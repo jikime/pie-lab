@@ -55,7 +55,7 @@ pie-lab/
   apps/
     dashboard/
     server/
-    chat-bridge/
+    chat/
 ```
 
 기존 `pi/packages/*`는 가능한 한 그대로 둡니다. 통합 과정에서 새로 필요한 영역만 추가합니다.
@@ -394,16 +394,16 @@ pie-chat/src/render/*
 
 ```txt
 pie-chat/src/live/*
-  -> apps/chat-bridge/src/providers/*
+  -> apps/chat/src/providers/*
 
 pie-chat/src/services/*
-  -> apps/chat-bridge/src/services/*
+  -> apps/chat/src/services/*
 
 pie-chat/src/config.ts
   -> packages/chat/src/config.ts
 
 pie-chat/src/runtime.ts
-  -> packages/chat/src/runtime.ts 또는 apps/chat-bridge/src/runtime.ts
+  -> packages/chat/src/runtime.ts 또는 apps/chat/src/runtime.ts
 
 pie-chat/src/secrets.ts
   -> packages/chat/src/secrets.ts

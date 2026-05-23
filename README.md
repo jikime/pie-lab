@@ -18,6 +18,13 @@
 
 `pie-lab` is a local-first Agentic Development Kit built from the `pi` source baseline and extended with 9router-derived routing, usage tracking, provider operations, and future `pie-chat` workflows.
 
+<p align="center">
+  <img alt="Pio, pie-lab AI Ant Companion" src="docs/assets/pio.png" width="520">
+</p>
+<p align="center">
+  <strong>Pio</strong> is pie-lab's AI Ant Companion.
+</p>
+
 * **[@pie-lab/coding-agent](packages/coding-agent)**: Interactive coding agent CLI
 * **[@pie-lab/agent-core](packages/agent)**: Agent runtime with tool calling and state management
 * **[@pie-lab/ai](packages/ai)**: Unified multi-provider LLM API (OpenAI, Anthropic, Google, …)

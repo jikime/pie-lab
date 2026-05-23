@@ -68,7 +68,7 @@ pie-lab/.pie
 apps/
   dashboard/
   server/
-  chat-bridge/
+  chat/
 
 packages/
   router/
@@ -289,8 +289,8 @@ pie-chat fork
 pie-lab/packages/chat
   -> chat provider 공통 타입, message normalization, attachment metadata
 
-pie-lab/apps/chat-bridge
-  -> Discord/Telegram bot 실행, channel 연결, remote command 처리
+pie-lab/apps/chat
+  -> web chat UI, Discord/Telegram bot 실행, channel 연결, remote command 처리
 ```
 
 중요한 원칙:
@@ -369,7 +369,7 @@ Resolved model = billing, quota, dashboard, debugging 기준
 apps/README.md
 apps/dashboard/
 apps/server/
-apps/chat-bridge/
+apps/chat/
 
 packages/router/
 packages/storage/
@@ -398,7 +398,7 @@ root package name은 `pie-lab`으로 변경했습니다.
 6. apps/server에 usage 조회 API 구현
 7. apps/server에 /v1/chat/completions 최소 endpoint 구현
 8. 이후 9router dashboard 일부를 apps/dashboard로 이식
-9. 이후 pie-chat text-only bridge를 apps/chat-bridge로 이식
+9. 이후 pie-chat text-only bridge를 apps/chat으로 이식
 ```
 
 초기 목표는 다음 한 가지입니다.

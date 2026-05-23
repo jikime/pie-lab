@@ -21,7 +21,7 @@ pie-lab/
   apps/
     dashboard/
     server/
-    chat-bridge/
+    chat/
 
   examples/
     simple-chat/
@@ -178,12 +178,13 @@ pie model list
 pie agent run ./agents/code-reviewer
 ```
 
-### apps/chat-bridge
+### apps/chat
 
-`pie-chat`을 기반으로 하는 외부 채팅 연결 app입니다.
+`pie-chat`을 기반으로 하는 웹 채팅 및 외부 채팅 연결 app입니다.
 
 담당 기능:
 
+- 웹 기반 agent chat UI
 - Discord channel 연결
 - Telegram DM/group 연결
 - 채팅 메시지를 agent input으로 변환
@@ -192,7 +193,7 @@ pie agent run ./agents/code-reviewer
 - remote command 처리
 - channel/account memory 연결
 
-초기 MVP에는 포함하지 않아도 됩니다. 다만 구조상 `apps/chat-bridge`로 분리해두고, 모든 LLM 호출은 `packages/agent`와 `packages/router`를 통과하도록 설계합니다.
+초기 MVP에는 포함하지 않아도 됩니다. 다만 구조상 `apps/chat`으로 분리해두고, 모든 LLM 호출은 `packages/agent`와 `packages/router`를 통과하도록 설계합니다.
 
 ### packages/core
 
@@ -324,7 +325,7 @@ user input
 - channel/account memory path 규칙
 - secret exchange interface
 
-Discord/Telegram SDK에 직접 의존하는 실행 코드는 `apps/chat-bridge`에 둡니다. `packages/chat`은 agent runtime이 이해할 수 있는 공통 message/event 형태를 제공합니다.
+Discord/Telegram SDK에 직접 의존하는 실행 코드와 웹 chat 실행 코드는 `apps/chat`에 둡니다. `packages/chat`은 agent runtime이 이해할 수 있는 공통 message/event 형태를 제공합니다.
 
 ### packages/shared
 
@@ -463,13 +464,13 @@ Chat bridge를 통한 agent 실행은 다음처럼 흐릅니다.
 
 ```txt
 Discord/Telegram
-  -> apps/chat-bridge: message 수신
+  -> apps/chat: message 수신
   -> packages/chat: message normalize
   -> packages/agent: agent run 생성
   -> packages/router: model/account 선택
   -> packages/providers: model 호출
   -> packages/storage: usage/run/chat log 저장
-  -> apps/chat-bridge: 응답 전송
+  -> apps/chat: 응답 전송
 ```
 
 ## 모델 선택과 라우팅 모드
@@ -712,7 +713,7 @@ fallback = caller/agent가 primary 결정, router가 예외 상황 결정
 ```txt
 apps/dashboard -> apps/server API
 apps/cli       -> apps/server API, packages/agent
-apps/chat-bridge -> packages/chat, packages/agent
+apps/chat      -> packages/chat, packages/agent
 apps/server    -> packages/router, packages/agent, packages/storage
 
 packages/agent    -> packages/core, packages/router

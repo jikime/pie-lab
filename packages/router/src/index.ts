@@ -144,6 +144,12 @@ export type ResolvedPiModelRoutePlan<TModel extends PiModelReference = PiModelRe
 const ROUTER_ALIAS_PREFIXES = new Set(["auto", "cheap", "fast", "combo"]);
 const DEFAULT_COMBO_ROUTE_LIMIT = 3;
 const DEFAULT_COMBO_STICKY_LIMIT = 1;
+const AUTO_ROUTING_DEPRECATED_MODEL_IDS = new Set([
+	"gemini-2.0-flash",
+	"gemini-2.0-flash-001",
+	"gemini-2.0-flash-lite",
+	"gemini-2.0-flash-lite-001",
+]);
 
 const comboRotationState = new Map<string, { index: number; consecutiveUseCount: number }>();
 
@@ -1062,6 +1068,7 @@ function selectBestModels<TModel extends PiModelReference>(
 ): TModel[] {
 	const candidates = models.filter((model) => {
 		if (isPiRouterModel(model)) return false;
+		if (isDeprecatedForAutoRouting(model)) return false;
 		if (constraints?.requireVision && !model.input?.includes("image")) return false;
 		if (constraints?.minContextTokens && (model.contextWindow ?? 0) < constraints.minContextTokens) return false;
 		if (constraints?.maxCostUsd && estimateModelCost(model) > constraints.maxCostUsd) return false;
@@ -1131,6 +1138,12 @@ function keywordScore(text: string, keywords: string[]): number {
 
 function estimateModelCost(model: PiModelReference): number {
 	return (model.cost?.input ?? 0) + (model.cost?.output ?? 0);
+}
+
+function isDeprecatedForAutoRouting(model: PiModelReference): boolean {
+	const id = model.id.toLowerCase();
+	const bareId = id.includes("/") ? (id.split("/").pop() ?? id) : id;
+	return AUTO_ROUTING_DEPRECATED_MODEL_IDS.has(bareId);
 }
 
 function backoffDecision(backoffLevel: number): RouterFallbackDecision {

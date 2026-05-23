@@ -162,7 +162,7 @@ pie agent run examples/file-summary-agent --input README.md
 
 필수 기능:
 
-- `apps/chat-bridge`
+- `apps/chat`
 - `packages/chat`
 - Discord 또는 Telegram 중 1개 채널 우선 지원
 - chat message를 agent input으로 변환

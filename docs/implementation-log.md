@@ -1646,3 +1646,74 @@ npm --workspace @pie-lab/dashboard-next run build
 - `http://127.0.0.1:4876/`의 title, description, canonical, Open Graph, Twitter card가 정상 표시됨을 확인했습니다.
 - `document.fonts.check("16px Pretendard")`가 `true`로 반환됨을 확인했습니다.
 - `robots.txt`, `sitemap.xml`, `manifest.webmanifest`가 정상 응답함을 확인했습니다.
+
+## 2026-05-23: pie-chat app 위치를 apps/chat으로 정리
+
+완료한 일:
+
+- `apps/chat-bridge`를 `apps/chat`으로 리네임했습니다.
+- `apps/chat`은 앞으로 웹 기반 `pie-chat`과 Discord/Telegram bridge를 함께 담는 app 영역으로 정리했습니다.
+- `packages/chat`은 SDK-neutral 공통 message/event 타입과 유틸을 담당하고, 실제 실행 app은 `apps/chat`에 둡니다.
+- 관련 architecture, migration, roadmap, current decisions 문서를 `apps/chat` 기준으로 업데이트했습니다.
+
+## 2026-05-23: apps/chat Next.js 웹 채팅 MVP 구현
+
+완료한 일:
+
+- `apps/chat`을 Next.js 16, React 19, Tailwind CSS 4 기반 앱으로 전환했습니다.
+- Pretendard, shadcn/ui 스타일 컴포넌트, 기본 SEO metadata, robots, sitemap, manifest를 추가했습니다.
+- 기본 실행 포트를 `4877`로 정했습니다.
+- `NEXT_PUBLIC_PIE_API_BASE_URL` 기본값을 `http://127.0.0.1:4873`으로 두고 `apps/server`의 `/v1/chat/completions`를 호출하도록 연결했습니다.
+- 기본 모델은 `auto:chat`으로 설정하고, `auto:coding`, `auto:reasoning`으로 빠르게 바꿀 수 있게 했습니다.
+- streaming 응답을 SSE로 파싱하고 assistant 메시지에 누적 표시합니다.
+- 응답 chunk의 `pi_adk` metadata를 읽어 routing mode, resolved provider, resolved model을 메시지 아래에 표시합니다.
+
+검증:
+
+```bash
+npm --workspace @pie-lab/pie-chat run lint
+npm --workspace @pie-lab/pie-chat run build
+```
+
+브라우저 확인:
+
+- `http://127.0.0.1:4877/`에서 Pie Chat 화면이 렌더링됨을 확인했습니다.
+- `lang=ko`, Pretendard font, metadata description, icon, composer, 기본 모델 `auto:chat`을 확인했습니다.
+- Next.js MCP `get_errors`에서 config/session error가 없음을 확인했습니다.
+- browser console error/warning이 없음을 확인했습니다.
+
+## 2026-05-23: auto:chat Google 모델 정책 2.5 이상으로 조정
+
+문제:
+
+- `pie-chat`의 기본 모델은 고정 Gemini 모델이 아니라 `auto:chat`입니다.
+- 현재 라우터 자동 선택 과정에서 Google의 `gemini-2.0-flash` 계열이 선택될 수 있었고, 이 모델은 신규 사용자에게 404 응답을 반환할 수 있었습니다.
+
+수정:
+
+- 자동 라우팅 후보에서 `gemini-2.0-flash`, `gemini-2.0-flash-001`, `gemini-2.0-flash-lite`, `gemini-2.0-flash-lite-001`을 제외했습니다.
+- 실행 중인 라우터 정책에 `auto:chat` alias와 `chat` intent를 아래 순서로 저장했습니다.
+  - `google/gemini-3.1-pro-preview`
+  - `google/gemini-2.5-flash`
+- `auto:coding`에서 사용 중인 Google fallback 기준과 맞춰, 채팅도 Google 2.5 이상 모델만 타도록 정리했습니다.
+
+확인:
+
+```bash
+curl -sS -X POST http://127.0.0.1:4873/routing-policy/preview \
+  -H 'content-type: application/json' \
+  -d '{"model":"auto:chat"}'
+```
+
+결과:
+
+```json
+{
+  "requestedModel": "auto:chat",
+  "routingMode": "router",
+  "routes": [
+    { "provider": "google", "model": "gemini-3.1-pro-preview" },
+    { "provider": "google", "model": "gemini-2.5-flash" }
+  ]
+}
+```

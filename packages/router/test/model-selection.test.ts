@@ -344,6 +344,46 @@ describe("pi model route resolver", () => {
 		});
 	});
 
+	it("does not auto-route to deprecated Gemini 2.0 Flash models", async () => {
+		const modelCatalog = [
+			{
+				provider: "google",
+				id: "gemini-2.0-flash",
+				name: "Gemini 2.0 Flash",
+				input: ["text", "image"],
+				cost: { input: 0.1, output: 0.4 },
+				contextWindow: 1048576,
+			},
+			{
+				provider: "google",
+				id: "gemini-2.5-flash",
+				name: "Gemini 2.5 Flash",
+				input: ["text", "image"],
+				cost: { input: 0.3, output: 2.5 },
+				contextWindow: 1048576,
+			},
+		] satisfies PiModelReference[];
+		const deprecatedCatalog: PiModelCatalog<PiModelReference> = {
+			find: (provider, modelId) => modelCatalog.find((model) => model.provider === provider && model.id === modelId),
+			getAvailable: () => modelCatalog,
+			getAll: () => modelCatalog,
+		};
+
+		await expect(
+			resolvePiModelRoute({
+				requestedModel: { provider: PIE_LAB_ROUTER_PROVIDER, id: "auto:chat" },
+				catalog: deprecatedCatalog,
+			}),
+		).resolves.toMatchObject({
+			route: {
+				requestedModel: "auto:chat",
+				routingMode: "router",
+				resolvedProvider: "google",
+				resolvedModel: "gemini-2.5-flash",
+			},
+		});
+	});
+
 	it("can create a reusable resolver for resolveRoute", async () => {
 		const resolver = createPiRouteResolver(catalog, {
 			intents: { coding: ["missing/model", "anthropic/claude-sonnet-4.5"] },
