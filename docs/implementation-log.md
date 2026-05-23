@@ -1717,3 +1717,39 @@ curl -sS -X POST http://127.0.0.1:4873/routing-policy/preview \
   ]
 }
 ```
+
+## 2026-05-23: pie-chat Telegram/Discord bridge extension 이식
+
+완료한 일:
+
+- 기존 `pi-chat`의 Telegram/Discord bridge extension 코드를 `apps/chat/extension` 아래로 이식했습니다.
+- `apps/chat/package.json`에 `pi.extensions` manifest를 추가해 `pie -e apps/chat`로 extension entry가 로드되도록 했습니다.
+- 기존 `@mariozechner/pi-*` import를 `@pie-lab/*` 패키지 기준으로 변경했습니다.
+- worker tmux session이 `pi`가 아니라 `pie` 명령으로 새 세션을 띄우도록 변경했습니다.
+- chat bridge 저장 경로를 `~/.pi/agent/chat`에서 `~/.pie/agent/chat`으로 변경했습니다.
+- 기존 bridge 기능인 `/chat-config`, `/chat-connect`, `/chat-spawn-all`, `/chat-workers`, `/chat-open-all`, `/chat-kill-all`, `/chat-new`, `/chat-status` 명령과 `chat_history`, `chat_attach`, `chat_request_secret`, `chat_workers` 도구를 유지했습니다.
+- `apps/chat` README에 웹 채팅 실행 방법과 Telegram/Discord bridge 사용 방법을 함께 정리했습니다.
+
+검증:
+
+```bash
+npm --workspace @pie-lab/pie-chat run check:bridge
+npm --workspace @pie-lab/pie-chat run lint
+npm --workspace @pie-lab/pie-chat run build
+```
+
+extension loader 확인:
+
+- `apps/chat`를 explicit extension path로 로드했을 때 `extension/index.ts`가 정상 발견되었습니다.
+- 등록된 명령: `chat-config`, `chat-list`, `chat-spawn-all`, `chat-workers`, `chat-open-all`, `chat-kill-all`, `chat-connect`, `chat-new`, `chat-disconnect`, `chat-status`
+- 등록된 도구: `chat_workers`, `chat_history`, `chat_attach`, `chat_request_secret`
+
+## 2026-05-23: pie-chat 사용법 문서 추가
+
+완료한 일:
+
+- `docs/chat-usage.md`를 추가해 웹 채팅과 Telegram/Discord bridge 사용법을 분리해서 정리했습니다.
+- Telegram bot token 입력, DM 추가, `/chat-connect`, `/chat-spawn-all`, worker 확인 흐름을 문서화했습니다.
+- 터미널에 직접 입력한 메시지는 로컬 `pie` 대화이므로 Telegram/Discord로 자동 전송되지 않는다는 점을 명확히 적었습니다.
+- 응답이 원격 채팅에 보이지 않을 때 확인할 `/chat-status`, `/chat-workers`, `channel.jsonl` 점검 순서를 추가했습니다.
+- `docs/README.md`와 `apps/chat/README.md`에서 새 사용법 문서로 연결했습니다.

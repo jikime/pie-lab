@@ -1,0 +1,10 @@
+{
+	"extends": "../../tsconfig.base.json",
+	"compilerOptions": {
+		"target": "ES2024",
+		"lib": ["ES2024", "DOM"],
+		"noEmit": true
+	},
+	"include": ["extension/**/*.ts"],
+	"exclude": ["src/**/*", ".next/**/*", "node_modules/**/*"]
+}

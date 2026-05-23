@@ -11,6 +11,7 @@
 - [마이그레이션 계획](./migration-plan.md): 기존 프로젝트에서 어떤 코드를 가져오고 어떻게 재배치할지 정리합니다.
 - [로드맵](./roadmap.md): MVP부터 이후 확장까지의 단계별 개발 계획입니다.
 - [사용량과 비용 측정](./usage-accounting.md): routing 이후 실제 사용량과 비용을 어디서 어떻게 기록할지 정리합니다.
+- [채팅 사용법](./chat-usage.md): 웹 채팅과 Telegram/Discord bridge 설정, 연결, 문제 해결 방법을 정리합니다.
 - [소스 출처](./origins.md): `pi`, `9router`, `pie-chat` fork와 import 기준 commit을 기록합니다.
 - [현재 결정 사항](./current-decisions.md): 지금까지 결정한 통합 방향과 현재 구조를 요약합니다.
 - [구현 이력](./implementation-log.md): 실제 코드에 반영된 작업과 검증 결과를 기록합니다.
