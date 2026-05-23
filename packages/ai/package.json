@@ -1,5 +1,5 @@
 {
-	"name": "@earendil-works/pi-ai",
+	"name": "@pie-lab/ai",
 	"version": "0.75.3",
 	"description": "Unified LLM API with automatic model discovery and provider configuration",
 	"type": "module",
@@ -58,6 +58,9 @@
 		"dist",
 		"README.md"
 	],
+	"publishConfig": {
+		"access": "public"
+	},
 	"scripts": {
 		"clean": "shx rm -rf dist",
 		"generate-models": "npx tsx scripts/generate-models.ts",

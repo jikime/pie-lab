@@ -1,0 +1,26 @@
+{
+	"name": "@pie-lab/storage",
+	"version": "0.0.0",
+	"type": "module",
+	"description": "Local storage interfaces for pie-lab",
+	"main": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js"
+		}
+	},
+	"files": [
+		"dist",
+		"README.md"
+	],
+	"publishConfig": {
+		"access": "public"
+	},
+	"scripts": {
+		"test": "vitest --run",
+		"build": "tsgo -p tsconfig.build.json",
+		"dev": "tsgo -p tsconfig.build.json --watch --preserveWatchOutput"
+	}
+}

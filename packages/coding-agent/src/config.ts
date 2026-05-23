@@ -133,7 +133,13 @@ function getSelfUpdateCommandForMethod(
 			const [command = "npm", ...npmArgs] = npmCommand ?? [];
 			const inferred = npmCommand?.length ? undefined : getInferredNpmInstall();
 			const prefixArgs = [...npmArgs, ...(inferred ? ["--prefix", inferred.prefix] : [])];
-			const installStep = makeSelfUpdateCommandStep(command, [...prefixArgs, "install", "-g", updatePackageName]);
+			const installStep = makeSelfUpdateCommandStep(command, [
+				...prefixArgs,
+				"install",
+				"-g",
+				"--ignore-scripts",
+				updatePackageName,
+			]);
 			const uninstallStep =
 				updatePackageName === installedPackageName
 					? undefined
@@ -322,7 +328,7 @@ export function getUpdateInstruction(packageName: string): string {
  */
 export function getPackageDir(): string {
 	// Allow override via environment variable (useful for Nix/Guix where store paths tokenize poorly)
-	const envDir = process.env.PI_PACKAGE_DIR;
+	const envDir = process.env.PIE_PACKAGE_DIR ?? process.env.PI_PACKAGE_DIR;
 	if (envDir) {
 		if (envDir === "~") return homedir();
 		if (envDir.startsWith("~/")) return homedir() + envDir.slice(1);
@@ -422,30 +428,62 @@ export function getBundledInteractiveAssetPath(name: string): string {
 }
 
 // =============================================================================
-// App Config (from package.json piConfig)
+// App Config (from package.json pieConfig)
 // =============================================================================
 
 interface PackageJson {
 	name?: string;
 	version?: string;
+	bin?: Record<string, string>;
+	pieConfig?: {
+		name?: string;
+		commandName?: string;
+		configDir?: string;
+	};
 	piConfig?: {
 		name?: string;
+		commandName?: string;
 		configDir?: string;
 	};
 }
 
 const pkg = JSON.parse(readFileSync(getPackageJsonPath(), "utf-8")) as PackageJson;
 
-const piConfigName: string | undefined = pkg.piConfig?.name;
-export const PACKAGE_NAME: string = pkg.name || "@earendil-works/pi-coding-agent";
-export const APP_NAME: string = piConfigName || "pi";
-export const APP_TITLE: string = piConfigName ? APP_NAME : "π";
-export const CONFIG_DIR_NAME: string = pkg.piConfig?.configDir || ".pi";
+const appConfig = pkg.pieConfig ?? pkg.piConfig;
+const appConfigName: string | undefined = appConfig?.name;
+const packageBinName = pkg.bin ? Object.keys(pkg.bin)[0] : undefined;
+export const PACKAGE_NAME: string = pkg.name || "@pie-lab/coding-agent";
+export const APP_NAME: string = appConfigName || "pie";
+export const CLI_NAME: string = appConfig?.commandName || packageBinName || APP_NAME;
+export const APP_TITLE: string = APP_NAME;
+export const CONFIG_DIR_NAME: string = appConfig?.configDir || ".pie";
 export const VERSION: string = pkg.version || "0.0.0";
 
-// e.g., PI_CODING_AGENT_DIR or TAU_CODING_AGENT_DIR
+// e.g., PIE_CODING_AGENT_DIR or TAU_CODING_AGENT_DIR
 export const ENV_AGENT_DIR = `${APP_NAME.toUpperCase()}_CODING_AGENT_DIR`;
 export const ENV_SESSION_DIR = `${APP_NAME.toUpperCase()}_CODING_AGENT_SESSION_DIR`;
+export const ENV_PACKAGE_DIR = `${APP_NAME.toUpperCase()}_PACKAGE_DIR`;
+export const ENV_OFFLINE = `${APP_NAME.toUpperCase()}_OFFLINE`;
+export const ENV_SKIP_VERSION_CHECK = `${APP_NAME.toUpperCase()}_SKIP_VERSION_CHECK`;
+export const ENV_TELEMETRY = `${APP_NAME.toUpperCase()}_TELEMETRY`;
+export const ENV_SHARE_VIEWER_URL = `${APP_NAME.toUpperCase()}_SHARE_VIEWER_URL`;
+export const ENV_STARTUP_BENCHMARK = `${APP_NAME.toUpperCase()}_STARTUP_BENCHMARK`;
+export const ENV_CLEAR_ON_SHRINK = `${APP_NAME.toUpperCase()}_CLEAR_ON_SHRINK`;
+export const ENV_HARDWARE_CURSOR = `${APP_NAME.toUpperCase()}_HARDWARE_CURSOR`;
+export const ENV_TIMING = `${APP_NAME.toUpperCase()}_TIMING`;
+
+export function getEnvWithLegacy(name: string, legacyName?: string): string | undefined {
+	return process.env[name] ?? (legacyName ? process.env[legacyName] : undefined);
+}
+
+export function isTruthyEnvValue(value: string | undefined): boolean {
+	if (!value) return false;
+	return value === "1" || value.toLowerCase() === "true" || value.toLowerCase() === "yes";
+}
+
+export function isTruthyEnv(name: string, legacyName?: string): boolean {
+	return isTruthyEnvValue(getEnvWithLegacy(name, legacyName));
+}
 
 export function expandTildePath(path: string): string {
 	if (path === "~") return homedir();
@@ -453,21 +491,21 @@ export function expandTildePath(path: string): string {
 	return path;
 }
 
-const DEFAULT_SHARE_VIEWER_URL = "https://pi.dev/session/";
+const DEFAULT_SHARE_VIEWER_URL = "https://pielab.ai/session/";
 
 /** Get the share viewer URL for a gist ID */
 export function getShareViewerUrl(gistId: string): string {
-	const baseUrl = process.env.PI_SHARE_VIEWER_URL || DEFAULT_SHARE_VIEWER_URL;
+	const baseUrl = getEnvWithLegacy(ENV_SHARE_VIEWER_URL, "PI_SHARE_VIEWER_URL") || DEFAULT_SHARE_VIEWER_URL;
 	return `${baseUrl}#${gistId}`;
 }
 
 // =============================================================================
-// User Config Paths (~/.pi/agent/*)
+// User Config Paths (~/.pie/agent/*)
 // =============================================================================
 
-/** Get the agent config directory (e.g., ~/.pi/agent/) */
+/** Get the agent config directory (e.g., ~/.pie/agent/) */
 export function getAgentDir(): string {
-	const envDir = process.env[ENV_AGENT_DIR];
+	const envDir = getEnvWithLegacy(ENV_AGENT_DIR, "PI_CODING_AGENT_DIR");
 	if (envDir) {
 		return expandTildePath(envDir);
 	}

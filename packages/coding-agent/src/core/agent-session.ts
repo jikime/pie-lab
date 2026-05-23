@@ -15,15 +15,8 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, resolve } from "node:path";
-import type {
-	Agent,
-	AgentEvent,
-	AgentMessage,
-	AgentState,
-	AgentTool,
-	ThinkingLevel,
-} from "@earendil-works/pi-agent-core";
-import type { AssistantMessage, ImageContent, Message, Model, TextContent } from "@earendil-works/pi-ai";
+import type { Agent, AgentEvent, AgentMessage, AgentState, AgentTool, ThinkingLevel } from "@pie-lab/agent-core";
+import type { AssistantMessage, ImageContent, Message, Model, TextContent } from "@pie-lab/ai";
 import {
 	clampThinkingLevel,
 	cleanupSessionResources,
@@ -32,7 +25,8 @@ import {
 	modelsAreEqual,
 	resetApiProviders,
 	streamSimple,
-} from "@earendil-works/pi-ai";
+} from "@pie-lab/ai";
+import { resolvePiModelRoute } from "@pie-lab/router";
 import { theme } from "../modes/interactive/theme/theme.js";
 import { stripFrontmatter } from "../utils/frontmatter.js";
 import { sleep } from "../utils/sleep.js";
@@ -344,6 +338,11 @@ export class AgentSession {
 	/** Model registry for API key resolution and model discovery */
 	get modelRegistry(): ModelRegistry {
 		return this._modelRegistry;
+	}
+
+	private async _resolveRequestModel(model: Model<any>): Promise<Model<any>> {
+		const routed = await resolvePiModelRoute({ requestedModel: model, catalog: this._modelRegistry });
+		return routed.model;
 	}
 
 	private async _getRequiredRequestAuth(model: Model<any>): Promise<{
@@ -1618,7 +1617,8 @@ export class AgentSession {
 				throw new Error(formatNoModelSelectedMessage());
 			}
 
-			const { apiKey, headers } = await this._getCompactionRequestAuth(this.model);
+			const compactionModel = await this._resolveRequestModel(this.model);
+			const { apiKey, headers } = await this._getCompactionRequestAuth(compactionModel);
 
 			const pathEntries = this.sessionManager.getBranch();
 			const settings = this.settingsManager.getCompactionSettings();
@@ -1670,7 +1670,7 @@ export class AgentSession {
 				// Generate compaction result
 				const result = await compact(
 					preparation,
-					this.model,
+					compactionModel,
 					apiKey,
 					headers,
 					customInstructions,
@@ -1865,10 +1865,11 @@ export class AgentSession {
 				return false;
 			}
 
+			const compactionModel = await this._resolveRequestModel(this.model);
 			let apiKey: string | undefined;
 			let headers: Record<string, string> | undefined;
 			if (this.agent.streamFn === streamSimple) {
-				const authResult = await this._modelRegistry.getApiKeyAndHeaders(this.model);
+				const authResult = await this._modelRegistry.getApiKeyAndHeaders(compactionModel);
 				if (!authResult.ok || !authResult.apiKey) {
 					this._emit({
 						type: "compaction_end",
@@ -1943,7 +1944,7 @@ export class AgentSession {
 				// Generate compaction result
 				const compactResult = await compact(
 					preparation,
-					this.model,
+					compactionModel,
 					apiKey,
 					headers,
 					undefined,
@@ -2737,7 +2738,7 @@ export class AgentSession {
 			let summaryText: string | undefined;
 			let summaryDetails: unknown;
 			if (options.summarize && entriesToSummarize.length > 0 && !extensionSummary) {
-				const model = this.model!;
+				const model = await this._resolveRequestModel(this.model!);
 				const { apiKey, headers } = await this._getRequiredRequestAuth(model);
 				const branchSummarySettings = this.settingsManager.getBranchSummarySettings();
 				const result = await generateBranchSummary(entriesToSummarize, {

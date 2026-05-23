@@ -1,6 +1,8 @@
 import { join } from "node:path";
-import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
-import type { Model } from "@earendil-works/pi-ai";
+import type { ThinkingLevel } from "@pie-lab/agent-core";
+import type { Model } from "@pie-lab/ai";
+import { createQuotaAwareProviderConnectionPreparer } from "@pie-lab/shared";
+import { createJsonProviderConnectionStore } from "@pie-lab/storage";
 import { getAgentDir } from "../config.js";
 import { AuthStorage } from "./auth-storage.js";
 import type { SessionStartEvent, ToolDefinition } from "./extensions/index.js";
@@ -133,7 +135,15 @@ export async function createAgentSessionServices(
 	const agentDir = options.agentDir ?? getAgentDir();
 	const authStorage = options.authStorage ?? AuthStorage.create(join(agentDir, "auth.json"));
 	const settingsManager = options.settingsManager ?? SettingsManager.create(cwd, agentDir);
-	const modelRegistry = options.modelRegistry ?? ModelRegistry.create(authStorage, join(agentDir, "models.json"));
+	const providerConnectionStore = createJsonProviderConnectionStore(join(agentDir, "provider-connections.json"));
+	const modelRegistry =
+		options.modelRegistry ??
+		ModelRegistry.create(authStorage, join(agentDir, "models.json"), {
+			providerConnectionStore,
+			prepareProviderConnections: createQuotaAwareProviderConnectionPreparer({
+				providerConnectionStore,
+			}),
+		});
 	const resourceLoader = new DefaultResourceLoader({
 		...(options.resourceLoaderOptions ?? {}),
 		cwd,

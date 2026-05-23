@@ -1,0 +1,231 @@
+# 로드맵
+
+## v0.1: 통합 MVP
+
+목표는 `pi`의 기존 기능을 가능한 한 보존한 상태에서 `9router`가 하나의 프로젝트 안에서 실제로 함께 동작하는 모습을 만드는 것입니다. `pie-chat`은 이 단계에서 통합 위치만 확정하고, 실제 기능 통합은 뒤 단계로 둡니다.
+
+필수 기능:
+
+- `pi` git source 기반 baseline
+- 기존 `pi` packages/scripts/tests 보존
+- `packages/router`
+- `packages/storage`
+- `apps/server`
+- `apps/dashboard`
+- 기존 `pi` CLI/TUI와 9router CLI 기능 연결
+- `GET /v1/models`
+- `POST /v1/chat/completions`
+- provider 등록
+- usage log 저장
+- usage log 조회 API
+- 최소 1단계 fallback
+- 기존 `pi` 핵심 workflow 보존
+- 내부 실행 경로: `pi runtime -> router -> pi provider engine`
+- 외부 실행 경로: `/v1 HTTP -> router -> pi provider engine`
+
+성공 기준:
+
+```bash
+pie start
+```
+
+명령으로 local server와 dashboard가 뜨고, OpenAI-compatible client가 `http://localhost:20128/v1`에 연결할 수 있어야 합니다.
+
+추가 성공 기준:
+
+- `auto:coding` 요청이 `packages/router`에서 실제 provider/model로 resolve됩니다.
+- `combo:coding`과 structured fallback 요청이 route plan으로 계산됩니다.
+- 9router-style named combo, 예를 들어 `premium-coding`, `budget-combo`가 route plan으로 계산됩니다.
+- combo strategy로 `fallback`, `round-robin`, sticky round-robin을 처리합니다.
+- rate-limit/quota 오류를 9router 원본 cooldown 규칙으로 분류합니다.
+- provider connection/settings store가 있고, 계정 선택 helper가 `fill-first`, `round-robin`, sticky round-robin을 계산합니다.
+- 내부 `coding-agent` stream 경로에서 stream 시작 전 실패는 다음 route 후보로 fallback됩니다.
+- fallback attempt의 success/error/aborted 결과가 usage record로 저장됩니다.
+- 저장된 usage record를 `/usage`와 `/usage/summary`에서 조회할 수 있습니다.
+- dashboard에서 usage summary와 최근 record를 확인할 수 있습니다.
+- 외부 `POST /v1/chat/completions` non-stream 요청이 router를 거쳐 실행됩니다.
+- 외부 `POST /v1/chat/completions` streaming/SSE 요청이 router를 거쳐 실행됩니다.
+- 외부 `/v1` 요청이 `coding-agent`의 `models.json`, `auth.json` 인증 설정을 공유합니다.
+- dashboard에서 provider/auth 설정 여부를 확인할 수 있습니다.
+- 내부 `pi` 실행과 외부 `/v1` 요청이 같은 router를 사용합니다.
+- resolved model 기준으로 usage/cost가 저장됩니다.
+- dashboard에서 provider connection을 생성/활성화/삭제할 수 있습니다.
+- dashboard에서 왜 특정 account가 선택됐는지 확인할 수 있습니다.
+- RTK token saver 절감량이 usage record와 dashboard에 표시됩니다.
+- compaction 같은 보조 LLM 호출도 router resolve를 거칩니다.
+- embedding, web search/fetch, TTS/STT, image generation endpoint가 server에 연결됩니다.
+- dashboard에서 fallback chain/combo policy를 생성, 삭제, preview할 수 있습니다.
+- dashboard에서 alias/intent mapping을 생성, 삭제, preview할 수 있습니다.
+
+## v0.2: ADK 기본 기능
+
+목표는 `pi`의 기존 agent/runtime 흐름을 기반으로 `pie-lab`라는 이름에 맞는 agent 개발 경험을 확장하는 것입니다.
+
+필수 기능:
+
+- `defineTool`
+- `defineAgent`
+- `runAgent`
+- agent config loading
+- tool execution loop
+- agent run log
+- `pie agent run`
+- examples 3개
+
+예제:
+
+```txt
+examples/simple-chat
+examples/file-summary-agent
+examples/coding-review-agent
+```
+
+성공 기준:
+
+```bash
+pie agent run examples/file-summary-agent --input README.md
+```
+
+명령으로 agent가 실행되고, dashboard에서 실행 기록을 볼 수 있어야 합니다.
+
+## v0.3: Router 고도화
+
+목표는 `9router`의 장점을 통합 구조 안에서 제대로 살리는 것입니다.
+
+1차 반영 완료:
+
+- usage/cost dashboard 연결
+- dashboard provider setup의 manual API key/token 등록
+- provider별 quota 정책
+- 계정 round-robin과 sticky round-robin
+- modelLock 기반 account/model cooldown
+- provider connection store와 실제 pi 인증 저장소 기본 동기화
+- model alias
+- retry/fallback policy
+- streaming fallback 안정화
+- RTK token saver 1차 통합
+- embedding, web search/fetch, TTS/STT, image generation endpoint
+- fallback chain dashboard 편집
+- alias/intent mapping dashboard 편집
+- OAuth token import wizard
+- quota 상세 dashboard 고도화 1차
+- budget limit dashboard 정책 편집
+- budget limit 실제 enforcement
+- browser redirect 기반 provider별 OAuth login wizard
+- provider health check 화면 고도화
+- provider health check deep probe
+- media endpoint alias와 provider 고급 옵션 1차
+- media endpoint별 provider coverage 확대 1차
+- request detail viewer와 fallback timeline
+- request detail raw event trace
+- routing policy import/export, combo reorder, model suggestion
+
+남은 고도화:
+
+- Vercel relay deploy helper
+
+성공 기준:
+
+- provider 하나가 실패해도 fallback provider로 이어집니다.
+- dashboard에서 fallback 결과와 비용을 확인할 수 있습니다.
+- CLI 도구가 장시간 사용 중에도 안정적으로 동작합니다.
+
+## v0.4: Dashboard/CLI 제품화
+
+목표는 개발자들이 매일 사용할 수 있는 도구로 다듬는 것입니다.
+
+현재 방향:
+
+- 대시보드 제품화는 `apps/dashboard-next`에서 진행합니다.
+- 기술 스택은 Next.js 16, Tailwind CSS 4, shadcn/ui로 정합니다.
+- 기존 `apps/dashboard`는 안정적인 비교 기준으로 유지하고, 기능을 검증한 뒤 단계적으로 교체합니다.
+
+필수 기능:
+
+- dashboard navigation 정리
+- provider setup wizard
+- model selector
+- request detail viewer
+- agent run viewer
+- CLI provider setup
+- CLI model selection
+- local config import/export
+
+성공 기준:
+
+- 신규 사용자가 문서만 보고 provider를 등록하고 local endpoint에 연결할 수 있습니다.
+- 사용량과 비용을 dashboard에서 쉽게 확인할 수 있습니다.
+
+## v0.5: Chat Bridge 통합
+
+목표는 `pie-chat`의 Discord/Telegram bridge 경험을 `pie-lab` agent runtime과 router 위에 올리는 것입니다.
+
+필수 기능:
+
+- `apps/chat-bridge`
+- `packages/chat`
+- Discord 또는 Telegram 중 1개 채널 우선 지원
+- chat message를 agent input으로 변환
+- agent response를 chat reply로 전송
+- 최소 remote command: `status`, `new`, `stop`
+- chat-origin usage/cost 기록
+
+성공 기준:
+
+- Discord 또는 Telegram에서 메시지를 보내면 `pie-lab` agent가 실행됩니다.
+- 해당 요청은 `pie-lab` router를 거쳐 실제 model로 라우팅됩니다.
+- dashboard에서 requested model, resolved model, provider, cost를 확인할 수 있습니다.
+
+후속 후보:
+
+- 나머지 chat provider 지원
+- file attachment
+- encrypted secret exchange
+- channel/account memory
+- tmux worker orchestration
+- Gondolin VM sandbox 통합
+- dashboard에서 chat channel과 worker 상태 표시
+
+## v0.6: Team Mode 준비
+
+목표는 개인용 로컬 도구에서 팀용 gateway로 확장할 기반을 만드는 것입니다.
+
+후보 기능:
+
+- team API key
+- per-user usage tracking
+- shared routing policy
+- shared agent template
+- basic auth 또는 local network auth
+- audit log
+
+이 단계는 MVP 이후에 판단합니다.
+
+## 이후 후보
+
+장기 후보 기능입니다.
+
+- hosted control plane
+- agent template registry
+- MCP registry integration
+- chat channel registry
+- visual workflow editor
+- cloud sync
+- enterprise SSO
+- plugin system
+- marketplace
+
+초기에는 이 기능들을 만들지 않습니다. 먼저 local-first 통합 경험을 완성하는 것이 더 중요합니다.
+
+## 우선순위 원칙
+
+개발 순서를 정할 때는 다음 기준을 사용합니다.
+
+1. 기존 `pi`와 `9router`의 중복을 줄이는가?
+2. 실제 사용자가 바로 체감하는가?
+3. OpenAI-compatible endpoint 안정성을 높이는가?
+4. agent 개발 경험을 단순하게 만드는가?
+5. dashboard와 CLI에서 확인 가능한가?
+6. chat bridge 요청도 router/usage 원칙을 지키는가?
+
+이 기준에 맞지 않는 기능은 나중으로 미룹니다.

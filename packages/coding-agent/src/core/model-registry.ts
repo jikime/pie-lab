@@ -17,15 +17,35 @@ import {
 	registerApiProvider,
 	resetApiProviders,
 	type SimpleStreamOptions,
-} from "@earendil-works/pi-ai";
-import { registerOAuthProvider, resetOAuthProviders } from "@earendil-works/pi-ai/oauth";
+} from "@pie-lab/ai";
+import { registerOAuthProvider, resetOAuthProviders } from "@pie-lab/ai/oauth";
+import {
+	buildModelLockUpdate,
+	checkFallbackError,
+	extractProviderResetCooldownMs,
+	getModelLockKey,
+	MODEL_LOCK_ALL,
+	MODEL_LOCK_PREFIX,
+	PIE_LAB_QUOTA_SELECTION_KEY,
+	PIE_LAB_ROUTER_MODEL_IDS,
+	PIE_LAB_ROUTER_PROVIDER,
+	type PiRouterPolicy,
+	selectProviderConnection,
+} from "@pie-lab/router";
+import type {
+	CreateProviderConnectionInput,
+	ProviderConnection,
+	ProviderConnectionSettings,
+	ProviderConnectionStore,
+	UpdateProviderConnectionInput,
+} from "@pie-lab/storage";
 import { existsSync, readFileSync } from "fs";
 import { join } from "path";
 import { type Static, Type } from "typebox";
 import { Compile } from "typebox/compile";
 import type { TLocalizedValidationError } from "typebox/error";
 import { getAgentDir } from "../config.js";
-import type { AuthStatus, AuthStorage } from "./auth-storage.js";
+import type { AuthCredential, AuthStatus, AuthStorage } from "./auth-storage.js";
 import { BUILT_IN_PROVIDER_DISPLAY_NAMES } from "./provider-display-names.js";
 import {
 	clearConfigValueCache,
@@ -201,6 +221,19 @@ const validateModelsConfig = Compile(ModelsConfigSchema);
 
 type ModelsConfig = Static<typeof ModelsConfigSchema>;
 
+const ROUTER_VIRTUAL_MODELS: Model<Api>[] = PIE_LAB_ROUTER_MODEL_IDS.map((id) => ({
+	id,
+	name: `Router ${id}`,
+	api: PIE_LAB_ROUTER_PROVIDER,
+	provider: PIE_LAB_ROUTER_PROVIDER,
+	baseUrl: "",
+	reasoning: id.includes("reasoning") || id.includes("coding"),
+	input: ["text", "image"],
+	cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+	contextWindow: 200000,
+	maxTokens: 32768,
+}));
+
 function formatValidationPath(error: TLocalizedValidationError): string {
 	if (error.keyword === "required") {
 		const requiredProperties = (error.params as { requiredProperties?: string[] }).requiredProperties;
@@ -238,11 +271,39 @@ export type ResolvedRequestAuth =
 			ok: true;
 			apiKey?: string;
 			headers?: Record<string, string>;
+			connectionId?: string;
 	  }
 	| {
 			ok: false;
 			error: string;
 	  };
+
+export interface ModelRegistryOptions {
+	providerConnectionStore?: ProviderConnectionStore;
+	prepareProviderConnections?: (options: {
+		provider: string;
+		model: Model<Api>;
+		connections: ProviderConnection[];
+		settings: ProviderConnectionSettings;
+	}) => Promise<ProviderConnection[]>;
+}
+
+type ProviderConnectionAuthResult =
+	| {
+			status: "selected";
+			apiKey: string;
+			connectionId: string;
+	  }
+	| {
+			status: "unavailable";
+			error: string;
+	  }
+	| {
+			status: "missing";
+	  };
+
+const PIE_LAB_AUTH_STORAGE_SOURCE = "auth.json";
+const LEGACY_QUOTA_SELECTION_KEY = "pieAdkQuotaSelection";
 
 /** Result of loading custom models from models.json */
 interface CustomModelsResult {
@@ -334,20 +395,119 @@ export class ModelRegistry {
 	private modelRequestHeaders: Map<string, Record<string, string>> = new Map();
 	private registeredProviders: Map<string, ProviderConfigInput> = new Map();
 	private loadError: string | undefined = undefined;
+	private providerConnectionStore: ProviderConnectionStore | undefined;
+	private prepareProviderConnections: ModelRegistryOptions["prepareProviderConnections"] | undefined;
 
 	private constructor(
 		readonly authStorage: AuthStorage,
 		private modelsJsonPath: string | undefined,
+		options: ModelRegistryOptions = {},
 	) {
+		this.providerConnectionStore = options.providerConnectionStore;
+		this.prepareProviderConnections = options.prepareProviderConnections;
 		this.loadModels();
 	}
 
-	static create(authStorage: AuthStorage, modelsJsonPath: string = join(getAgentDir(), "models.json")): ModelRegistry {
-		return new ModelRegistry(authStorage, modelsJsonPath);
+	static create(
+		authStorage: AuthStorage,
+		modelsJsonPath: string = join(getAgentDir(), "models.json"),
+		options: ModelRegistryOptions = {},
+	): ModelRegistry {
+		return new ModelRegistry(authStorage, modelsJsonPath, options);
 	}
 
-	static inMemory(authStorage: AuthStorage): ModelRegistry {
-		return new ModelRegistry(authStorage, undefined);
+	static inMemory(authStorage: AuthStorage, options: ModelRegistryOptions = {}): ModelRegistry {
+		return new ModelRegistry(authStorage, undefined, options);
+	}
+
+	setProviderConnectionStore(providerConnectionStore: ProviderConnectionStore | undefined): void {
+		this.providerConnectionStore = providerConnectionStore;
+	}
+
+	async getRouterPolicy(): Promise<PiRouterPolicy | undefined> {
+		if (!this.providerConnectionStore) return undefined;
+		const settings = await this.providerConnectionStore.getSettings();
+		return settings.routerPolicy as PiRouterPolicy | undefined;
+	}
+
+	async syncAuthStorageProviderConnections(provider?: string): Promise<void> {
+		if (!this.providerConnectionStore) {
+			return;
+		}
+
+		this.authStorage.reload();
+		const providers = provider === undefined ? await this.getAuthStorageSyncedProviders() : [provider];
+		await Promise.all(providers.map((providerName) => this.syncAuthStorageProviderConnection(providerName)));
+	}
+
+	async markProviderConnectionUnavailable(
+		connectionId: string | undefined,
+		model: Model<Api>,
+		error: unknown,
+	): Promise<void> {
+		if (!this.providerConnectionStore || !connectionId) {
+			return;
+		}
+
+		const connection = await this.providerConnectionStore.getProviderConnectionById(connectionId);
+		if (!connection) {
+			return;
+		}
+
+		const status = extractProviderErrorStatus(error);
+		const message = providerErrorText(error);
+		const backoffLevel = typeof connection.backoffLevel === "number" ? connection.backoffLevel : 0;
+		const resetCooldownMs = extractProviderResetCooldownMs(error);
+		const decision =
+			resetCooldownMs !== null
+				? { shouldFallback: true, cooldownMs: resetCooldownMs, newBackoffLevel: 0 }
+				: checkFallbackError(status, message, backoffLevel);
+		if (!decision.shouldFallback) {
+			return;
+		}
+
+		await this.providerConnectionStore.updateProviderConnection(connectionId, {
+			...buildModelLockUpdate(model.id, decision.cooldownMs),
+			testStatus: "unavailable",
+			lastError: message.slice(0, 100),
+			errorCode: status,
+			lastErrorAt: new Date().toISOString(),
+			backoffLevel: decision.newBackoffLevel ?? backoffLevel,
+		});
+	}
+
+	async clearProviderConnectionError(connectionId: string | undefined, model: Model<Api>): Promise<void> {
+		if (!this.providerConnectionStore || !connectionId) {
+			return;
+		}
+
+		const connection = await this.providerConnectionStore.getProviderConnectionById(connectionId);
+		if (!connection) {
+			return;
+		}
+
+		const updates: Record<string, unknown> = {};
+		const now = Date.now();
+		const currentModelLockKey = getModelLockKey(model.id);
+
+		for (const [key, value] of Object.entries(connection)) {
+			if (!key.startsWith(MODEL_LOCK_PREFIX)) continue;
+			if (key === currentModelLockKey || key === MODEL_LOCK_ALL || isExpiredLock(value, now)) {
+				updates[key] = null;
+			}
+		}
+
+		if (!hasActiveLockAfterUpdates(connection, updates, now)) {
+			updates.testStatus = null;
+			updates.lastError = null;
+			updates.errorCode = null;
+			updates.lastErrorAt = null;
+			updates.backoffLevel = 0;
+		}
+
+		if (Object.keys(updates).length > 0) {
+			await this.providerConnectionStore.updateProviderConnection(connectionId, updates);
+		}
 	}
 
 	/**
@@ -401,7 +561,12 @@ export class ModelRegistry {
 			}
 		}
 
-		this.models = combined;
+		this.models = this.withRouterVirtualModels(combined);
+	}
+
+	private withRouterVirtualModels(models: Model<Api>[]): Model<Api>[] {
+		const withoutRouter = models.filter((model) => model.provider !== PIE_LAB_ROUTER_PROVIDER);
+		return [...withoutRouter, ...ROUTER_VIRTUAL_MODELS];
 	}
 
 	/** Load built-in models and apply provider/model overrides */
@@ -636,6 +801,14 @@ export class ModelRegistry {
 	 * Get API key for a model.
 	 */
 	hasConfiguredAuth(model: Model<Api>): boolean {
+		if (model.provider === PIE_LAB_ROUTER_PROVIDER) {
+			return this.models.some(
+				(m) =>
+					m.provider !== PIE_LAB_ROUTER_PROVIDER &&
+					(this.authStorage.hasAuth(m.provider) ||
+						this.providerRequestConfigs.get(m.provider)?.apiKey !== undefined),
+			);
+		}
 		return (
 			this.authStorage.hasAuth(model.provider) ||
 			this.providerRequestConfigs.get(model.provider)?.apiKey !== undefined
@@ -680,12 +853,21 @@ export class ModelRegistry {
 	async getApiKeyAndHeaders(model: Model<Api>): Promise<ResolvedRequestAuth> {
 		try {
 			const providerConfig = this.providerRequestConfigs.get(model.provider);
-			const apiKeyFromAuthStorage = await this.authStorage.getApiKey(model.provider, { includeFallback: false });
+			const providerConnectionAuth = await this.getProviderConnectionAuth(model);
+			if (providerConnectionAuth.status === "unavailable") {
+				return { ok: false, error: providerConnectionAuth.error };
+			}
+			const apiKeyFromAuthStorage =
+				providerConnectionAuth.status === "selected"
+					? undefined
+					: await this.authStorage.getApiKey(model.provider, { includeFallback: false });
 			const apiKey =
-				apiKeyFromAuthStorage ??
-				(providerConfig?.apiKey
-					? resolveConfigValueOrThrow(providerConfig.apiKey, `API key for provider "${model.provider}"`)
-					: undefined);
+				providerConnectionAuth.status === "selected"
+					? providerConnectionAuth.apiKey
+					: (apiKeyFromAuthStorage ??
+						(providerConfig?.apiKey
+							? resolveConfigValueOrThrow(providerConfig.apiKey, `API key for provider "${model.provider}"`)
+							: undefined));
 
 			const providerHeaders = resolveHeadersOrThrow(providerConfig?.headers, `provider "${model.provider}"`);
 			const modelHeaders = resolveHeadersOrThrow(
@@ -709,6 +891,8 @@ export class ModelRegistry {
 				ok: true,
 				apiKey,
 				headers: headers && Object.keys(headers).length > 0 ? headers : undefined,
+				connectionId:
+					providerConnectionAuth.status === "selected" ? providerConnectionAuth.connectionId : undefined,
 			};
 		} catch (error) {
 			return {
@@ -716,6 +900,144 @@ export class ModelRegistry {
 				error: error instanceof Error ? error.message : String(error),
 			};
 		}
+	}
+
+	private async getProviderConnectionAuth(model: Model<Api>): Promise<ProviderConnectionAuthResult> {
+		if (!this.providerConnectionStore) {
+			return { status: "missing" };
+		}
+
+		this.authStorage.reload();
+		await this.syncAuthStorageProviderConnection(model.provider);
+
+		let connections = await this.providerConnectionStore.getProviderConnections({
+			provider: model.provider,
+			isActive: true,
+		});
+		if (connections.length === 0) {
+			return { status: "missing" };
+		}
+
+		const settings = await this.providerConnectionStore.getSettings();
+		if (this.prepareProviderConnections) {
+			connections = await this.prepareProviderConnections({
+				provider: model.provider,
+				model,
+				connections,
+				settings,
+			});
+		}
+		const selection = selectProviderConnection({
+			provider: model.provider,
+			model: model.id,
+			connections,
+			settings,
+		});
+
+		if (selection.status === "unavailable") {
+			return {
+				status: "unavailable",
+				error: `All provider connections for "${model.provider}" are unavailable (${selection.retryAfterHuman}).`,
+			};
+		}
+
+		if (selection.status === "missing") {
+			return { status: "missing" };
+		}
+
+		if (selection.updates) {
+			await this.providerConnectionStore.updateProviderConnection(selection.connection.id, selection.updates);
+		}
+
+		const apiKey = await this.resolveProviderConnectionApiKey(selection.connection);
+		if (!apiKey) {
+			return {
+				status: "unavailable",
+				error: `Provider connection "${selection.connection.id}" for "${model.provider}" has no apiKey or accessToken.`,
+			};
+		}
+
+		return {
+			status: "selected",
+			apiKey,
+			connectionId: selection.connection.id,
+		};
+	}
+
+	private async syncAuthStorageProviderConnection(provider: string): Promise<void> {
+		if (!this.providerConnectionStore) {
+			return;
+		}
+
+		const credential = this.authStorage.get(provider);
+		const syncedConnections = (await this.providerConnectionStore.getProviderConnections({ provider })).filter(
+			isAuthStorageSyncedConnection,
+		);
+		if (!credential) {
+			await Promise.all(
+				syncedConnections.map((connection) =>
+					this.updateProviderConnectionIfChanged(connection, buildAuthStorageConnectionDeactivation(connection)),
+				),
+			);
+			return;
+		}
+
+		const [primaryConnection, ...duplicateConnections] = syncedConnections;
+		if (!primaryConnection) {
+			await this.providerConnectionStore.createProviderConnection({
+				...createAuthStorageProviderConnectionInput(provider, credential),
+				...buildAuthStorageConnectionReset(),
+			});
+		} else {
+			await this.updateProviderConnectionIfChanged(
+				primaryConnection,
+				createAuthStorageProviderConnectionUpdate(primaryConnection, credential),
+			);
+		}
+
+		await Promise.all(
+			duplicateConnections.map((connection) =>
+				this.updateProviderConnectionIfChanged(connection, buildAuthStorageConnectionDeactivation(connection)),
+			),
+		);
+	}
+
+	private async getAuthStorageSyncedProviders(): Promise<string[]> {
+		if (!this.providerConnectionStore) {
+			return [];
+		}
+
+		const providers = new Set(this.authStorage.list());
+		const connections = await this.providerConnectionStore.getProviderConnections();
+		for (const connection of connections) {
+			if (isAuthStorageSyncedConnection(connection)) {
+				providers.add(connection.provider);
+			}
+		}
+
+		return [...providers];
+	}
+
+	private async updateProviderConnectionIfChanged(
+		connection: ProviderConnection,
+		updates: UpdateProviderConnectionInput,
+	): Promise<void> {
+		if (!this.providerConnectionStore || !hasProviderConnectionUpdate(connection, updates)) {
+			return;
+		}
+
+		await this.providerConnectionStore.updateProviderConnection(connection.id, updates);
+	}
+
+	private async resolveProviderConnectionApiKey(connection: ProviderConnection): Promise<string | undefined> {
+		if (isAuthStorageSyncedConnection(connection)) {
+			return (
+				(await this.authStorage.getApiKey(connection.provider, { includeFallback: false })) ??
+				resolveRawProviderConnectionApiKey(connection)
+			);
+		}
+
+		return resolveRawProviderConnectionApiKey(connection);
 	}
 
 	/**
@@ -921,6 +1243,242 @@ export class ModelRegistry {
 			});
 		}
 	}
+}
+
+function createAuthStorageProviderConnectionInput(
+	provider: string,
+	credential: AuthCredential,
+): CreateProviderConnectionInput {
+	return {
+		provider,
+		name: getAuthStorageConnectionName(credential),
+		isActive: true,
+		...createAuthStorageCredentialFields(credential),
+		providerSpecificData: createAuthStorageProviderSpecificData(undefined, credential, {
+			clearQuotaSelection: false,
+		}),
+	};
+}
+
+function createAuthStorageProviderConnectionUpdate(
+	connection: ProviderConnection,
+	credential: AuthCredential,
+): UpdateProviderConnectionInput {
+	const credentialChanged = !authStorageConnectionCredentialMatches(connection, credential);
+	const reactivating = connection.isActive !== true;
+	return {
+		name: connection.name ?? getAuthStorageConnectionName(credential),
+		isActive: true,
+		...createAuthStorageCredentialFields(credential),
+		providerSpecificData: createAuthStorageProviderSpecificData(connection.providerSpecificData, credential, {
+			clearQuotaSelection: credentialChanged,
+		}),
+		...(credentialChanged || reactivating ? buildAuthStorageConnectionReset(connection) : {}),
+	};
+}
+
+function buildAuthStorageConnectionDeactivation(connection: ProviderConnection): UpdateProviderConnectionInput {
+	return {
+		isActive: false,
+		apiKey: null,
+		accessToken: null,
+		refreshToken: null,
+		providerSpecificData: createInactiveAuthStorageProviderSpecificData(connection.providerSpecificData),
+		...buildAuthStorageConnectionReset(connection),
+	};
+}
+
+function buildAuthStorageConnectionReset(connection?: ProviderConnection): UpdateProviderConnectionInput {
+	return {
+		testStatus: null,
+		lastError: null,
+		errorCode: null,
+		lastErrorAt: null,
+		backoffLevel: 0,
+		...buildModelLockClearUpdates(connection),
+	};
+}
+
+function createAuthStorageCredentialFields(
+	credential: AuthCredential,
+): Pick<UpdateProviderConnectionInput, "authType" | "apiKey" | "accessToken" | "refreshToken"> {
+	if (credential.type === "api_key") {
+		return {
+			authType: "apikey",
+			apiKey: credential.key,
+			accessToken: null,
+			refreshToken: null,
+		};
+	}
+
+	return {
+		authType: "oauth",
+		apiKey: null,
+		accessToken: credential.access,
+		refreshToken: credential.refresh,
+	};
+}
+
+function createAuthStorageProviderSpecificData(
+	value: ProviderConnection["providerSpecificData"],
+	credential: AuthCredential,
+	options: { clearQuotaSelection: boolean },
+): Record<string, unknown> {
+	const data = isRecord(value) ? { ...value } : {};
+	data.source = PIE_LAB_AUTH_STORAGE_SOURCE;
+	delete data.authDeletedAt;
+	if (options.clearQuotaSelection) {
+		delete data[PIE_LAB_QUOTA_SELECTION_KEY];
+		delete data[LEGACY_QUOTA_SELECTION_KEY];
+	}
+	if (credential.type === "oauth") {
+		data.expires = credential.expires;
+	} else {
+		delete data.expires;
+	}
+	return data;
+}
+
+function createInactiveAuthStorageProviderSpecificData(
+	value: ProviderConnection["providerSpecificData"],
+): Record<string, unknown> {
+	const data = isRecord(value) ? { ...value } : {};
+	data.source = PIE_LAB_AUTH_STORAGE_SOURCE;
+	data.authDeletedAt =
+		typeof data.authDeletedAt === "string" && data.authDeletedAt.length > 0
+			? data.authDeletedAt
+			: new Date().toISOString();
+	return data;
+}
+
+function buildModelLockClearUpdates(connection: ProviderConnection | undefined): UpdateProviderConnectionInput {
+	if (!connection) {
+		return {};
+	}
+
+	const updates: UpdateProviderConnectionInput = {};
+	for (const [key, value] of Object.entries(connection)) {
+		if (key.startsWith(MODEL_LOCK_PREFIX) && value !== null) {
+			updates[key] = null;
+		}
+	}
+	return updates;
+}
+
+function getAuthStorageConnectionName(credential: AuthCredential): string {
+	return credential.type === "api_key" ? "auth.json API key" : "auth.json OAuth";
+}
+
+function authStorageConnectionCredentialMatches(connection: ProviderConnection, credential: AuthCredential): boolean {
+	if (credential.type === "api_key") {
+		return (
+			connection.authType === "apikey" &&
+			connection.apiKey === credential.key &&
+			(connection.accessToken ?? null) === null &&
+			(connection.refreshToken ?? null) === null
+		);
+	}
+
+	const data = isRecord(connection.providerSpecificData) ? connection.providerSpecificData : {};
+	return (
+		connection.authType === "oauth" &&
+		(connection.apiKey ?? null) === null &&
+		connection.accessToken === credential.access &&
+		connection.refreshToken === credential.refresh &&
+		data.expires === credential.expires
+	);
+}
+
+function isAuthStorageSyncedConnection(connection: ProviderConnection): boolean {
+	return (
+		typeof connection.providerSpecificData === "object" &&
+		connection.providerSpecificData !== null &&
+		connection.providerSpecificData.source === PIE_LAB_AUTH_STORAGE_SOURCE
+	);
+}
+
+function resolveRawProviderConnectionApiKey(connection: ProviderConnection): string | undefined {
+	const rawCredential =
+		typeof connection.apiKey === "string" && connection.apiKey.length > 0
+			? connection.apiKey
+			: typeof connection.accessToken === "string" && connection.accessToken.length > 0
+				? connection.accessToken
+				: undefined;
+
+	return rawCredential
+		? resolveConfigValueOrThrow(rawCredential, `credential for provider connection "${connection.id}"`)
+		: undefined;
+}
+
+function hasProviderConnectionUpdate(connection: ProviderConnection, updates: UpdateProviderConnectionInput): boolean {
+	for (const [key, value] of Object.entries(updates)) {
+		if (!unknownValuesEqual(connection[key], value)) {
+			return true;
+		}
+	}
+	return false;
+}
+
+function unknownValuesEqual(left: unknown, right: unknown): boolean {
+	if (Object.is(left, right)) {
+		return true;
+	}
+	if (isRecord(left) && isRecord(right)) {
+		return JSON.stringify(left) === JSON.stringify(right);
+	}
+	return false;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function extractProviderErrorStatus(error: unknown): number | undefined {
+	if (!error || typeof error !== "object") return undefined;
+	const record = error as Record<string, unknown>;
+
+	for (const key of ["status", "statusCode", "code"]) {
+		if (typeof record[key] === "number") return record[key];
+	}
+
+	const response = record.response;
+	if (response && typeof response === "object" && typeof (response as Record<string, unknown>).status === "number") {
+		return (response as Record<string, number>).status;
+	}
+
+	return undefined;
+}
+
+function providerErrorText(error: unknown): string {
+	if (typeof error === "string") return error;
+	if (error instanceof Error) return error.message;
+	if (isErrorAssistantMessage(error) && error.errorMessage) return error.errorMessage;
+	return String(error);
+}
+
+function isErrorAssistantMessage(value: unknown): value is { errorMessage?: string } {
+	return typeof value === "object" && value !== null && "errorMessage" in value;
+}
+
+function isExpiredLock(value: unknown, now: number): boolean {
+	return typeof value === "string" && Date.parse(value) <= now;
+}
+
+function isActiveLock(value: unknown, now: number): boolean {
+	return typeof value === "string" && Date.parse(value) > now;
+}
+
+function hasActiveLockAfterUpdates(
+	connection: ProviderConnection,
+	updates: Record<string, unknown>,
+	now: number,
+): boolean {
+	for (const [key, value] of Object.entries(connection)) {
+		if (!key.startsWith(MODEL_LOCK_PREFIX)) continue;
+		if (key in updates) continue;
+		if (isActiveLock(value, now)) return true;
+	}
+	return false;
 }
 
 /**

@@ -1,0 +1,31 @@
+{
+	"name": "@pie-lab/shared",
+	"version": "0.0.0",
+	"type": "module",
+	"description": "Shared metadata and utilities for pie-lab",
+	"main": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js"
+		}
+	},
+	"files": [
+		"dist",
+		"README.md"
+	],
+	"publishConfig": {
+		"access": "public"
+	},
+	"scripts": {
+		"build": "tsgo -p tsconfig.build.json",
+		"dev": "tsgo -p tsconfig.build.json --watch --preserveWatchOutput",
+		"clean": "shx rm -rf dist"
+	},
+	"dependencies": {
+		"@pie-lab/router": "0.0.0",
+		"@pie-lab/storage": "0.0.0",
+		"undici": "^8.3.0"
+	}
+}

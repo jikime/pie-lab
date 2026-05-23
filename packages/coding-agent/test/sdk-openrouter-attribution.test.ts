@@ -7,7 +7,7 @@ import {
 	createAssistantMessageEventStream,
 	type Model,
 	type SimpleStreamOptions,
-} from "@earendil-works/pi-ai";
+} from "@pie-lab/ai";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { AuthStorage } from "../src/core/auth-storage.js";
 import { ModelRegistry } from "../src/core/model-registry.js";
@@ -123,11 +123,12 @@ describe("createAgentSession OpenRouter attribution headers", () => {
 		});
 
 		try {
-			await session.agent.streamFn(
+			const stream = await session.agent.streamFn(
 				model,
 				{ messages: [] },
 				options.requestHeaders ? { headers: options.requestHeaders } : undefined,
 			);
+			await stream.result();
 			return capturedOptions?.headers;
 		} finally {
 			session.dispose();
@@ -140,8 +141,8 @@ describe("createAgentSession OpenRouter attribution headers", () => {
 	it("adds default attribution headers for OpenRouter models", async () => {
 		const headers = await captureHeaders(createModel("openrouter", "https://openrouter.ai/api/v1"));
 
-		expect(headers?.["HTTP-Referer"]).toBe("https://pi.dev");
-		expect(headers?.["X-OpenRouter-Title"]).toBe("pi");
+		expect(headers?.["HTTP-Referer"]).toBe("https://pielab.ai");
+		expect(headers?.["X-OpenRouter-Title"]).toBe("pie");
 		expect(headers?.["X-OpenRouter-Categories"]).toBe("cli-agent");
 	});
 
@@ -158,8 +159,8 @@ describe("createAgentSession OpenRouter attribution headers", () => {
 	it("adds attribution headers for custom providers routed through OpenRouter", async () => {
 		const headers = await captureHeaders(createModel("custom-openrouter", "https://openrouter.ai/api/v1"));
 
-		expect(headers?.["HTTP-Referer"]).toBe("https://pi.dev");
-		expect(headers?.["X-OpenRouter-Title"]).toBe("pi");
+		expect(headers?.["HTTP-Referer"]).toBe("https://pielab.ai");
+		expect(headers?.["X-OpenRouter-Title"]).toBe("pie");
 		expect(headers?.["X-OpenRouter-Categories"]).toBe("cli-agent");
 	});
 

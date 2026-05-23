@@ -7,27 +7,27 @@ Pi is a minimal terminal coding harness. It is designed to stay small at the cor
 On linux or mac you can install Pi with curl:
 
 ```bash
-curl -fsSL https://pi.dev/install.sh | sh
+curl -fsSL https://pielab.ai/install.sh | sh
 ```
 
 Or alternatively with npm:
 
 ```bash
-npm install -g @earendil-works/pi-coding-agent
+npm install -g --ignore-scripts @pie-lab/coding-agent
 ```
 
 To uninstall pi itself, use npm for curl and npm installs:
 
 ```bash
-npm uninstall -g @earendil-works/pi-coding-agent
+npm uninstall -g @pie-lab/coding-agent
 ```
 
-For pnpm, Yarn, or Bun installs, use the matching global remove command: `pnpm remove -g @earendil-works/pi-coding-agent`, `yarn global remove @earendil-works/pi-coding-agent`, or `bun uninstall -g @earendil-works/pi-coding-agent`.
+For pnpm, Yarn, or Bun installs, use the matching global remove command: `pnpm remove -g @pie-lab/coding-agent`, `yarn global remove @pie-lab/coding-agent`, or `bun uninstall -g @pie-lab/coding-agent`.
 
 Then run it in a project directory:
 
 ```bash
-pi
+pie
 ```
 
 Authenticate with `/login` for subscription providers, or set an API key such as `ANTHROPIC_API_KEY` before starting pi.

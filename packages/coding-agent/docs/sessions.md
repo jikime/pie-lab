@@ -4,14 +4,14 @@ Pi saves conversations as sessions so you can continue work, branch from earlier
 
 ## Session Storage
 
-Sessions auto-save to `~/.pi/agent/sessions/`, organized by working directory. Each session is a JSONL file with a tree structure.
+Sessions auto-save to `~/.pie/agent/sessions/`, organized by working directory. Each session is a JSONL file with a tree structure.
 
 ```bash
-pi -c                  # Continue most recent session
-pi -r                  # Browse and select from past sessions
-pi --no-session        # Ephemeral mode; do not save
-pi --session <path|id> # Use a specific session file or partial session ID
-pi --fork <path|id>    # Fork a session file or partial session ID into a new session
+pie -c                  # Continue most recent session
+pie -r                  # Browse and select from past sessions
+pie --no-session        # Ephemeral mode; do not save
+pie --session <path|id> # Use a specific session file or partial session ID
+pie --fork <path|id>    # Fork a session file or partial session ID into a new session
 ```
 
 Use `/session` in interactive mode to see the current session file, session ID, message count, tokens, and cost.
@@ -35,7 +35,7 @@ For the JSONL file format and SessionManager API, see [Session Format](session-f
 
 ## Resuming and Deleting Sessions
 
-`/resume` opens an interactive session picker for the current project. `pi -r` opens the same picker at startup.
+`/resume` opens an interactive session picker for the current project. `pie -r` opens the same picker at startup.
 
 In the picker you can:
 
@@ -56,7 +56,7 @@ Use `/name <name>` to set a human-readable session name:
 /name Refactor auth module
 ```
 
-Named sessions are easier to find in `/resume` and `pi -r`.
+Named sessions are easier to find in `/resume` and `pie -r`.
 
 ## Branching with `/tree`
 

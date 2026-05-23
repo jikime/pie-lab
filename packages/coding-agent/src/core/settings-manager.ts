@@ -1,9 +1,9 @@
-import type { Transport } from "@earendil-works/pi-ai";
+import type { Transport } from "@pie-lab/ai";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { homedir } from "os";
 import { dirname, join } from "path";
 import lockfile from "proper-lockfile";
-import { CONFIG_DIR_NAME, getAgentDir } from "../config.js";
+import { CONFIG_DIR_NAME, ENV_CLEAR_ON_SHRINK, ENV_HARDWARE_CURSOR, getAgentDir, isTruthyEnv } from "../config.js";
 
 export interface CompactionSettings {
 	enabled?: boolean; // default: true
@@ -938,7 +938,7 @@ export class SettingsManager {
 		if (this.settings.terminal?.clearOnShrink !== undefined) {
 			return this.settings.terminal.clearOnShrink;
 		}
-		return process.env.PI_CLEAR_ON_SHRINK === "1";
+		return isTruthyEnv(ENV_CLEAR_ON_SHRINK, "PI_CLEAR_ON_SHRINK");
 	}
 
 	setClearOnShrink(enabled: boolean): void {
@@ -1022,7 +1022,7 @@ export class SettingsManager {
 	}
 
 	getShowHardwareCursor(): boolean {
-		return this.settings.showHardwareCursor ?? process.env.PI_HARDWARE_CURSOR === "1";
+		return this.settings.showHardwareCursor ?? isTruthyEnv(ENV_HARDWARE_CURSOR, "PI_HARDWARE_CURSOR");
 	}
 
 	setShowHardwareCursor(enabled: boolean): void {

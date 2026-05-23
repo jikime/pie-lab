@@ -7,7 +7,7 @@ import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import type { AgentMessage } from "@earendil-works/pi-agent-core";
+import type { AgentMessage } from "@pie-lab/agent-core";
 import {
 	type AssistantMessage,
 	getProviders,
@@ -16,7 +16,7 @@ import {
 	type Model,
 	type OAuthProviderId,
 	type OAuthSelectPrompt,
-} from "@earendil-works/pi-ai";
+} from "@pie-lab/ai";
 import type {
 	AutocompleteItem,
 	AutocompleteProvider,
@@ -27,7 +27,7 @@ import type {
 	OverlayHandle,
 	OverlayOptions,
 	SlashCommand,
-} from "@earendil-works/pi-tui";
+} from "@pie-lab/tui";
 import {
 	CombinedAutocompleteProvider,
 	type Component,
@@ -46,16 +46,19 @@ import {
 	TruncatedText,
 	TUI,
 	visibleWidth,
-} from "@earendil-works/pi-tui";
+} from "@pie-lab/tui";
 import { spawn, spawnSync } from "child_process";
 import {
 	APP_NAME,
 	APP_TITLE,
+	CLI_NAME,
+	ENV_OFFLINE,
 	getAgentDir,
 	getAuthPath,
 	getDebugLogPath,
 	getDocsPath,
 	getShareViewerUrl,
+	isTruthyEnv,
 	VERSION,
 } from "../../config.js";
 import { type AgentSession, type AgentSessionEvent, parseSkillBlock } from "../../core/agent-session.js";
@@ -631,7 +634,7 @@ export class InteractiveMode {
 			);
 			const onboarding = theme.fg(
 				"dim",
-				`Pi can explain its own features and look up its docs. Ask it how to use or extend Pi.`,
+				`pie can explain its own features and look up its docs. Ask it how to use or extend pie.`,
 			);
 			this.builtInHeader = new ExpandableText(
 				() => `${logo}\n${compactInstructions}\n${compactOnboarding}\n\n${onboarding}`,
@@ -783,7 +786,7 @@ export class InteractiveMode {
 	}
 
 	private async checkForPackageUpdates(): Promise<string[]> {
-		if (process.env.PI_OFFLINE) {
+		if (isTruthyEnv(ENV_OFFLINE, "PI_OFFLINE")) {
 			return [];
 		}
 
@@ -879,7 +882,7 @@ export class InteractiveMode {
 	}
 
 	private reportInstallTelemetry(version: string): void {
-		if (process.env.PI_OFFLINE) {
+		if (isTruthyEnv(ENV_OFFLINE, "PI_OFFLINE")) {
 			return;
 		}
 
@@ -887,7 +890,7 @@ export class InteractiveMode {
 			return;
 		}
 
-		void fetch(`https://pi.dev/api/report-install?version=${encodeURIComponent(version)}`, {
+		void fetch(`https://pielab.ai/api/report-install?version=${encodeURIComponent(version)}`, {
 			headers: {
 				"User-Agent": getPiUserAgent(version),
 			},
@@ -3581,9 +3584,9 @@ export class InteractiveMode {
 	}
 
 	showNewVersionNotification(release: LatestPiRelease): void {
-		const action = theme.fg("accent", `${APP_NAME} update`);
+		const action = theme.fg("accent", `${CLI_NAME} update`);
 		const updateInstruction = theme.fg("muted", `New version ${release.version} is available. Run `) + action;
-		const changelogUrl = "https://pi.dev/changelog";
+		const changelogUrl = "https://pielab.ai/changelog";
 		const changelogLink = getCapabilities().hyperlinks
 			? hyperlink(theme.fg("accent", "open changelog"), changelogUrl)
 			: theme.fg("accent", changelogUrl);
@@ -3610,7 +3613,7 @@ export class InteractiveMode {
 	}
 
 	showPackageUpdateNotification(packages: string[]): void {
-		const action = theme.fg("accent", `${APP_NAME} update`);
+		const action = theme.fg("accent", `${CLI_NAME} update`);
 		const updateInstruction = theme.fg("muted", "Package updates are available. Run ") + action;
 		const packageLines = packages.map((pkg) => `- ${pkg}`).join("\n");
 
@@ -4576,6 +4579,7 @@ export class InteractiveMode {
 
 					try {
 						this.session.modelRegistry.authStorage.logout(providerOption.id);
+						await this.session.modelRegistry.syncAuthStorageProviderConnections(providerOption.id);
 						this.session.modelRegistry.refresh();
 						await this.updateAvailableProviderCount();
 						const message =
@@ -4708,6 +4712,7 @@ export class InteractiveMode {
 			}
 
 			this.session.modelRegistry.authStorage.set(providerId, { type: "api_key", key: apiKey });
+			await this.session.modelRegistry.syncAuthStorageProviderConnections(providerId);
 
 			restoreEditor();
 			await this.completeProviderAuthentication(providerId, providerName, "api_key", previousModel);
@@ -4833,6 +4838,7 @@ export class InteractiveMode {
 			});
 
 			// Success
+			await this.session.modelRegistry.syncAuthStorageProviderConnections(providerId);
 			restoreEditor();
 			await this.completeProviderAuthentication(providerId, providerName, "oauth", previousModel);
 		} catch (error: unknown) {

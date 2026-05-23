@@ -4,9 +4,16 @@ See [AGENTS.md](../../../AGENTS.md) for additional guidelines.
 
 ## Setup
 
+pie-lab requires Node.js `>=22.19.0`. Use the repo's `.nvmrc` or `.node-version` before installing dependencies:
+
 ```bash
-git clone https://github.com/earendil-works/pi-mono
-cd pi-mono
+nvm install
+nvm use
+```
+
+```bash
+git clone <pie-lab-repo-url>
+cd pie-lab
 npm install
 npm run build
 ```
@@ -14,10 +21,10 @@ npm run build
 Run from source:
 
 ```bash
-/path/to/pi-mono/pi-test.sh
+/path/to/pie-lab/pie-test.sh
 ```
 
-The script can be run from any directory. Pi keeps the caller's current working directory.
+The script can be run from any directory. pie keeps the caller's current working directory.
 
 ## Forking / Rebranding
 
@@ -48,7 +55,7 @@ Never use `__dirname` directly for package assets.
 
 ## Debug Command
 
-`/debug` (hidden) writes to `~/.pi/agent/pi-debug.log`:
+`/debug` (hidden) writes to `~/.pie/agent/pie-debug.log`:
 - Rendered TUI lines with ANSI codes
 - Last messages sent to the LLM
 

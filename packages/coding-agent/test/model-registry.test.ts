@@ -1,9 +1,11 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AnthropicMessagesCompat, Api, Context, Model, OpenAICompletionsCompat } from "@earendil-works/pi-ai";
-import { getApiProvider } from "@earendil-works/pi-ai";
-import { getOAuthProvider } from "@earendil-works/pi-ai/oauth";
+import type { AnthropicMessagesCompat, Api, Context, Model, OpenAICompletionsCompat } from "@pie-lab/ai";
+import { getApiProvider } from "@pie-lab/ai";
+import { getOAuthProvider } from "@pie-lab/ai/oauth";
+import { PIE_LAB_ROUTER_PROVIDER } from "@pie-lab/router";
+import { createInMemoryProviderConnectionStore, type ProviderConnection } from "@pie-lab/storage";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { AuthStorage } from "../src/core/auth-storage.js";
 import { clearApiKeyCache, ModelRegistry, type ProviderConfigInput } from "../src/core/model-registry.js";
@@ -14,7 +16,7 @@ describe("ModelRegistry", () => {
 	let authStorage: AuthStorage;
 
 	beforeEach(() => {
-		tempDir = join(tmpdir(), `pi-test-model-registry-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+		tempDir = join(tmpdir(), `pie-test-model-registry-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 		mkdirSync(tempDir, { recursive: true });
 		modelsJsonPath = join(tempDir, "models.json");
 		authStorage = AuthStorage.create(join(tempDir, "auth.json"));
@@ -87,6 +89,336 @@ describe("ModelRegistry", () => {
 	const emptyContext: Context = {
 		messages: [],
 	};
+
+	function providerConnection(
+		overrides: Partial<ProviderConnection> & { id: string; provider: string },
+	): ProviderConnection {
+		return {
+			authType: "apikey" as const,
+			isActive: true,
+			priority: 1,
+			createdAt: "2026-05-22T00:00:00.000Z",
+			updatedAt: "2026-05-22T00:00:00.000Z",
+			...overrides,
+		};
+	}
+
+	describe("pie-lab router virtual models", () => {
+		test("includes router aliases in the model catalog", () => {
+			const registry = ModelRegistry.create(authStorage, modelsJsonPath);
+			const routerModels = getModelsForProvider(registry, PIE_LAB_ROUTER_PROVIDER);
+
+			expect(routerModels.map((model) => model.id)).toEqual(
+				expect.arrayContaining(["auto:coding", "cheap:coding", "fast:chat"]),
+			);
+		});
+
+		test("marks router aliases available when at least one real provider is configured", () => {
+			writeModelsJson({
+				"custom-provider": providerConfig("https://example.com/v1", [{ id: "custom-model" }]),
+			});
+			const withAuth = ModelRegistry.create(authStorage, modelsJsonPath);
+			expect(withAuth.getAvailable().some((model) => model.provider === PIE_LAB_ROUTER_PROVIDER)).toBe(true);
+		});
+	});
+
+	describe("pie-lab provider connections", () => {
+		test("uses the selected provider connection credential before auth storage", async () => {
+			authStorage.set("openai", { type: "api_key", key: "auth-storage-key" });
+			const providerConnectionStore = createInMemoryProviderConnectionStore({
+				connections: [
+					providerConnection({
+						id: "openai_conn_2",
+						provider: "openai",
+						apiKey: "connection-key-2",
+						priority: 2,
+					}),
+					providerConnection({
+						id: "openai_conn_1",
+						provider: "openai",
+						apiKey: "connection-key-1",
+						priority: 1,
+					}),
+				],
+			});
+			const registry = ModelRegistry.create(authStorage, modelsJsonPath, { providerConnectionStore });
+
+			const auth = await registry.getApiKeyAndHeaders(openAiModel);
+
+			expect(auth).toEqual({
+				ok: true,
+				apiKey: "connection-key-1",
+				connectionId: "openai_conn_1",
+			});
+		});
+
+		test("updates selected provider connection state for round-robin", async () => {
+			const providerConnectionStore = createInMemoryProviderConnectionStore({
+				connections: [
+					providerConnection({
+						id: "openai_conn_1",
+						provider: "openai",
+						apiKey: "connection-key-1",
+						priority: 1,
+					}),
+					providerConnection({
+						id: "openai_conn_2",
+						provider: "openai",
+						apiKey: "connection-key-2",
+						priority: 2,
+					}),
+				],
+				settings: {
+					fallbackStrategy: "round-robin",
+					stickyRoundRobinLimit: 1,
+				},
+			});
+			const registry = ModelRegistry.create(authStorage, modelsJsonPath, { providerConnectionStore });
+
+			const first = await registry.getApiKeyAndHeaders(openAiModel);
+			const second = await registry.getApiKeyAndHeaders(openAiModel);
+
+			expect(first).toMatchObject({ ok: true, apiKey: "connection-key-1", connectionId: "openai_conn_1" });
+			expect(second).toMatchObject({ ok: true, apiKey: "connection-key-2", connectionId: "openai_conn_2" });
+			await expect(providerConnectionStore.getProviderConnectionById("openai_conn_1")).resolves.toMatchObject({
+				lastUsedAt: expect.any(String),
+				consecutiveUseCount: 1,
+			});
+		});
+
+		test("locks a failing provider connection for the routed model and selects the next connection", async () => {
+			const providerConnectionStore = createInMemoryProviderConnectionStore({
+				connections: [
+					providerConnection({
+						id: "openai_conn_1",
+						provider: "openai",
+						apiKey: "connection-key-1",
+						priority: 1,
+					}),
+					providerConnection({
+						id: "openai_conn_2",
+						provider: "openai",
+						apiKey: "connection-key-2",
+						priority: 2,
+					}),
+				],
+			});
+			const registry = ModelRegistry.create(authStorage, modelsJsonPath, { providerConnectionStore });
+			const rateLimitError = Object.assign(new Error("rate limit exceeded"), { status: 429 });
+
+			await registry.markProviderConnectionUnavailable("openai_conn_1", openAiModel, rateLimitError);
+
+			await expect(providerConnectionStore.getProviderConnectionById("openai_conn_1")).resolves.toMatchObject({
+				testStatus: "unavailable",
+				lastError: "rate limit exceeded",
+				errorCode: 429,
+				backoffLevel: 1,
+				[`modelLock_${openAiModel.id}`]: expect.any(String),
+			});
+			await expect(registry.getApiKeyAndHeaders(openAiModel)).resolves.toMatchObject({
+				ok: true,
+				apiKey: "connection-key-2",
+				connectionId: "openai_conn_2",
+			});
+
+			await registry.clearProviderConnectionError("openai_conn_1", openAiModel);
+
+			await expect(providerConnectionStore.getProviderConnectionById("openai_conn_1")).resolves.toMatchObject({
+				testStatus: null,
+				lastError: null,
+				errorCode: null,
+				backoffLevel: 0,
+				[`modelLock_${openAiModel.id}`]: null,
+			});
+		});
+
+		test("uses provider reset timing for quota cooldown locks", async () => {
+			const providerConnectionStore = createInMemoryProviderConnectionStore({
+				connections: [
+					providerConnection({
+						id: "openai_conn_1",
+						provider: "openai",
+						apiKey: "connection-key-1",
+						priority: 1,
+					}),
+				],
+			});
+			const registry = ModelRegistry.create(authStorage, modelsJsonPath, { providerConnectionStore });
+			const before = Date.now();
+			const quotaError = Object.assign(new Error("You have hit your ChatGPT usage limit."), {
+				status: 429,
+				error: { type: "usage_limit_reached", resets_in_seconds: 600 },
+			});
+
+			await registry.markProviderConnectionUnavailable("openai_conn_1", openAiModel, quotaError);
+
+			const updated = await providerConnectionStore.getProviderConnectionById("openai_conn_1");
+			const lockUntil = Date.parse(String(updated?.[`modelLock_${openAiModel.id}`]));
+
+			expect(updated).toMatchObject({
+				testStatus: "unavailable",
+				lastError: "You have hit your ChatGPT usage limit.",
+				errorCode: 429,
+				backoffLevel: 0,
+			});
+			expect(lockUntil).toBeGreaterThanOrEqual(before + 590_000);
+			expect(lockUntil).toBeLessThanOrEqual(before + 610_000);
+		});
+
+		test("creates a provider connection from auth.json API key when no connection exists", async () => {
+			authStorage.set("openai", { type: "api_key", key: "auth-json-key" });
+			const providerConnectionStore = createInMemoryProviderConnectionStore();
+			const registry = ModelRegistry.create(authStorage, modelsJsonPath, { providerConnectionStore });
+
+			const auth = await registry.getApiKeyAndHeaders(openAiModel);
+
+			expect(auth).toMatchObject({
+				ok: true,
+				apiKey: "auth-json-key",
+				connectionId: expect.any(String),
+			});
+			await expect(providerConnectionStore.getProviderConnections({ provider: "openai" })).resolves.toMatchObject([
+				{
+					provider: "openai",
+					authType: "apikey",
+					name: "auth.json API key",
+					apiKey: "auth-json-key",
+					isActive: true,
+					providerSpecificData: { source: "auth.json" },
+				},
+			]);
+		});
+
+		test("creates a provider connection from auth.json OAuth credentials when no connection exists", async () => {
+			authStorage.set("anthropic", {
+				type: "oauth",
+				access: "oauth-access-token",
+				refresh: "oauth-refresh-token",
+				expires: Date.now() + 60_000,
+			});
+			const providerConnectionStore = createInMemoryProviderConnectionStore();
+			const registry = ModelRegistry.create(authStorage, modelsJsonPath, { providerConnectionStore });
+			const model: Model<Api> = {
+				...openAiModel,
+				provider: "anthropic",
+				api: "anthropic-messages",
+				id: "claude-test",
+			};
+
+			const auth = await registry.getApiKeyAndHeaders(model);
+
+			expect(auth).toMatchObject({
+				ok: true,
+				apiKey: "oauth-access-token",
+				connectionId: expect.any(String),
+			});
+			await expect(providerConnectionStore.getProviderConnections({ provider: "anthropic" })).resolves.toMatchObject(
+				[
+					{
+						provider: "anthropic",
+						authType: "oauth",
+						name: "auth.json OAuth",
+						accessToken: "oauth-access-token",
+						refreshToken: "oauth-refresh-token",
+						providerSpecificData: { source: "auth.json" },
+					},
+				],
+			);
+		});
+
+		test("updates an auth.json synced provider connection when the stored API key changes", async () => {
+			authStorage.set("openai", { type: "api_key", key: "new-auth-json-key" });
+			const providerConnectionStore = createInMemoryProviderConnectionStore({
+				connections: [
+					providerConnection({
+						id: "openai_auth_conn",
+						provider: "openai",
+						apiKey: "old-auth-json-key",
+						testStatus: "unavailable",
+						lastError: "old error",
+						errorCode: 429,
+						backoffLevel: 1,
+						providerSpecificData: {
+							source: "auth.json",
+							pieLabQuotaSelection: { status: "depleted" },
+						},
+						[`modelLock_${openAiModel.id}`]: "2026-05-23T00:00:00.000Z",
+					}),
+				],
+			});
+			const registry = ModelRegistry.create(authStorage, modelsJsonPath, { providerConnectionStore });
+
+			const auth = await registry.getApiKeyAndHeaders(openAiModel);
+
+			expect(auth).toMatchObject({
+				ok: true,
+				apiKey: "new-auth-json-key",
+				connectionId: "openai_auth_conn",
+			});
+			await expect(providerConnectionStore.getProviderConnectionById("openai_auth_conn")).resolves.toMatchObject({
+				apiKey: "new-auth-json-key",
+				accessToken: null,
+				refreshToken: null,
+				isActive: true,
+				testStatus: null,
+				lastError: null,
+				errorCode: null,
+				backoffLevel: 0,
+				[`modelLock_${openAiModel.id}`]: null,
+				providerSpecificData: { source: "auth.json" },
+			});
+			const updated = await providerConnectionStore.getProviderConnectionById("openai_auth_conn");
+			expect(updated?.providerSpecificData?.pieLabQuotaSelection).toBeUndefined();
+		});
+
+		test("deactivates auth.json synced provider connections when stored credentials are removed", async () => {
+			const providerConnectionStore = createInMemoryProviderConnectionStore({
+				connections: [
+					providerConnection({
+						id: "openai_auth_conn",
+						provider: "openai",
+						apiKey: "auth-json-key",
+						testStatus: "unavailable",
+						lastError: "old error",
+						errorCode: 429,
+						backoffLevel: 1,
+						providerSpecificData: { source: "auth.json" },
+						[`modelLock_${openAiModel.id}`]: "2026-05-23T00:00:00.000Z",
+					}),
+					providerConnection({
+						id: "openai_manual_conn",
+						provider: "openai",
+						apiKey: "manual-key",
+						providerSpecificData: { source: "manual" },
+					}),
+				],
+			});
+			const registry = ModelRegistry.create(authStorage, modelsJsonPath, { providerConnectionStore });
+
+			await registry.syncAuthStorageProviderConnections("openai");
+
+			await expect(providerConnectionStore.getProviderConnectionById("openai_auth_conn")).resolves.toMatchObject({
+				isActive: false,
+				apiKey: null,
+				accessToken: null,
+				refreshToken: null,
+				testStatus: null,
+				lastError: null,
+				errorCode: null,
+				backoffLevel: 0,
+				[`modelLock_${openAiModel.id}`]: null,
+				providerSpecificData: {
+					source: "auth.json",
+					authDeletedAt: expect.any(String),
+				},
+			});
+			await expect(providerConnectionStore.getProviderConnectionById("openai_manual_conn")).resolves.toMatchObject({
+				isActive: true,
+				apiKey: "manual-key",
+				providerSpecificData: { source: "manual" },
+			});
+		});
+	});
 
 	describe("baseUrl override (no custom models)", () => {
 		test("overriding baseUrl keeps all built-in models", () => {

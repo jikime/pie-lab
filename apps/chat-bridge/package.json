@@ -1,0 +1,12 @@
+{
+	"name": "@pie-lab/pie-chat",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"description": "pie-lab Discord/Telegram chat bridge app based on the pi-chat source",
+	"scripts": {
+		"dev": "echo \"chat bridge app not imported yet\"",
+		"build": "echo \"chat bridge app not imported yet\"",
+		"check": "echo \"chat bridge app not imported yet\""
+	}
+}

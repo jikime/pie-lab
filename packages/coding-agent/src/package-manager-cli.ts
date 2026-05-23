@@ -1,8 +1,9 @@
-import { Markdown, type MarkdownTheme } from "@earendil-works/pi-tui";
+import { Markdown, type MarkdownTheme } from "@pie-lab/tui";
 import chalk from "chalk";
 import { selectConfig } from "./cli/config-selector.js";
 import {
-	APP_NAME,
+	CLI_NAME,
+	CONFIG_DIR_NAME,
 	detectInstallMethod,
 	getAgentDir,
 	getPackageDir,
@@ -68,13 +69,13 @@ function reportSettingsErrors(settingsManager: SettingsManager, context: string)
 function getPackageCommandUsage(command: PackageCommand): string {
 	switch (command) {
 		case "install":
-			return `${APP_NAME} install <source> [-l]`;
+			return `${CLI_NAME} install <source> [-l]`;
 		case "remove":
-			return `${APP_NAME} remove <source> [-l]`;
+			return `${CLI_NAME} remove <source> [-l]`;
 		case "update":
-			return `${APP_NAME} update [source|self|pi] [--self] [--extensions] [--extension <source>] [--force]`;
+			return `${CLI_NAME} update [source|self|pie] [--self] [--extensions] [--extension <source>] [--force]`;
 		case "list":
-			return `${APP_NAME} list`;
+			return `${CLI_NAME} list`;
 	}
 }
 
@@ -87,15 +88,15 @@ function printPackageCommandHelp(command: PackageCommand): void {
 Install a package and add it to settings.
 
 Options:
-  -l, --local    Install project-locally (.pi/settings.json)
+  -l, --local    Install project-locally (${CONFIG_DIR_NAME}/settings.json)
 
 Examples:
-  ${APP_NAME} install npm:@foo/bar
-  ${APP_NAME} install git:github.com/user/repo
-  ${APP_NAME} install git:git@github.com:user/repo
-  ${APP_NAME} install https://github.com/user/repo
-  ${APP_NAME} install ssh://git@github.com/user/repo
-  ${APP_NAME} install ./local/path
+  ${CLI_NAME} install npm:@foo/bar
+  ${CLI_NAME} install git:github.com/user/repo
+  ${CLI_NAME} install git:git@github.com:user/repo
+  ${CLI_NAME} install https://github.com/user/repo
+  ${CLI_NAME} install ssh://git@github.com/user/repo
+  ${CLI_NAME} install ./local/path
 `);
 			return;
 
@@ -104,14 +105,14 @@ Examples:
   ${getPackageCommandUsage("remove")}
 
 Remove a package and its source from settings.
-Alias: ${APP_NAME} uninstall <source> [-l]
+Alias: ${CLI_NAME} uninstall <source> [-l]
 
 Options:
-  -l, --local    Remove from project settings (.pi/settings.json)
+  -l, --local    Remove from project settings (${CONFIG_DIR_NAME}/settings.json)
 
 Examples:
-  ${APP_NAME} remove npm:@foo/bar
-  ${APP_NAME} uninstall npm:@foo/bar
+  ${CLI_NAME} remove npm:@foo/bar
+  ${CLI_NAME} uninstall npm:@foo/bar
 `);
 			return;
 
@@ -119,18 +120,18 @@ Examples:
 			console.log(`${chalk.bold("Usage:")}
   ${getPackageCommandUsage("update")}
 
-Update pi and installed packages.
+Update pie and installed packages.
 
 Options:
-  --self                  Update pi only
+  --self                  Update pie only
   --extensions            Update installed packages only
   --extension <source>    Update one package only
-  --force                 Reinstall pi even if the current version is latest
+  --force                 Reinstall pie even if the current version is latest
 
 Short forms:
-  ${APP_NAME} update                Update pi and all extensions
-  ${APP_NAME} update <source>       Update one package
-  ${APP_NAME} update pi             Update pi only (self works as alias to pi)
+  ${CLI_NAME} update                Update pie and all extensions
+  ${CLI_NAME} update <source>       Update one package
+  ${CLI_NAME} update pie            Update pie only (self works as alias to pie; pi is accepted as a legacy alias)
 `);
 			return;
 
@@ -253,7 +254,7 @@ function parsePackageCommand(args: string[]): PackageCommandOptions | undefined 
 			}
 			updateTarget = { type: "extensions", source: extensionFlagSource };
 		} else if (source) {
-			const sourceIsSelf = source === "self" || source === "pi";
+			const sourceIsSelf = source === "self" || source === "pie" || source === "pi";
 			if (sourceIsSelf) {
 				updateTarget = extensionsFlag ? { type: "all" } : { type: "self" };
 			} else {
@@ -297,13 +298,13 @@ function updateTargetIncludesExtensions(target: UpdateTarget): boolean {
 }
 
 function printSelfUpdateUnavailable(npmCommand?: string[], updatePackageName = PACKAGE_NAME): void {
-	console.error(`error: ${APP_NAME} cannot self-update this installation.`);
+	console.error(`error: ${CLI_NAME} cannot self-update this installation.`);
 	console.error(getSelfUpdateUnavailableInstruction(PACKAGE_NAME, npmCommand, updatePackageName));
 
 	const entrypoint = process.argv[1];
 	if (entrypoint) {
 		console.error("");
-		console.error(`Location of pi executable: ${entrypoint}`);
+		console.error(`Location of ${CLI_NAME} executable: ${entrypoint}`);
 	}
 }
 
@@ -352,12 +353,12 @@ async function getSelfUpdatePlan(force: boolean): Promise<SelfUpdatePlan> {
 		return { packageName: PACKAGE_NAME, shouldRun: true };
 	}
 
-	console.log(chalk.green(`${APP_NAME} is already up to date (v${VERSION})`));
+	console.log(chalk.green(`${CLI_NAME} is already up to date (v${VERSION})`));
 	return { packageName: PACKAGE_NAME, shouldRun: false };
 }
 
 async function runSelfUpdate(command: SelfUpdateCommand): Promise<void> {
-	console.log(chalk.dim(`Updating ${APP_NAME} with ${command.display}...`));
+	console.log(chalk.dim(`Updating ${CLI_NAME} with ${command.display}...`));
 	for (const step of command.steps ?? [command]) {
 		await new Promise<void>((resolve, reject) => {
 			const child = spawnProcess(step.command, step.args, {
@@ -424,7 +425,7 @@ export async function handlePackageCommand(args: string[]): Promise<boolean> {
 
 	if (options.invalidOption) {
 		console.error(chalk.red(`Unknown option ${options.invalidOption} for "${options.command}".`));
-		console.error(chalk.dim(`Use "${APP_NAME} --help" or "${getPackageCommandUsage(options.command)}".`));
+		console.error(chalk.dim(`Use "${CLI_NAME} --help" or "${getPackageCommandUsage(options.command)}".`));
 		process.exitCode = 1;
 		return true;
 	}
@@ -545,9 +546,9 @@ export async function handlePackageCommand(args: string[]): Promise<boolean> {
 					const installMethod = detectInstallMethod();
 					if (process.platform === "win32" && installMethod !== "npm" && installMethod !== "pnpm") {
 						console.error(
-							chalk.red(`${APP_NAME} self-update on Windows is only supported for npm and pnpm installs.`),
+							chalk.red(`${CLI_NAME} self-update on Windows is only supported for npm and pnpm installs.`),
 						);
-						console.error(chalk.dim(`Detected install method: ${installMethod}. Update ${APP_NAME} manually.`));
+						console.error(chalk.dim(`Detected install method: ${installMethod}. Update ${CLI_NAME} manually.`));
 						process.exitCode = 1;
 						return true;
 					}
@@ -576,7 +577,7 @@ export async function handlePackageCommand(args: string[]): Promise<boolean> {
 						process.exitCode = 1;
 						return true;
 					}
-					console.log(chalk.green(`Updated ${APP_NAME}`));
+					console.log(chalk.green(`Updated ${CLI_NAME}`));
 				}
 				return true;
 			}

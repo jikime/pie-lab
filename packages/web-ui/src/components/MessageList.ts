@@ -1,8 +1,5 @@
-import type { AgentMessage, AgentTool } from "@earendil-works/pi-agent-core";
-import type {
-	AssistantMessage as AssistantMessageType,
-	ToolResultMessage as ToolResultMessageType,
-} from "@earendil-works/pi-ai";
+import type { AgentMessage, AgentTool } from "@pie-lab/agent-core";
+import type { AssistantMessage as AssistantMessageType, ToolResultMessage as ToolResultMessageType } from "@pie-lab/ai";
 import { html, LitElement, type TemplateResult } from "lit";
 import { property } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";

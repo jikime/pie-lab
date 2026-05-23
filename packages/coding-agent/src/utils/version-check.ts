@@ -1,6 +1,7 @@
+import { ENV_OFFLINE, ENV_SKIP_VERSION_CHECK, isTruthyEnv } from "../config.js";
 import { getPiUserAgent } from "./pi-user-agent.js";
 
-const LATEST_VERSION_URL = "https://pi.dev/api/latest-version";
+const LATEST_VERSION_URL = "https://pielab.ai/api/latest-version";
 const DEFAULT_VERSION_CHECK_TIMEOUT_MS = 10000;
 
 export interface LatestPiRelease {
@@ -57,7 +58,9 @@ export async function getLatestPiRelease(
 	currentVersion: string,
 	options: { timeoutMs?: number } = {},
 ): Promise<LatestPiRelease | undefined> {
-	if (process.env.PI_SKIP_VERSION_CHECK || process.env.PI_OFFLINE) return undefined;
+	if (isTruthyEnv(ENV_SKIP_VERSION_CHECK, "PI_SKIP_VERSION_CHECK") || isTruthyEnv(ENV_OFFLINE, "PI_OFFLINE")) {
+		return undefined;
+	}
 
 	const response = await fetch(LATEST_VERSION_URL, {
 		headers: {
