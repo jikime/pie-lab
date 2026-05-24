@@ -169,4 +169,119 @@ describe("createAgentSession router fallback", () => {
 			},
 		]);
 	});
+
+	it("records usage and cost for learning and memory router aliases", async () => {
+		const authStorage = AuthStorage.inMemory();
+		const modelRegistry = ModelRegistry.create(authStorage, join(agentDir, "models.json"));
+		const usageStore = createInMemoryUsageStore();
+		const attemptedModels: string[] = [];
+
+		modelRegistry.registerProvider("metered-provider", {
+			api: "metered-api",
+			apiKey: "metered-key",
+			baseUrl: "https://metered.test/v1",
+			models: [
+				{
+					id: "learning-mini",
+					name: "Learning Mini",
+					reasoning: false,
+					input: ["text"],
+					cost: { input: 1, output: 2, cacheRead: 0, cacheWrite: 0 },
+					contextWindow: 128000,
+					maxTokens: 4096,
+				},
+				{
+					id: "memory-mini",
+					name: "Memory Mini",
+					reasoning: false,
+					input: ["text"],
+					cost: { input: 1, output: 2, cacheRead: 0, cacheWrite: 0 },
+					contextWindow: 128000,
+					maxTokens: 4096,
+				},
+			],
+			streamSimple: (model) => {
+				attemptedModels.push(`${model.provider}/${model.id}`);
+				const stream = createAssistantMessageEventStream();
+				const message = createMessage(model, "stop");
+				message.usage = {
+					input: 11,
+					output: 7,
+					cacheRead: 3,
+					cacheWrite: 2,
+					totalTokens: 23,
+					cost: { input: 0.000011, output: 0.000014, cacheRead: 0, cacheWrite: 0, total: 0.000025 },
+				};
+				stream.push({ type: "done", reason: "stop", message });
+				return stream;
+			},
+		});
+
+		modelRegistry.getRouterPolicy = async () => ({
+			aliases: {
+				"auto:learning": "metered-provider/learning-mini",
+				"auto:memory": "metered-provider/memory-mini",
+			},
+		});
+
+		const learningModel = modelRegistry.find(PIE_LAB_ROUTER_PROVIDER, "auto:learning")!;
+		const memoryModel = modelRegistry.find(PIE_LAB_ROUTER_PROVIDER, "auto:memory")!;
+		const { session } = await createAgentSession({
+			cwd,
+			agentDir,
+			model: learningModel,
+			authStorage,
+			modelRegistry,
+			usageStore,
+			settingsManager: SettingsManager.create(cwd, agentDir),
+			sessionManager: SessionManager.inMemory(cwd),
+		});
+
+		await (await session.agent.streamFn(learningModel, { messages: [] })).result();
+		await (await session.agent.streamFn(memoryModel, { messages: [] })).result();
+
+		expect(attemptedModels).toEqual(["metered-provider/learning-mini", "metered-provider/memory-mini"]);
+		expect(usageStore.getUsageRecords()).toMatchObject([
+			{
+				requestedModel: "auto:learning",
+				routingMode: "router",
+				resolvedProvider: "metered-provider",
+				resolvedModel: "learning-mini",
+				status: "success",
+				usage: {
+					input: 11,
+					output: 7,
+					cacheRead: 3,
+					cacheWrite: 2,
+					totalTokens: 23,
+				},
+				cost: {
+					total: 0.000025,
+					currency: "USD",
+					pricingSource: "pie-metadata",
+				},
+				costUsd: 0.000025,
+			},
+			{
+				requestedModel: "auto:memory",
+				routingMode: "router",
+				resolvedProvider: "metered-provider",
+				resolvedModel: "memory-mini",
+				status: "success",
+				usage: {
+					input: 11,
+					output: 7,
+					cacheRead: 3,
+					cacheWrite: 2,
+					totalTokens: 23,
+				},
+				cost: {
+					total: 0.000025,
+					currency: "USD",
+					pricingSource: "pie-metadata",
+				},
+				costUsd: 0.000025,
+			},
+		]);
+	});
 });

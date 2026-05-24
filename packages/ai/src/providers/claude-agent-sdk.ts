@@ -136,7 +136,7 @@ export const streamClaudeAgentSdk: StreamFunction<"claude-agent-sdk", ClaudeAgen
 
 			const { query } = await import("@anthropic-ai/claude-agent-sdk");
 			const abortController = new AbortController();
-			abortCleanup = forwardAbortSignal(options?.signal, abortController, () => void queryHandle?.interrupt());
+			abortCleanup = forwardAbortSignal(options?.signal, abortController, () => queryHandle?.interrupt());
 			const prompt = buildPrompt(model, context);
 			let sdkOptions = buildSdkOptions(model, context, abortController, options);
 			const overriddenOptions = await options?.onPayload?.(sdkOptions, model);
@@ -451,12 +451,12 @@ function resolveClaudeModelId(modelId: string): string {
 function forwardAbortSignal(
 	signal: AbortSignal | undefined,
 	abortController: AbortController,
-	onAbort?: () => void,
+	onAbort?: () => unknown,
 ): () => void {
 	if (!signal) return () => {};
 	const abort = () => {
 		abortController.abort();
-		onAbort?.();
+		runAbortCallback(onAbort);
 	};
 	if (signal.aborted) {
 		abort();
@@ -467,6 +467,20 @@ function forwardAbortSignal(
 	}
 	signal.addEventListener("abort", abort, { once: true });
 	return () => signal.removeEventListener("abort", abort);
+}
+
+function runAbortCallback(onAbort: (() => unknown) | undefined): void {
+	if (!onAbort) return;
+	try {
+		const result = onAbort();
+		if (result && typeof (result as Promise<unknown>).catch === "function") {
+			void (result as Promise<unknown>).catch(() => {
+				// Interrupt is best-effort. The abortController signal is the authoritative cancellation path.
+			});
+		}
+	} catch {
+		// Interrupt can throw when the SDK has already observed the same abort.
+	}
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {

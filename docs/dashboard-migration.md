@@ -1,29 +1,29 @@
-# dashboard-next 이관 범위
+# dashboard 이관 범위
 
-이 문서는 기존 `apps/dashboard`에 들어간 9router 운영 기능을 `apps/dashboard-next`로 옮길 때의 기준입니다.
+이 문서는 기존 Vite dashboard에 들어간 9router 운영 기능을 Next.js 기반 `apps/dashboard`로 옮길 때의 기준입니다.
 
-현재 방향은 기존 Vite dashboard를 바로 버리는 것이 아닙니다. `apps/dashboard`는 기능 검증용 기준판으로 유지하고, `apps/dashboard-next`는 Next.js 16, Tailwind CSS 4, shadcn/ui 기반의 제품화 dashboard로 단계적으로 완성합니다.
+현재 방향은 Next.js dashboard를 기본 운영 화면으로 사용하고, 기존 Vite dashboard는 `apps/dashboard_old`에 비교 기준판으로 보관하는 것입니다.
 
 ## 현재 판단
 
-`apps/dashboard`는 단일 `main.ts` 중심이라 구조는 무겁지만, usage, provider connection, OAuth, quota detail, model availability, proxy pool, routing policy, budget, request detail, raw trace 같은 기능이 많이 들어가 있습니다.
+`apps/dashboard_old`는 단일 `main.ts` 중심이라 구조는 무겁지만, usage, provider connection, OAuth, quota detail, model availability, proxy pool, routing policy, budget, request detail, raw trace 같은 기능이 들어간 기준 구현입니다.
 
-`apps/dashboard-next`는 화면 구조, navigation, SEO, Pretendard, shadcn/ui 컴포넌트, 주요 페이지 골격과 주요 9router 운영 조작 기능을 갖춘 상태입니다. 기존 Vite dashboard는 비교 기준으로 유지하지만, 매일 보는 제품형 dashboard는 `apps/dashboard-next`를 기준으로 다듬습니다.
+`apps/dashboard`는 화면 구조, navigation, SEO, Pretendard, shadcn/ui 컴포넌트, 주요 페이지 골격과 주요 9router 운영 조작 기능, Learning Loop 운영 화면을 갖춘 상태입니다. 매일 보는 제품형 dashboard는 `apps/dashboard`를 기준으로 다듬습니다.
 
 따라서 당분간 기준은 다음과 같습니다.
 
 ```txt
 apps/dashboard
-  -> 9router 운영 기능의 기준 구현
-
-apps/dashboard-next
   -> 사용자가 매일 볼 제품형 dashboard
-  -> 기존 기능을 기능별로 검증하며 단계적 이관
+
+apps/dashboard_old
+  -> 기존 Vite dashboard
+  -> 비교와 회귀 확인용 기준 구현
 ```
 
 ## 기능별 이관 상태
 
-| 영역 | 기존 dashboard 상태 | dashboard-next 상태 | 남은 일 |
+| 영역 | 기존 dashboard_old 상태 | dashboard 상태 | 남은 일 |
 | --- | --- | --- | --- |
 | Overview | usage, provider, quota, budget 일부 요약 | 기본 card와 provider health 요약 | request detail, budget, model availability 신호 요약 개선 |
 | Usage | usage list, summary, RTK saved, request detail button | usage list, summary, request detail sheet, fallback timeline, raw trace, origin/endpoint별 집계 | filtering과 RTK saved 표시 강화 |
@@ -36,7 +36,7 @@ apps/dashboard-next
 | Proxy | proxy pool 생성, 테스트, 수정, 삭제, connection binding | proxy pool 생성/수정/삭제/테스트, active/strict toggle, provider connection proxy assignment | connection 목록 필터 개선 |
 | Media | media routes와 provider coverage 확인 | media routes 조회, endpoint별 test form | provider coverage 문구 개선 |
 | Settings | quota, RTK, budget, fallback 설정 | settings JSON 저장과 RTK toggle | 안전한 form control, validation, import/export |
-| Build | root build에 포함 | root build에 아직 미포함 | 교체 시점에 root build 포함 여부 결정 |
+| Build | 별도 workspace로 보관 | root build 대상 | root build 회귀 확인 |
 
 ## 우선순위
 
@@ -57,7 +57,7 @@ apps/dashboard-next
 
 ## 완료 기준
 
-`apps/dashboard-next`가 기존 dashboard를 대체하려면 아래 조건을 만족해야 합니다.
+`apps/dashboard`가 기존 dashboard를 대체하려면 아래 조건을 만족해야 합니다.
 
 - 최근 usage record와 summary를 볼 수 있습니다.
 - request 하나를 열어 fallback attempt timeline과 raw event trace를 볼 수 있습니다.
@@ -73,17 +73,17 @@ apps/dashboard-next
 
 ## 진행 원칙
 
-한 번에 모든 화면을 새로 만들지 않습니다. 기존 dashboard에서 이미 동작하는 API와 동작 방식을 확인한 뒤, `dashboard-next`에 작은 단위로 옮깁니다.
+한 번에 모든 화면을 새로 만들지 않습니다. 기존 dashboard에서 이미 동작하는 API와 동작 방식을 확인한 뒤, Next.js dashboard에 작은 단위로 옮깁니다.
 
 화면을 옮길 때는 다음 순서로 진행합니다.
 
 ```txt
 1. 기존 dashboard의 API 호출과 사용자 동작 확인
-2. dashboard-next lib/api-client.ts에 필요한 API 추가
+2. dashboard lib/api-client.ts에 필요한 API 추가
 3. shadcn/ui 기반 page component 구현
 4. loading/error/empty 상태 확인
 5. server와 함께 실제 브라우저에서 동작 확인
 6. 기존 dashboard와 결과 비교
 ```
 
-이 방식으로 진행하면 `dashboard-next`가 단순히 예쁜 shell이 아니라, 실제 9router 운영에 필요한 화면으로 안전하게 바뀝니다.
+이 방식으로 진행하면 `dashboard`가 단순히 예쁜 shell이 아니라, 실제 9router 운영에 필요한 화면으로 안전하게 바뀝니다.

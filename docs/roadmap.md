@@ -128,9 +128,9 @@ pie -p "README.md를 요약해줘" @README.md
 
 현재 방향:
 
-- 대시보드 제품화는 `apps/dashboard-next`에서 진행합니다.
+- 대시보드 제품화는 `apps/dashboard`에서 진행합니다.
 - 기술 스택은 Next.js 16, Tailwind CSS 4, shadcn/ui로 정합니다.
-- 기존 `apps/dashboard`는 안정적인 비교 기준으로 유지하고, 기능을 검증한 뒤 단계적으로 교체합니다.
+- 기존 Vite dashboard는 `apps/dashboard_old`에 비교 기준으로 보관합니다.
 
 필수 기능:
 
@@ -145,10 +145,10 @@ pie -p "README.md를 요약해줘" @README.md
 
 현재 상태:
 
-- 기존 `apps/dashboard`에는 usage, provider, quota, budget, proxy, routing policy, request detail, raw trace 같은 9router 운영 화면이 1차 구현되어 있습니다.
-- `apps/dashboard-next`는 Next.js 16, Tailwind CSS 4, shadcn/ui, Pretendard, SEO 기반 shell과 주요 메뉴 구조를 갖춘 상태입니다.
+- `apps/dashboard_old`에는 usage, provider, quota, budget, proxy, routing policy, request detail, raw trace 같은 9router 운영 화면의 Vite 기준 구현이 보관되어 있습니다.
+- `apps/dashboard`는 Next.js 16, Tailwind CSS 4, shadcn/ui, Pretendard, SEO 기반 shell과 주요 메뉴 구조를 갖춘 상태입니다.
 - usage detail sheet, fallback timeline, raw trace, origin/endpoint별 usage 집계, provider connection 생성/활성화/삭제, OAuth redirect login, provider별 setup guide, quota detail, model availability cooldown clear, routing combo/alias/intent form, budget form, proxy update/delete/binding, media endpoint test form이 이관되었습니다.
-- `apps/dashboard-next`는 별도 실행하는 제품형 dashboard로 유지합니다. root build 포함 여부는 별도 결정합니다.
+- `apps/dashboard`는 기본 제품형 dashboard이며 root build 대상입니다.
 
 성공 기준:
 

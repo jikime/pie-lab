@@ -45,6 +45,12 @@ export const dashboardPages = [
       "Inspect image, speech, transcription, embedding, and web tool routing support in Pie Lab.",
   },
   {
+    path: "/learning",
+    title: "Learning",
+    description:
+      "Inspect local memory, background learning reviews, and skill curator status.",
+  },
+  {
     path: "/proxy",
     title: "Proxy",
     description:

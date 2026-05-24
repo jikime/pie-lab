@@ -9,6 +9,7 @@ import {
   AudioLines,
   BarChart3,
   Boxes,
+  Brain,
   Cable,
   ClipboardList,
   Gauge,
@@ -32,6 +33,7 @@ const navItems = [
   { href: "/usage", label: "Usage", icon: BarChart3 },
   { href: "/quota", label: "Quota", icon: ShieldCheck },
   { href: "/media", label: "Media", icon: AudioLines },
+  { href: "/learning", label: "Learning", icon: Brain },
   { href: "/proxy", label: "Proxy", icon: Network },
   { href: "/logs", label: "Logs", icon: TerminalSquare },
   { href: "/settings", label: "Settings", icon: Settings },
@@ -46,7 +48,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
         <SidebarContent />
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b bg-background/95 px-4 backdrop-blur sm:px-6">
+        <header className="sticky top-0 z-30 flex h-[57px] items-center gap-3 border-b bg-background/95 px-4 backdrop-blur sm:px-6">
           <Sheet open={open} onOpenChange={setOpen}>
             <SheetTrigger asChild>
               <Button type="button" variant="ghost" size="icon" className="lg:hidden" aria-label="Open navigation">
@@ -78,7 +80,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <div className="flex min-h-full w-full flex-col">
-      <div className="px-5 py-5">
+      <div className="flex h-14 items-center px-5">
         <Link href="/" className="flex items-center gap-3" onClick={onNavigate}>
           <div className="flex size-9 items-center justify-center rounded-lg bg-foreground text-background">
             <Boxes className="size-5" />

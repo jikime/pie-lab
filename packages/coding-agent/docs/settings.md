@@ -228,6 +228,61 @@ Object form filters which resources to load:
 
 See [packages.md](packages.md) for package management details.
 
+### Learning Loop
+
+These settings control persistent memory, automatic skill creation, Honcho context, and curator maintenance.
+
+```json
+{
+  "learning": {
+    "enabled": true,
+    "review": {
+      "mode": "auto"
+    },
+    "memory": {
+      "enabled": true,
+      "reviewIntervalTurns": 5
+    },
+    "skills": {
+      "enabled": true,
+      "autoSave": true,
+      "reviewToolIterations": 8,
+      "curatorEnabled": true,
+      "curator": {
+        "staleAfterDays": 30,
+        "archiveAfterDays": 90,
+        "autoArchive": true,
+        "backupBeforeRun": true,
+        "pruneAfterDays": 180
+      }
+    },
+    "honcho": {
+      "enabled": true,
+      "recallMode": "hybrid",
+      "sessionStrategy": "per-repo",
+      "contextTokenBudget": 1200,
+      "dialecticCadence": 3
+    }
+  }
+}
+```
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `learning.enabled` | boolean | `true` | Enable local learning runtime |
+| `learning.review.mode` | `"auto" \| "suggest" \| "off"` | `"auto"` | Apply review actions automatically, save proposals for approval, or disable review |
+| `learning.memory.enabled` | boolean | `true` | Store and inject `MEMORY.md` / `USER.md` |
+| `learning.memory.reviewIntervalTurns` | number | `5` | Memory review cadence |
+| `learning.skills.enabled` | boolean | `true` | Enable learning skill tools |
+| `learning.skills.autoSave` | boolean | `true` | Allow background review to save reusable skills |
+| `learning.skills.curatorEnabled` | boolean | `true` | Enable curator CLI and API actions |
+| `learning.skills.curator.staleAfterDays` | number | `30` | Mark unused agent-created skills stale after this many days |
+| `learning.skills.curator.archiveAfterDays` | number | `90` | Archive unused agent-created skills after this many days |
+| `learning.skills.curator.autoArchive` | boolean | `true` | Let `pie curator run` archive old skills automatically |
+| `learning.skills.curator.backupBeforeRun` | boolean | `true` | Create a rollback snapshot before curator run |
+| `learning.skills.curator.pruneAfterDays` | number | `180` | Remove archived agent-created skills after this many archived days |
+| `learning.honcho.enabled` | boolean | `true` | Enable Honcho context when credentials are configured |
+
 ## Example
 
 ```json

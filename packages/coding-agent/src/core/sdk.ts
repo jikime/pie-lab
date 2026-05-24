@@ -18,6 +18,14 @@ import { formatNoModelsAvailableMessage } from "./auth-guidance.ts";
 import { AuthStorage } from "./auth-storage.ts";
 import { DEFAULT_THINKING_LEVEL } from "./defaults.ts";
 import type { ExtensionRunner, LoadExtensionsResult, SessionStartEvent, ToolDefinition } from "./extensions/index.ts";
+import {
+	BackgroundLearningReview,
+	createLearningToolDefinitions,
+	HonchoProvider,
+	LearningReviewStore,
+	MemoryStore,
+	SkillManager,
+} from "./learning/index.ts";
 import { convertToLlm } from "./messages.ts";
 import { ModelRegistry } from "./model-registry.ts";
 import { findInitialModel } from "./model-resolver.ts";
@@ -44,7 +52,7 @@ import {
 export interface CreateAgentSessionOptions {
 	/** Working directory for project-local discovery. Default: process.cwd() */
 	cwd?: string;
-	/** Global config directory. Default: ~/.pi/agent */
+	/** Global config directory. Default: ~/.pie/agent */
 	agentDir?: string;
 
 	/** Auth storage for credentials. Default: AuthStorage.create(agentDir/auth.json) */
@@ -269,6 +277,31 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		time("resourceLoader.reload");
 	}
 
+	const learningSettings = settingsManager.getLearningSettings();
+	const memoryStore = new MemoryStore({ agentDir });
+	const reviewStore = new LearningReviewStore({ agentDir });
+	const skillManager = new SkillManager({ agentDir, cwd });
+	const learningMemorySnapshot =
+		learningSettings.enabled && learningSettings.memory.enabled
+			? memoryStore.formatForSystemPrompt(memoryStore.readSnapshot())
+			: undefined;
+	let reloadSessionResources: (() => Promise<void>) | undefined;
+	const onLearningSkillsChanged = async (): Promise<void> => {
+		await resourceLoader.reload();
+		await reloadSessionResources?.();
+	};
+	const learningTools =
+		!options.noTools &&
+		learningSettings.enabled &&
+		(learningSettings.memory.enabled || learningSettings.skills.enabled)
+			? createLearningToolDefinitions({
+					memoryStore,
+					skillManager,
+					onSkillsChanged: onLearningSkillsChanged,
+				})
+			: [];
+	const customTools = [...(options.customTools ?? []), ...learningTools];
+
 	// Check if session has existing data to restore
 	const existingSession = sessionManager.buildSessionContext();
 	const hasExistingSession = existingSession.messages.length > 0;
@@ -375,6 +408,13 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	};
 
 	const extensionRunnerRef: { current?: ExtensionRunner } = {};
+	const honchoProvider = new HonchoProvider({
+		agentDir,
+		cwd,
+		sessionId: sessionManager.getSessionId(),
+		settings: learningSettings,
+		streamFn: (model, context, options) => agent.streamFn?.(model, context, options),
+	});
 
 	agent = new Agent({
 		initialState: {
@@ -565,8 +605,8 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		sessionId: sessionManager.getSessionId(),
 		transformContext: async (messages) => {
 			const runner = extensionRunnerRef.current;
-			if (!runner) return messages;
-			return runner.emitContext(messages);
+			const transformed = runner ? await runner.emitContext(messages) : messages;
+			return honchoProvider.injectContext(transformed);
 		},
 		steeringMode: settingsManager.getSteeringMode(),
 		followUpMode: settingsManager.getFollowUpMode(),
@@ -589,6 +629,15 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		sessionManager.appendThinkingLevelChange(thinkingLevel);
 	}
 
+	const backgroundLearningReview = new BackgroundLearningReview({
+		settings: learningSettings,
+		memoryStore,
+		skillManager,
+		reviewStore,
+		streamFn: agent.streamFn?.bind(agent),
+		onSkillsChanged: onLearningSkillsChanged,
+	});
+
 	const session = new AgentSession({
 		agent,
 		sessionManager,
@@ -596,13 +645,18 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		cwd,
 		scopedModels: options.scopedModels,
 		resourceLoader,
-		customTools: options.customTools,
+		customTools,
 		modelRegistry,
 		initialActiveToolNames,
 		allowedToolNames,
 		extensionRunnerRef,
 		sessionStartEvent: options.sessionStartEvent,
+		learningMemorySnapshot,
+		backgroundLearningReview,
+		honchoProvider,
+		learningSkillManager: skillManager,
 	});
+	reloadSessionResources = () => session.reload();
 	const extensionsResult = resourceLoader.getExtensions();
 
 	return {

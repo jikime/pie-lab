@@ -186,7 +186,7 @@ CLI 시작 헤더는 이 팔레트를 기준으로 라이트/다크 터미널을
 - `packages/tui`
 - `packages/web-ui`
 - 기존 scripts
-- 기존 `.pi` 구조에서 이전된 `.pie` 설정 구조
+- 기존 `.pie` 구조에서 이전된 `.pie` 설정 구조
 - 기존 CLI/TUI workflow
 
 원칙:
@@ -238,29 +238,29 @@ pi agent/runtime
 
 ## 5-1. dashboard 기술 방향
 
-기존 `apps/dashboard`는 Vite 기반 단일 페이지 대시보드로 유지합니다.
+기존 Vite 기반 단일 페이지 대시보드는 `apps/dashboard_old`로 보관합니다.
 
-다만 앞으로의 제품형 대시보드는 `apps/dashboard-next`에서 Next.js 16, Tailwind CSS 4, shadcn/ui 기반으로 다시 구성합니다.
+제품형 대시보드는 `apps/dashboard`에서 Next.js 16, Tailwind CSS 4, shadcn/ui 기반으로 운영합니다.
 
 이유:
 
 - 9router 원본처럼 메뉴별 페이지 구조를 만들기 쉽습니다.
 - routing, providers, usage, quota, media, proxy, logs, settings를 App Router 경로로 자연스럽게 분리할 수 있습니다.
 - shadcn/ui는 컴포넌트 코드가 프로젝트 내부에 들어오기 때문에 `pie-lab` 스타일로 커스터마이징하기 좋습니다.
-- 기존 Vite 대시보드를 바로 덮어쓰지 않고, 새 대시보드를 검증한 뒤 단계적으로 교체할 수 있습니다.
+- 기존 Vite 대시보드는 `dashboard_old`로 남겨 비교와 회귀 확인에 사용할 수 있습니다.
 
 현재 기준:
 
 ```txt
-apps/dashboard       기존 Vite dashboard, 유지
-apps/dashboard-next  Next.js 16 + Tailwind 4 + shadcn/ui dashboard, 신규 개발
+apps/dashboard      Next.js 16 + Tailwind 4 + shadcn/ui dashboard, 기본 운영
+apps/dashboard_old  기존 Vite dashboard, 비교/참고용 보관
 ```
 
-`apps/dashboard-next`에는 usage detail/fallback timeline/raw trace, origin/endpoint별 usage 집계, provider connection CRUD, OAuth redirect login, provider별 setup guide, quota detail, model availability cooldown clear, routing policy form, budget form, proxy pool update/delete/binding, media endpoint test form이 들어갔습니다.
+`apps/dashboard`에는 usage detail/fallback timeline/raw trace, origin/endpoint별 usage 집계, provider connection CRUD, OAuth redirect login, provider별 setup guide, quota detail, model availability cooldown clear, routing policy form, budget form, proxy pool update/delete/binding, media endpoint test form, Learning Loop 운영 화면이 들어갔습니다.
 
-root build에 포함할지는 별도 결정하며, 지금은 아래처럼 독립 실행합니다.
+root build는 `apps/dashboard`를 기준으로 실행합니다.
 
-`dashboard-next`의 기본 실행 주소는 다음입니다.
+`dashboard`의 기본 실행 주소는 다음입니다.
 
 ```txt
 http://127.0.0.1:4876
@@ -569,7 +569,7 @@ external HTTP  ┘
 ```txt
 - pie-chat bridge 장시간 실사용 검증
 - chat-origin usage/cost dashboard 구분 고도화
-- dashboard-next의 기존 dashboard 기능 완전 이관
+- dashboard의 남은 운영 기능 보강
 - 설치와 실행 흐름 안정화
 ```
 
@@ -801,7 +801,7 @@ GET /v1/quota/:connectionId
 ```txt
 - pie-chat bridge 장시간 실사용 검증
 - chat-origin usage/cost dashboard 구분 고도화
-- dashboard-next의 기존 dashboard 기능 완전 이관
+- dashboard의 남은 운영 기능 보강
 - 설치와 실행 흐름 안정화
 ```
 

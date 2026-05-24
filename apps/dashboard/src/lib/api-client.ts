@@ -579,6 +579,95 @@ export interface MediaTestResponse {
   bodyText: string
 }
 
+export interface LearningSettings {
+  enabled: boolean
+  review: { mode: "auto" | "suggest" | "off" }
+  memory: { enabled: boolean; reviewIntervalTurns: number }
+  skills: {
+    enabled: boolean
+    autoSave: boolean
+    reviewToolIterations: number
+    curatorEnabled: boolean
+    curator: CuratorSettings
+  }
+  honcho: {
+    enabled: boolean
+    recallMode: string
+    sessionStrategy: string
+    contextTokenBudget: number
+    dialecticCadence: number
+  }
+}
+
+export interface CuratorSettings {
+  staleAfterDays: number
+  archiveAfterDays: number
+  autoArchive: boolean
+  backupBeforeRun: boolean
+  pruneAfterDays: number
+}
+
+export interface CuratedSkillStatus {
+  name: string
+  location: string
+  state: "active" | "stale" | "archived" | "pinned"
+  pinned: boolean
+  createdAt?: string
+  updatedAt?: string
+  lastUsedAt?: string
+  useCount: number
+  viewCount: number
+  patchCount: number
+  idleDays?: number
+  archivedAt?: string
+}
+
+export interface LearningReviewAction {
+  type: "memory_append" | "user_append" | "skill_create" | "skill_patch" | "skill_edit" | "skill_write_file"
+  text?: string
+  name?: string
+  description?: string
+  content?: string
+  oldText?: string
+  newText?: string
+  path?: string
+}
+
+export interface LearningReviewActionResult {
+  action: LearningReviewAction
+  status: "applied" | "proposed" | "skipped" | "failed"
+  reason?: string
+}
+
+export interface LearningReviewRecord {
+  id: string
+  createdAt: string
+  model: string
+  mode: "auto" | "suggest" | "off"
+  status: "applied" | "proposed" | "skipped" | "failed"
+  rawOutput?: string
+  actions: LearningReviewAction[]
+  results: LearningReviewActionResult[]
+  error?: string
+}
+
+export interface LearningResponse {
+  settings: LearningSettings
+  memory: { memory: string; user: string }
+  curator: { status: CuratedSkillStatus[] }
+  reviews: {
+    count: number
+    proposals: number
+    recent: LearningReviewRecord[]
+  }
+}
+
+export interface LearningReviewsResponse {
+  count: number
+  proposals: number
+  reviews: LearningReviewRecord[]
+}
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -712,6 +801,24 @@ export const dashboardApi = {
       body: JSON.stringify({ action: "clearCooldown", provider, model }),
     }),
   proxyPools: () => apiRequest<ProxyPoolResponse>("/proxy-pools?includeUsage=true"),
+  learning: () => apiRequest<LearningResponse>("/learning"),
+  learningReviews: (limit = 20) => apiRequest<LearningReviewsResponse>(`/learning/reviews?limit=${limit}`),
+  learningReviewAction: (input: { action: "approve" | "reject"; id: string } | { action: "mode"; mode: "auto" | "suggest" | "off" }) =>
+    apiRequest<{ review?: LearningReviewRecord; settings?: LearningSettings["review"] }>("/learning/reviews", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  curatorAction: (
+    input:
+      | { action: "run" | "prune"; dryRun?: boolean }
+      | { action: "pin" | "unpin" | "archive" | "restore"; name: string }
+      | { action: "backup" | "rollback" }
+      | { action: "settings"; settings: Partial<CuratorSettings> },
+  ) =>
+    apiRequest<unknown>("/learning/curator", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
   createProxyPool: (input: { name: string; type: "http" | "vercel"; proxyUrl?: string; noProxy?: string; strictProxy?: boolean }) =>
     apiRequest<{ proxyPool: ProxyPool }>("/proxy-pools", {
       method: "POST",
@@ -747,7 +854,7 @@ async function mediaTestRequest(kind: MediaKind, input: Record<string, unknown>,
       ? {
           method: "POST",
           headers: {
-            "x-pie-client-origin": "dashboard-next:media-test",
+            "x-pie-client-origin": "dashboard:media-test",
           },
           body: createMediaFormData(input, file),
         }
@@ -755,7 +862,7 @@ async function mediaTestRequest(kind: MediaKind, input: Record<string, unknown>,
           method: "POST",
           headers: {
             "content-type": "application/json",
-            "x-pie-client-origin": "dashboard-next:media-test",
+            "x-pie-client-origin": "dashboard:media-test",
           },
           body: JSON.stringify(input),
         }

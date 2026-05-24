@@ -56,12 +56,13 @@
 		"shrinkwrap": "node ../../scripts/generate-coding-agent-shrinkwrap.mjs"
 	},
 	"dependencies": {
+		"@honcho-ai/sdk": "2.1.1",
 		"@pie-lab/agent-core": "^0.75.5",
 		"@pie-lab/ai": "^0.75.5",
-		"@pie-lab/tui": "^0.75.5",
 		"@pie-lab/router": "0.0.0",
 		"@pie-lab/shared": "0.0.0",
 		"@pie-lab/storage": "0.0.0",
+		"@pie-lab/tui": "^0.75.5",
 		"@silvia-odwyer/photon-node": "0.3.4",
 		"chalk": "5.6.2",
 		"cross-spawn": "7.0.6",

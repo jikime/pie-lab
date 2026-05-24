@@ -71,6 +71,7 @@ import {
 	wrapRegisteredTools,
 } from "./extensions/index.js";
 import { emitSessionShutdownEvent } from "./extensions/runner.js";
+import type { BackgroundLearningReview, HonchoProvider, SkillManager } from "./learning/index.js";
 import type { BashExecutionMessage, CustomMessage } from "./messages.js";
 import type { ModelRegistry } from "./model-registry.js";
 import { expandPromptTemplate, type PromptTemplate } from "./prompt-templates.js";
@@ -174,6 +175,14 @@ export interface AgentSessionConfig {
 	extensionRunnerRef?: { current?: ExtensionRunner };
 	/** Session start event metadata emitted when extensions bind to this runtime. */
 	sessionStartEvent?: SessionStartEvent;
+	/** Frozen local memory snapshot injected into the base system prompt for this session. */
+	learningMemorySnapshot?: string;
+	/** Non-blocking background memory/skill reviewer. */
+	backgroundLearningReview?: BackgroundLearningReview;
+	/** Honcho context/sync provider. */
+	honchoProvider?: HonchoProvider;
+	/** Learning skill manager used for agent-created skill usage accounting. */
+	learningSkillManager?: SkillManager;
 }
 
 export interface ExtensionBindings {
@@ -289,6 +298,10 @@ export class AgentSession {
 	private _allowedToolNames?: Set<string>;
 	private _baseToolsOverride?: Record<string, AgentTool>;
 	private _sessionStartEvent: SessionStartEvent;
+	private _learningMemorySnapshot?: string;
+	private _backgroundLearningReview?: BackgroundLearningReview;
+	private _honchoProvider?: HonchoProvider;
+	private _learningSkillManager?: SkillManager;
 	private _extensionUIContext?: ExtensionUIContext;
 	private _extensionCommandContextActions?: ExtensionCommandContextActions;
 	private _extensionAbortHandler?: () => void;
@@ -323,6 +336,10 @@ export class AgentSession {
 		this._allowedToolNames = config.allowedToolNames ? new Set(config.allowedToolNames) : undefined;
 		this._baseToolsOverride = config.baseToolsOverride;
 		this._sessionStartEvent = config.sessionStartEvent ?? { type: "session_start", reason: "startup" };
+		this._learningMemorySnapshot = config.learningMemorySnapshot;
+		this._backgroundLearningReview = config.backgroundLearningReview;
+		this._honchoProvider = config.honchoProvider;
+		this._learningSkillManager = config.learningSkillManager;
 
 		// Always subscribe to agent events for internal handling
 		// (session persistence, extensions, auto-compaction, retry logic)
@@ -537,6 +554,11 @@ export class AgentSession {
 					this._retryAttempt = 0;
 				}
 			}
+		}
+
+		if (event.type === "agent_end") {
+			void this._honchoProvider?.syncTurn(event.messages);
+			this._backgroundLearningReview?.trigger(event.messages);
 		}
 	};
 
@@ -908,6 +930,7 @@ export class AgentSession {
 			selectedTools: validToolNames,
 			toolSnippets,
 			promptGuidelines,
+			learningMemorySnapshot: this._learningMemorySnapshot,
 		};
 		return buildSystemPrompt(this._baseSystemPromptOptions);
 	}
@@ -1158,6 +1181,7 @@ export class AgentSession {
 
 		try {
 			const content = readFileSync(skill.filePath, "utf-8");
+			this._learningSkillManager?.recordUseByPath(skill.filePath);
 			const body = stripFrontmatter(content).trim();
 			const skillBlock = `<skill name="${skill.name}" location="${skill.filePath}">\nReferences are relative to ${skill.baseDir}.\n\n${body}\n</skill>`;
 			return args ? `${skillBlock}\n\n${args}` : skillBlock;

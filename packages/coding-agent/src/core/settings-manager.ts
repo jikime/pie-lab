@@ -5,6 +5,7 @@ import lockfile from "proper-lockfile";
 import { CONFIG_DIR_NAME, getAgentDir } from "../config.ts";
 import { normalizePath, resolvePath } from "../utils/paths.ts";
 import { DEFAULT_HTTP_IDLE_TIMEOUT_MS, parseHttpIdleTimeoutMs } from "./http-dispatcher.ts";
+import { type LearningSettings, normalizeLearningSettings } from "./learning/learning-settings.ts";
 
 export interface CompactionSettings {
 	enabled?: boolean; // default: true
@@ -56,6 +57,16 @@ export interface MarkdownSettings {
 export interface WarningSettings {
 	anthropicExtraUsage?: boolean; // default: true
 }
+
+export type LearningSettingsInput = Partial<{
+	enabled: boolean;
+	review: Partial<LearningSettings["review"]>;
+	memory: Partial<LearningSettings["memory"]>;
+	skills: Omit<Partial<LearningSettings["skills"]>, "curator"> & {
+		curator?: Partial<LearningSettings["skills"]["curator"]>;
+	};
+	honcho: Partial<LearningSettings["honcho"]>;
+}>;
 
 export type TransportSetting = Transport;
 
@@ -110,6 +121,7 @@ export interface Settings {
 	showHardwareCursor?: boolean; // Show terminal cursor while still positioning it for IME
 	markdown?: MarkdownSettings;
 	warnings?: WarningSettings;
+	learning?: LearningSettingsInput;
 	sessionDir?: string; // Custom session storage directory (same format as --session-dir CLI flag)
 	httpIdleTimeoutMs?: number; // HTTP header/body idle timeout in milliseconds; 0 disables it
 }
@@ -812,6 +824,45 @@ export class SettingsManager {
 
 	getEnableInstallTelemetry(): boolean {
 		return this.settings.enableInstallTelemetry ?? true;
+	}
+
+	getLearningSettings(): LearningSettings {
+		return normalizeLearningSettings(this.settings.learning);
+	}
+
+	setLearningReviewMode(mode: LearningSettings["review"]["mode"]): void {
+		const currentLearning = this.globalSettings.learning ?? {};
+		this.globalSettings.learning = {
+			...currentLearning,
+			review: {
+				...(currentLearning.review ?? {}),
+				mode,
+			},
+		};
+		this.markModified("learning", "review");
+		this.save();
+	}
+
+	setLearningCuratorSettings(settings: Partial<LearningSettings["skills"]["curator"]>): void {
+		const currentLearning = this.globalSettings.learning ?? {};
+		const currentSkills = currentLearning.skills ?? {};
+		const nextCurator = { ...(currentSkills.curator ?? {}) };
+		for (const [key, value] of Object.entries(settings) as Array<
+			[keyof LearningSettings["skills"]["curator"], unknown]
+		>) {
+			if (value !== undefined) {
+				(nextCurator as Record<string, unknown>)[key] = value;
+			}
+		}
+		this.globalSettings.learning = {
+			...currentLearning,
+			skills: {
+				...currentSkills,
+				curator: nextCurator,
+			},
+		};
+		this.markModified("learning", "skills");
+		this.save();
 	}
 
 	setEnableInstallTelemetry(enabled: boolean): void {

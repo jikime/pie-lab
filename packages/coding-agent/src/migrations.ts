@@ -73,7 +73,7 @@ export function migrateAuthToAuthJson(): string[] {
 }
 
 /**
- * Migrate sessions from legacy ~/.pi/agent/*.jsonl to proper session directories.
+ * Migrate sessions from legacy ~/.pie/agent/*.jsonl to proper session directories.
  *
  * Bug in v0.30.0: Sessions were saved to the agent root instead of
  * sessions/<encoded-cwd>/. This migration moves them

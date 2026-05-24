@@ -1,58 +1,70 @@
 # @pie-lab/dashboard
 
-Dashboard app for provider setup, routing policy, usage/cost visibility, request logs, and later chat bridge status.
+`pie-lab`의 기본 대시보드입니다.
 
-Source direction:
+이 앱은 9router의 메뉴형 대시보드 구조를 참고해 Next.js App Router 기반으로 구성한 버전입니다. 이전 Vite 기반 대시보드는 `apps/dashboard_old`에 보관합니다.
 
-- Base UI/UX ideas come from `https://github.com/jikime/9router`.
-- Provider calls must go through the pie-lab router/provider flow.
-- Usage and cost views should read from `@pie-lab/storage`.
+## 기술 스택
 
-Current implemented scope:
+- Next.js 16
+- Tailwind CSS 4
+- shadcn/ui
+- React 19
+- App Router
+- Pretendard
 
-- Vite-based local dashboard shell.
-- Usage summary cards.
-- Provider/auth status table.
-- Proxy pool creation/list/toggle/delete controls.
-- Provider quota connection status table.
-- Model cooldown availability table.
-- Model cooldown clear button.
-- Provider connection proxy pool assignment controls.
-- On-demand provider quota detail panel.
-- Provider/model aggregate lists.
-- Recent usage record table.
-- Filters for status, provider, model, limit, and order.
-- Budget policy form and budget usage/exhaustion status panel.
-- Manual API key/access token/OAuth token import.
-- Browser redirect OAuth login for Claude, Codex, and Gemini CLI.
-- Reads `GET /providers`, `GET /models/availability`, `GET /proxy-pools`, `GET /quota`, `GET /budget`, `GET /usage`, and `GET /usage/summary` from `@pie-lab/server`.
-- Writes `POST /oauth/callback`, `POST /models/availability`, `POST /proxy-pools`, `PUT /proxy-pools/:proxyPoolId`, `DELETE /proxy-pools/:proxyPoolId`, and `PUT /provider-connections/:connectionId`.
+## 실행
 
-Quota scope:
-
-- The dashboard currently shows whether each provider connection can be queried for quota.
-- It calls `/quota/:connectionId` only when a user selects a specific connection.
-- It does not automatically call every quota detail endpoint, because those calls may hit real provider APIs.
-- It can bind a provider connection to a proxy pool, and quota detail lookup will use that pool through the server.
-- Server routing can use quota snapshots for quota-aware account selection.
-
-Model availability scope:
-
-- The dashboard shows active `modelLock_${model}` cooldowns stored on provider connections.
-- It displays the locked connection, provider, model scope, retry-after text, unlock time, and last error.
-- The clear button sends the 9router-style `{ "action": "clearCooldown", "provider": "...", "model": "..." }` request.
-- This view does not call provider quota detail endpoints automatically.
-
-Run locally:
+먼저 API 서버가 필요합니다.
 
 ```bash
 npm --workspace @pie-lab/server run dev
+```
+
+다른 터미널에서 대시보드를 실행합니다.
+
+```bash
 npm --workspace @pie-lab/dashboard run dev
 ```
 
-Default URLs:
+기본 주소:
 
 ```txt
-server     http://127.0.0.1:4873
-dashboard  http://127.0.0.1:4874
+http://127.0.0.1:4876
 ```
+
+브라우저에서 호출하는 API 기본값은 다음입니다.
+
+```txt
+http://127.0.0.1:4873
+```
+
+다른 API 서버를 사용하려면 다음 환경변수를 지정합니다.
+
+```bash
+NEXT_PUBLIC_PIE_API_BASE_URL=http://127.0.0.1:4873 npm --workspace @pie-lab/dashboard run dev
+```
+
+SEO의 기준 도메인은 기본적으로 `https://pielab.ai`입니다.
+배포 환경에서 다른 canonical URL을 써야 한다면 다음 환경변수를 지정합니다.
+
+```bash
+NEXT_PUBLIC_SITE_URL=https://pielab.ai npm --workspace @pie-lab/dashboard run build
+```
+
+## 현재 메뉴
+
+- Overview
+- Routing
+- Providers
+- Usage
+- Quota
+- Media
+- Proxy
+- Logs
+- Learning
+- Settings
+
+## 현재 역할
+
+이 앱은 현재 기본 운영 대시보드입니다. 기존 Vite 대시보드는 비교와 회귀 확인이 필요할 때 `apps/dashboard_old`에서 별도로 실행합니다.

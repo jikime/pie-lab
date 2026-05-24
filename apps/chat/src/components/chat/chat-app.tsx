@@ -144,8 +144,8 @@ export function ChatApp() {
   return (
     <main className="flex min-h-screen bg-background text-foreground">
       <aside className="hidden w-72 shrink-0 border-r bg-card lg:flex lg:flex-col">
-        <div className="border-b px-4 py-4">
-          <div className="flex items-center justify-between gap-3">
+        <div className="flex h-[57px] items-center border-b px-4">
+          <div className="flex w-full items-center justify-between gap-3">
             <div>
               <h1 className="text-base font-semibold">Pie Chat</h1>
               <p className="mt-1 truncate text-xs text-muted-foreground">{routeSummary}</p>
@@ -194,8 +194,8 @@ export function ChatApp() {
       </aside>
 
       <section className="flex min-h-screen min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-10 border-b bg-background/95 backdrop-blur">
-          <div className="mx-auto flex h-14 w-full max-w-5xl items-center justify-between gap-3 px-4">
+        <header className="sticky top-0 z-10 flex h-[57px] items-center border-b bg-background/95 backdrop-blur">
+          <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-3 px-4">
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <h1 className="truncate text-base font-semibold lg:hidden">Pie Chat</h1>

@@ -2,6 +2,69 @@
 
 이 문서는 `pie-lab` 통합 작업 중 실제 코드에 반영된 내용을 시간순으로 기록합니다.
 
+## 2026-05-24: Learning Loop router usage와 dashboard API 검증 보강
+
+완료한 일:
+
+- Honcho dialectic summary 보조 호출이 가능하면 `auto:memory` router alias를 통과하도록 연결했습니다.
+- `auto:learning`, `auto:memory` 요청이 `AgentSession` router stream 경로에서 usage/cost record를 남기는지 테스트를 추가했습니다.
+- `/learning/reviews` approve가 proposed action을 실제 memory/skill에 적용하는지 테스트를 추가했습니다.
+- `/learning/reviews` reject가 proposal을 skipped로 바꾸는지 기존 테스트를 유지했습니다.
+- `/learning/curator` run이 stale agent-created skill을 실제 archive하고 status에 반영하는지 테스트를 추가했습니다.
+
+검증:
+
+```bash
+npm run test --workspace @pie-lab/coding-agent -- sdk-router-fallback.test.ts
+npm run test --workspace @pie-lab/coding-agent -- learning.test.ts
+npm run test --workspace @pie-lab/server -- learning-api
+npm run build --workspace @pie-lab/coding-agent
+npm run build --workspace @pie-lab/server
+```
+
+## 2026-05-24: Learning Loop와 curator 1차 구현
+
+완료한 일:
+
+- `packages/coding-agent/src/core/learning/`에 Learning Loop 코어를 추가했습니다.
+- persistent memory를 `~/.pie/agent/memories/MEMORY.md`, `~/.pie/agent/memories/USER.md` 기준으로 저장하고 system prompt frozen snapshot으로 주입하도록 했습니다.
+- `skills_list`, `skill_view`, `skill_manage`, `memory` learning tool을 추가했습니다.
+- agent-created skill을 `~/.pie/agent/skills/<skill>/SKILL.md`에 저장하고 `.usage.json`으로 provenance와 사용 정보를 기록하도록 했습니다.
+- background learning review를 `agent_end` 이후 non-blocking으로 실행하고, `auto:learning` router alias를 사용하도록 연결했습니다.
+- learning review 기록을 `~/.pie/agent/learning/reviews/*.json`에 저장하도록 했습니다.
+- `learning.review.mode`를 추가해 `auto`, `suggest`, `off` 모드를 지원하도록 했습니다.
+- `pie learning status/history/show/proposals/approve/reject/mode` 명령을 추가했습니다.
+- memory 중복 저장과 유사 skill 중복 생성을 최소한의 유사도 검사로 skip하도록 했습니다.
+- Honcho provider를 `@honcho-ai/sdk` v2.1.1 기반으로 추가하고, context를 system prompt가 아니라 `transformContext` 직전에 `<memory-context>`로 주입하도록 했습니다.
+- router에 `auto:learning`, `auto:memory` alias를 추가했습니다.
+- `pie curator` 명령을 추가해 agent-created skill의 `status`, `run`, `pin`, `unpin`, `archive`, `restore`, `backup`을 지원하도록 했습니다.
+- `learning.skills.curator` 설정을 추가해 stale/archive/prune 일수, auto archive, run 전 backup 여부를 조정할 수 있게 했습니다.
+- curator에 `--dry-run`, `prune`, `rollback`, `settings`를 추가했습니다.
+- `apps/server`에 `/learning`, `/learning/curator` API를 추가했습니다.
+- `apps/dashboard`에 Learning Loop 섹션을 추가해 memory, USER profile, curator 상태, pin/archive/restore, run/dry-run/prune, curator 설정을 볼 수 있게 했습니다.
+- 실제 설정/데이터 경로의 `.pi` 사용을 `.pie`로 정리했습니다. `pkg.pi`, `piConfig` 같은 manifest 호환 필드는 유지했습니다.
+
+검증:
+
+```bash
+npm run build --workspace @pie-lab/coding-agent
+npm run test --workspace @pie-lab/coding-agent -- learning
+npm run test --workspace @pie-lab/router
+npm run test --workspace @pie-lab/server -- learning-api
+npm run check --workspace @pie-lab/dashboard
+node packages/coding-agent/dist/cli.js curator --help
+```
+
+상세 문서:
+
+- [Learning Loop](./learning-loop.md)
+
+당시 한계:
+
+- Hermes의 전체 skills hub, 외부 registry/tap, 설치 전 guard/audit, TUI Skills Hub는 아직 이식하지 않았습니다.
+- curator는 아직 `pause`, `resume` 같은 실행 스케줄 제어는 없습니다.
+- 전체 `@pie-lab/coding-agent` 테스트에는 Learning Loop와 무관한 `pi.dev`/`pielab.ai` 브랜딩 기대값, CLI help 종료 코드 실패가 남아 있습니다.
+
 ## 2026-05-22: pi 기반 저장소 구성
 
 완료한 일:
@@ -1166,7 +1229,7 @@ npm --workspace @pie-lab/router test -- model-selection.test.ts
 문제:
 
 - `pie` CLI는 `~/.pie/agent/provider-connections.json`을 사용합니다.
-- 그런데 server/dashboard의 provider connection, routing policy, quota API는 shared helper의 기본값 때문에 `~/.pi/agent/provider-connections.json`을 보고 있었습니다.
+- 그런데 server/dashboard의 provider connection, routing policy, quota API는 shared helper의 기본값 때문에 `~/.pie/agent/provider-connections.json`을 보고 있었습니다.
 - 그 결과 dashboard에서 `auto:coding` alias를 저장해도 실제 `pie` CLI 세션에는 적용되지 않을 수 있었습니다.
 
 수정:
@@ -1758,7 +1821,7 @@ curl -sS -X POST http://127.0.0.1:4873/routing-policy/preview \
 - `apps/chat/package.json`에 `pi.extensions` manifest를 추가해 `pie -e apps/chat`로 extension entry가 로드되도록 했습니다.
 - 기존 `@mariozechner/pi-*` import를 `@pie-lab/*` 패키지 기준으로 변경했습니다.
 - worker tmux session이 `pi`가 아니라 `pie` 명령으로 새 세션을 띄우도록 변경했습니다.
-- chat bridge 저장 경로를 `~/.pi/agent/chat`에서 `~/.pie/agent/chat`으로 변경했습니다.
+- chat bridge 저장 경로를 `~/.pie/agent/chat`에서 `~/.pie/agent/chat`으로 변경했습니다.
 - 기존 bridge 기능인 `/chat-config`, `/chat-connect`, `/chat-spawn-all`, `/chat-workers`, `/chat-open-all`, `/chat-kill-all`, `/chat-new`, `/chat-status` 명령과 `chat_history`, `chat_attach`, `chat_request_secret`, `chat_workers` 도구를 유지했습니다.
 - `apps/chat` README에 웹 채팅 실행 방법과 Telegram/Discord bridge 사용 방법을 함께 정리했습니다.
 
@@ -1831,7 +1894,7 @@ extension loader 확인:
 
 완료한 일:
 
-- `docs/dashboard-next-migration.md`를 추가했습니다.
+- `docs/dashboard-migration.md`를 추가했습니다.
 - 기존 `apps/dashboard`를 9router 운영 기능의 기준 구현으로 두고, `apps/dashboard-next`를 제품화 dashboard로 단계적 이관한다는 기준을 정리했습니다.
 - Usage, Logs, Routing, Providers, Quota, Model Availability, Budget, Proxy, Media, Settings, Chat 영역별 이관 상태와 남은 일을 표로 정리했습니다.
 - 우선순위는 `Usage/Logs -> Providers -> Quota/Model Availability -> Routing -> Budget/Proxy/Media -> Chat 상태` 순서로 잡았습니다.
@@ -1845,7 +1908,7 @@ extension loader 확인:
 - `GET /usage/:requestId`를 호출하는 `dashboardApi.usageDetail()`과 관련 타입을 추가했습니다.
 - detail sheet에서 attempt summary, fallback timeline, raw event trace를 볼 수 있게 했습니다.
 - logs page 설명을 request detail과 raw trace 기준으로 갱신했습니다.
-- `docs/dashboard-next-migration.md`에서 Usage/Logs 이관 상태를 현재 구현 기준으로 업데이트했습니다.
+- `docs/dashboard-migration.md`에서 Usage/Logs 이관 상태를 현재 구현 기준으로 업데이트했습니다.
 
 검증:
 
@@ -1862,7 +1925,7 @@ npm --workspace @pie-lab/dashboard-next run build
 - API key, access token, OAuth token 형식의 connection 입력을 받을 수 있게 했습니다.
 - connection 활성화/비활성화와 삭제 버튼을 추가했습니다.
 - `dashboardApi.createProviderConnection()`, `dashboardApi.updateProviderConnection()`, `dashboardApi.deleteProviderConnection()`을 추가했습니다.
-- `docs/dashboard-next-migration.md`에서 Providers 이관 상태를 현재 구현 기준으로 업데이트했습니다.
+- `docs/dashboard-migration.md`에서 Providers 이관 상태를 현재 구현 기준으로 업데이트했습니다.
 
 검증:
 
@@ -1879,7 +1942,7 @@ npm --workspace @pie-lab/dashboard-next run build
 - `GET /oauth/start`를 호출해 Claude, Codex, Gemini CLI OAuth redirect login을 시작할 수 있게 했습니다.
 - redirect callback으로 돌아온 `code`와 `state`를 감지해 `POST /oauth/callback`으로 provider connection을 저장하게 했습니다.
 - OAuth flow state와 code verifier는 `localStorage`에 임시 저장하고, callback 처리 후 삭제하도록 했습니다.
-- `docs/dashboard-next-migration.md`에서 Providers 이관 상태를 OAuth redirect login 포함 기준으로 업데이트했습니다.
+- `docs/dashboard-migration.md`에서 Providers 이관 상태를 OAuth redirect login 포함 기준으로 업데이트했습니다.
 
 검증:
 
@@ -1897,7 +1960,7 @@ npm --workspace @pie-lab/dashboard-next run build
 - `GET /models/availability`를 Quota 화면에 연결해 active cooldown/lock 상태를 볼 수 있게 했습니다.
 - `POST /models/availability`의 `clearCooldown` action을 호출하는 Clear 버튼을 추가했습니다.
 - `dashboardApi.quotaDetail()`, `dashboardApi.modelAvailability()`, `dashboardApi.clearModelCooldown()`과 관련 타입을 추가했습니다.
-- `docs/dashboard-next-migration.md`에서 Quota와 Model Availability 이관 상태를 현재 구현 기준으로 업데이트했습니다.
+- `docs/dashboard-migration.md`에서 Quota와 Model Availability 이관 상태를 현재 구현 기준으로 업데이트했습니다.
 
 검증:
 
@@ -1915,7 +1978,7 @@ npm --workspace @pie-lab/dashboard-next run build
 - combo, alias, intent 삭제 버튼을 추가했습니다.
 - JSON editor와 preview 기능은 유지하되, form 저장 결과가 policy JSON에도 반영되도록 했습니다.
 - `dashboardApi.saveRoutingCombo()`, `deleteRoutingCombo()`, `saveRoutingAlias()`, `deleteRoutingAlias()`, `saveRoutingIntent()`, `deleteRoutingIntent()`를 추가했습니다.
-- `docs/dashboard-next-migration.md`에서 Routing 이관 상태를 현재 구현 기준으로 업데이트했습니다.
+- `docs/dashboard-migration.md`에서 Routing 이관 상태를 현재 구현 기준으로 업데이트했습니다.
 
 검증:
 

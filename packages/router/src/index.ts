@@ -67,6 +67,8 @@ export const PIE_LAB_ROUTER_MODEL_IDS = [
 	"auto:coding",
 	"auto:chat",
 	"auto:reasoning",
+	"auto:learning",
+	"auto:memory",
 	"cheap:coding",
 	"fast:chat",
 	"combo:coding",
@@ -718,7 +720,10 @@ export function parseModelSelection(input: string | ModelSelection): ModelSelect
 
 	if (prefix === "fixed") return { mode: "fixed", model: value };
 	if (prefix === "fallback") return { mode: "fallback", primary: value };
-	if (prefix === "auto") return { mode: "router", intent: value, alias: raw };
+	if (prefix === "auto") {
+		const constraints = value === "learning" || value === "memory" ? { budget: "low" as const } : undefined;
+		return { mode: "router", intent: value, alias: raw, constraints };
+	}
 	if (prefix === "cheap") return { mode: "router", intent: value, alias: raw, constraints: { budget: "low" } };
 	if (prefix === "fast") return { mode: "router", intent: value, alias: raw, constraints: { latency: "low" } };
 	if (prefix === "combo") return { mode: "router", intent: value, alias: raw };
@@ -1114,6 +1119,10 @@ function scoreModel(model: PiModelReference, intent: RouterIntent, constraints: 
 	if (intent === "vision") {
 		if (model.input?.includes("image")) score += 10;
 		score += keywordScore(text, ["vision", "gpt", "gemini", "claude"]);
+	}
+	if (intent === "learning" || intent === "memory") {
+		score += keywordScore(text, ["mini", "flash", "haiku", "small", "cheap", "gpt-5"]);
+		score -= keywordScore(text, ["opus", "pro", "reasoning", "thinking"]) / 2;
 	}
 
 	if (constraints?.budget === "low") {

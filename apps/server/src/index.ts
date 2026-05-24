@@ -31,6 +31,7 @@ import {
 	type ModelAvailabilityApiOptions,
 } from "./model-availability-api.js";
 import { createMediaRequestHandler, type MediaApiOptions } from "./media-api.js";
+import { createLearningRequestHandler, type LearningApiOptions } from "./learning-api.js";
 import { createProviderStatusRequestHandler } from "./provider-status-api.js";
 import { createProxyPoolRequestHandler, type ProxyPoolApiOptions } from "./proxy-pools-api.js";
 import {
@@ -46,6 +47,7 @@ export * from "./budget-api.js";
 export * from "./budget-policy.js";
 export * from "./oauth-api.js";
 export * from "./media-api.js";
+export * from "./learning-api.js";
 export * from "./model-availability-api.js";
 export * from "./provider-connections-api.js";
 export * from "./provider-settings-api.js";
@@ -67,6 +69,7 @@ export interface PieLabServerOptions
 		ProviderQuotaApiOptions,
 		ModelAvailabilityApiOptions,
 		MediaApiOptions,
+		LearningApiOptions,
 		ProxyPoolApiOptions,
 		RoutingPolicyApiOptions,
 		SiteApiOptions {
@@ -102,6 +105,7 @@ export function createPieLabRequestHandler(options: PieLabServerOptions = {}) {
 	const quotaHandler = createProviderQuotaRequestHandler({ ...options, providerConnectionStore });
 	const modelAvailabilityHandler = createModelAvailabilityRequestHandler({ ...options, providerConnectionStore });
 	const mediaHandler = createMediaRequestHandler({ ...options, providerConnectionStore, usageStore });
+	const learningHandler = createLearningRequestHandler(options);
 	const proxyPoolHandler = createProxyPoolRequestHandler({ ...options, providerConnectionStore });
 	const siteHandler = createSiteRequestHandler(options);
 	const routingPolicyHandler = createRoutingPolicyRequestHandler({
@@ -147,6 +151,10 @@ export function createPieLabRequestHandler(options: PieLabServerOptions = {}) {
 		}
 		if (isMediaPath(url.pathname)) {
 			await mediaHandler(request, response);
+			return;
+		}
+		if (isLearningPath(url.pathname)) {
+			await learningHandler(request, response);
 			return;
 		}
 		if (isQuotaPath(url.pathname)) {
@@ -289,5 +297,16 @@ function isMediaPath(pathname: string): boolean {
 		pathname === "/v1/images/generations" ||
 		pathname === "/media/routes" ||
 		pathname === "/v1/media/routes"
+	);
+}
+
+function isLearningPath(pathname: string): boolean {
+	return (
+		pathname === "/learning" ||
+		pathname === "/v1/learning" ||
+		pathname === "/learning/curator" ||
+		pathname === "/v1/learning/curator" ||
+		pathname === "/learning/reviews" ||
+		pathname === "/v1/learning/reviews"
 	);
 }

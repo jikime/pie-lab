@@ -11,6 +11,7 @@ Pi implements the [Agent Skills standard](https://agentskills.io/specification),
 - [Locations](#locations)
 - [How Skills Work](#how-skills-work)
 - [Skill Commands](#skill-commands)
+- [Curator](#curator)
 - [Skill Structure](#skill-structure)
 - [Frontmatter](#frontmatter)
 - [Validation](#validation)
@@ -88,6 +89,35 @@ Toggle skill commands via `/settings` in interactive mode or in `settings.json`:
   "enableSkillCommands": true
 }
 ```
+
+## Curator
+
+Pie can create reusable skills through the Learning Loop. Curator keeps those agent-created skills tidy without touching skills you created yourself.
+
+Curator only manages skills with `.usage.json` metadata containing `createdBy: "agent"`.
+
+Common commands:
+
+```bash
+pie curator status
+pie curator run
+pie curator run --dry-run
+pie curator pin router-integration-debugging
+pie curator unpin router-integration-debugging
+pie curator archive router-integration-debugging
+pie curator restore router-integration-debugging
+pie curator prune --dry-run
+pie curator rollback
+```
+
+Policy can be changed from the CLI:
+
+```bash
+pie curator settings --stale-days 14 --archive-days 60 --prune-days 180
+pie curator settings --auto-archive false
+```
+
+Archive moves skills to `~/.pie/agent/skills/.archive` instead of deleting them. `run` creates a backup snapshot under `~/.pie/agent/skills/.backups` when `backupBeforeRun` is enabled.
 
 ## Skill Structure
 

@@ -27,40 +27,40 @@ type FooterColorName = keyof FooterPalette;
 
 const FOOTER_PALETTES: Record<"dark" | "light" | "universal", FooterPalette> = {
 	dark: {
-		label: { rgb: [148, 163, 184], color256: 109 },
-		value: { rgb: [226, 232, 240], color256: 254 },
-		primary: { rgb: [96, 165, 250], color256: 75 },
-		secondary: { rgb: [103, 181, 209], color256: 110 },
-		path: { rgb: [72, 187, 142], color256: 72 },
-		model: { rgb: [224, 128, 64], color256: 173 },
-		status: { rgb: [72, 187, 142], color256: 72 },
-		warning: { rgb: [222, 165, 54], color256: 178 },
-		error: { rgb: [224, 102, 102], color256: 167 },
-		muted: { rgb: [148, 163, 184], color256: 109 },
+		label: { rgb: [106, 120, 138], color256: 66 },
+		value: { rgb: [170, 178, 190], color256: 248 },
+		primary: { rgb: [106, 150, 184], color256: 73 },
+		secondary: { rgb: [96, 154, 150], color256: 73 },
+		path: { rgb: [98, 152, 126], color256: 72 },
+		model: { rgb: [178, 132, 92], color256: 137 },
+		status: { rgb: [112, 154, 120], color256: 108 },
+		warning: { rgb: [184, 154, 84], color256: 137 },
+		error: { rgb: [184, 104, 104], color256: 131 },
+		muted: { rgb: [88, 100, 116], color256: 243 },
 	},
 	light: {
-		label: { rgb: [71, 85, 105], color256: 60 },
-		value: { rgb: [17, 24, 39], color256: 235 },
-		primary: { rgb: [37, 99, 190], color256: 26 },
-		secondary: { rgb: [24, 112, 132], color256: 30 },
-		path: { rgb: [30, 120, 91], color256: 29 },
-		model: { rgb: [176, 86, 35], color256: 130 },
-		status: { rgb: [30, 120, 91], color256: 29 },
-		warning: { rgb: [166, 104, 28], color256: 136 },
-		error: { rgb: [170, 48, 48], color256: 124 },
-		muted: { rgb: [71, 85, 105], color256: 60 },
+		label: { rgb: [82, 94, 110], color256: 240 },
+		value: { rgb: [36, 46, 62], color256: 236 },
+		primary: { rgb: [52, 98, 144], color256: 25 },
+		secondary: { rgb: [48, 110, 122], color256: 30 },
+		path: { rgb: [52, 114, 86], color256: 29 },
+		model: { rgb: [138, 86, 52], color256: 130 },
+		status: { rgb: [64, 118, 82], color256: 29 },
+		warning: { rgb: [130, 98, 36], color256: 94 },
+		error: { rgb: [136, 60, 60], color256: 124 },
+		muted: { rgb: [106, 116, 130], color256: 243 },
 	},
 	universal: {
-		label: { rgb: [71, 85, 105], color256: 60 },
-		value: { rgb: [55, 65, 81], color256: 240 },
-		primary: { rgb: [37, 99, 190], color256: 26 },
-		secondary: { rgb: [24, 112, 132], color256: 30 },
-		path: { rgb: [30, 120, 91], color256: 29 },
-		model: { rgb: [176, 86, 35], color256: 130 },
-		status: { rgb: [30, 120, 91], color256: 29 },
-		warning: { rgb: [166, 104, 28], color256: 136 },
-		error: { rgb: [170, 48, 48], color256: 124 },
-		muted: { rgb: [107, 114, 128], color256: 243 },
+		label: { rgb: [86, 98, 114], color256: 240 },
+		value: { rgb: [62, 74, 90], color256: 240 },
+		primary: { rgb: [62, 108, 146], color256: 25 },
+		secondary: { rgb: [58, 118, 126], color256: 30 },
+		path: { rgb: [62, 122, 92], color256: 29 },
+		model: { rgb: [146, 96, 58], color256: 130 },
+		status: { rgb: [72, 126, 88], color256: 29 },
+		warning: { rgb: [140, 108, 44], color256: 94 },
+		error: { rgb: [146, 68, 68], color256: 124 },
+		muted: { rgb: [106, 116, 130], color256: 243 },
 	},
 };
 
@@ -80,8 +80,8 @@ function footerFg(text: string, colorName: FooterColorName, bold = false): strin
 	const ansi = getCapabilities().trueColor
 		? `\x1b[38;2;${color.rgb[0]};${color.rgb[1]};${color.rgb[2]}m`
 		: `\x1b[38;5;${color.color256}m`;
-	const styled = `${ansi}${text}\x1b[39m`;
-	return bold ? `\x1b[1m${styled}\x1b[22m` : styled;
+	const styled = `${bold ? "\x1b[1m" : ""}${ansi}${text}\x1b[39m${bold ? "\x1b[22m" : ""}`;
+	return styled;
 }
 
 /**

@@ -147,6 +147,21 @@ export {
 } from "./core/extensions/index.ts";
 // Footer data provider (git branch + extension statuses - data not otherwise available to extensions)
 export type { ReadonlyFooterDataProvider } from "./core/footer-data-provider.ts";
+export {
+	BackgroundLearningReview,
+	type CuratedSkillStatus,
+	type CuratorRunResult,
+	DEFAULT_CURATOR_POLICY,
+	type LearningReviewRecord,
+	LearningReviewStore,
+	type MemorySnapshot,
+	MemoryStore,
+	type ReviewAction,
+	type ReviewActionResult,
+	SkillCurator,
+	SkillManager,
+	type SkillSummary,
+} from "./core/learning/index.ts";
 export { convertToLlm } from "./core/messages.ts";
 export { ModelRegistry } from "./core/model-registry.ts";
 export type {
@@ -214,6 +229,7 @@ export {
 export {
 	type CompactionSettings,
 	type ImageSettings,
+	type LearningSettingsInput,
 	type PackageSource,
 	type RetrySettings,
 	SettingsManager,

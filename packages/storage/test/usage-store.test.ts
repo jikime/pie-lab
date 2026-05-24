@@ -153,7 +153,7 @@ describe("usage stores", () => {
 				resolvedProvider: "openai",
 				resolvedModel: "gpt-5.1",
 				endpoint: "/v1/embeddings",
-				clientOrigin: "dashboard-next:media-test",
+				clientOrigin: "dashboard:media-test",
 				status: "error",
 				usage: undefined,
 				cost: undefined,
@@ -186,7 +186,7 @@ describe("usage stores", () => {
 		]);
 		expect(summary.byClientOrigin.map((group) => [group.key, group.records])).toEqual([
 			["pie-chat:telegram", 1],
-			["dashboard-next:media-test", 1],
+			["dashboard:media-test", 1],
 		]);
 	});
 });
