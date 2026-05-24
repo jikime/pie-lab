@@ -35,19 +35,20 @@ google/gemini-3.1-pro-preview
 google/gemini-2.5-flash
 ```
 
-웹 채팅 요청은 API server로 전달될 때 `clientOrigin=pie-chat:web`으로 usage record에 저장됩니다. dashboard-next의 `Usage -> Origins` 탭에서 웹 채팅 비용과 CLI/bridge 비용을 분리해서 볼 수 있습니다.
+웹 채팅 요청은 API server로 전달될 때 `clientOrigin=pie-chat:web`으로 usage record에 저장됩니다. dashboard의 `Usage -> Origins` 탭에서 웹 채팅 비용과 CLI/bridge 비용을 분리해서 볼 수 있습니다.
 
 ## Telegram/Discord Bridge 실행
 
-Telegram/Discord bridge는 Next.js 웹 서버가 아니라 `pie` extension으로 실행합니다.
+Telegram/Discord bridge는 Next.js 웹 서버가 아니라 `pie` extension으로 실행합니다. 이 저장소는 `.pie/settings.json`에서 `apps/chat`을 project-local package로 등록하므로, 저장소 루트에서 일반 `pie` 세션을 열면 bridge 명령이 자동으로 로드됩니다.
+
+```bash
+pie
+```
+
+프로젝트 설정을 사용하지 않는 임시 테스트에서는 다음처럼 명시적으로 로드할 수도 있습니다.
 
 ```bash
 pie -e apps/chat
-```
-
-소스에서 바로 테스트할 때는 저장소 루트에서 다음처럼 실행할 수도 있습니다.
-
-```bash
 ./pie-test.sh -e apps/chat
 ```
 
@@ -63,7 +64,7 @@ pie -e apps/chat
 
 1. Telegram에서 `@BotFather`로 새 bot을 만듭니다.
 2. 발급받은 bot token을 복사합니다.
-3. `pie -e apps/chat` 실행 후 `/chat-config`를 입력합니다.
+3. 저장소 루트에서 `pie` 실행 후 `/chat-config`를 입력합니다.
 4. `Create account`에서 `Telegram`을 선택합니다.
 5. bot token을 입력합니다.
 6. DM을 연결하려면 `Add DM`을 선택합니다.
@@ -80,7 +81,7 @@ pie -e apps/chat
 
 1. Discord Developer Portal에서 bot application을 만듭니다.
 2. Bot 설정에서 Message Content Intent를 활성화합니다.
-3. `pie -e apps/chat` 실행 후 `/chat-config`를 입력합니다.
+3. 저장소 루트에서 `pie` 실행 후 `/chat-config`를 입력합니다.
 4. `Create account`에서 `Discord`를 선택합니다.
 5. Discord bot token을 입력합니다.
 6. 안내되는 invite URL로 bot을 서버에 초대합니다.
@@ -142,7 +143,7 @@ Telegram/Discord 메시지
 
 Telegram/Discord로 응답을 보내려면 메시지가 반드시 원격 채팅에서 들어온 턴이어야 합니다.
 
-bridge worker에서 발생한 모델 호출은 `clientOrigin=pie-chat:telegram` 또는 `clientOrigin=pie-chat:discord`로 usage record에 저장됩니다. 따라서 같은 모델을 사용해도 웹 채팅, Telegram, Discord, 일반 CLI 비용을 dashboard-next에서 구분할 수 있습니다.
+bridge worker에서 발생한 모델 호출은 `clientOrigin=pie-chat:telegram` 또는 `clientOrigin=pie-chat:discord`로 usage record에 저장됩니다. 따라서 같은 모델을 사용해도 웹 채팅, Telegram, Discord, 일반 CLI 비용을 dashboard에서 구분할 수 있습니다.
 
 ## 자주 쓰는 명령
 
@@ -259,4 +260,4 @@ Discord에서 자주 생기는 원인은 다음과 같습니다.
 - 웹 채팅 앱: `apps/chat/src`
 - usage origin: `pie-chat:web`, `pie-chat:telegram`, `pie-chat:discord`
 
-웹 채팅과 Telegram/Discord bridge는 같은 `apps/chat`에 있지만 실행 방식은 다릅니다. 웹 채팅은 Next.js 서버로 실행하고, Telegram/Discord bridge는 `pie -e apps/chat`로 실행합니다.
+웹 채팅과 Telegram/Discord bridge는 같은 `apps/chat`에 있지만 실행 방식은 다릅니다. 웹 채팅은 Next.js 서버로 실행하고, Telegram/Discord bridge는 저장소 루트의 `pie` 세션에서 project-local extension으로 실행합니다.

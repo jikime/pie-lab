@@ -807,7 +807,7 @@ GET /v1/quota/:connectionId
 
 `pie-chat`은 이름을 `pie-chat`으로 사용하되, 실제 소스 출처는 기존 fork인 `https://github.com/jikime/pi-chat`입니다. 구현 방향은 기존 `pi-chat`의 bridge 흐름을 최대한 유지하고, LLM 직접 호출 부분만 `pie-lab agent runtime -> router -> provider engine` 경로로 바꾸는 것입니다.
 
-현재는 `apps/chat`에 Next.js 웹 채팅과 Telegram/Discord bridge extension을 이식한 상태입니다. `pie -e apps/chat`로 `/chat-config`, `/chat-connect`, `/chat-spawn-all` 같은 기존 bridge 흐름을 사용할 수 있고, worker 실행 명령과 저장 경로는 `pie`와 `~/.pie/agent/chat` 기준으로 정리했습니다. 따라서 남은 일은 bridge 코드를 처음부터 다시 통합하는 것이 아니라, 실제 Telegram/Discord 환경에서 장시간 송수신을 검증하고, chat-origin usage/cost와 dashboard 관찰성을 더 분명하게 만드는 것입니다.
+현재는 `apps/chat`에 Next.js 웹 채팅과 Telegram/Discord bridge extension을 이식한 상태입니다. 프로젝트 설정에서 `apps/chat`을 local package로 등록해 저장소 루트의 일반 `pie` 세션에서도 `/chat-config`, `/chat-connect`, `/chat-spawn-all` 같은 기존 bridge 흐름을 사용할 수 있고, worker 실행 명령과 저장 경로는 `pie`와 `~/.pie/agent/chat` 기준으로 정리했습니다. 따라서 남은 일은 bridge 코드를 처음부터 다시 통합하는 것이 아니라, 실제 Telegram/Discord 환경에서 장시간 송수신을 검증하고, chat-origin usage/cost와 dashboard 관찰성을 더 분명하게 만드는 것입니다.
 
 ## 15. 9router 원본 기준 라우팅 원칙
 

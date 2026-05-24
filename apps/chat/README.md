@@ -51,11 +51,14 @@ NEXT_PUBLIC_PIE_API_BASE_URL=http://127.0.0.1:4873 npm --workspace @pie-lab/pie-
 
 `apps/chat` also exposes a pie extension entry at `extension/index.ts`.
 
-Use it from a `pie` session with:
+In this repo, the extension is registered in project settings, so a normal `pie` session from the
+repo root loads the bridge commands:
 
 ```bash
-pie -e apps/chat
+pie
 ```
+
+For one-off testing without project settings, you can still use `pie -e apps/chat`.
 
 Then configure and connect channels from the TUI:
 

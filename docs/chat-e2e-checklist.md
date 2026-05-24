@@ -36,13 +36,14 @@ npm --workspace @pie-lab/pie-chat run build
 1. bridge extension을 실행합니다.
 
 ```bash
-./pie-test.sh -e apps/chat
+pie
 ```
 
-또는 전역 설치된 CLI 기준:
+프로젝트 설정을 우회해 임시로 확인할 때는 다음처럼 명시적으로 로드할 수도 있습니다.
 
 ```bash
 pie -e apps/chat
+./pie-test.sh -e apps/chat
 ```
 
 2. TUI에서 명령이 등록되어 있는지 확인합니다.

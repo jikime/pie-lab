@@ -11,10 +11,10 @@
 	},
 	"scripts": {
 		"dev": "next dev -H 127.0.0.1 -p 4877",
-		"build": "next build",
+		"build": "npm run check:bridge && next build",
 		"start": "next start -H 127.0.0.1 -p 4877",
 		"lint": "eslint",
-		"check": "eslint && npm run check:bridge && next build",
+		"check": "eslint && npm run build",
 		"check:bridge": "tsc -p tsconfig.bridge.json --noEmit"
 	},
 	"dependencies": {

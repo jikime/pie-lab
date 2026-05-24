@@ -30,7 +30,7 @@
 
 `apps/server`는 OpenAI-compatible chat completions, streaming SSE, embeddings, web search/fetch, TTS/STT, image generation endpoint를 제공합니다. `apps/dashboard`는 Next.js 16, Tailwind CSS 4, shadcn/ui 기반의 기본 dashboard이며 usage detail, provider setup, OAuth redirect login, quota detail, model availability, routing policy form, budget form, proxy 관리, media endpoint test form, Learning Loop 운영 화면까지 포함합니다. 이전 Vite dashboard는 `apps/dashboard_old`에 보관합니다.
 
-`apps/chat`은 `pie-chat` 영역으로, Next.js 웹 채팅과 Telegram/Discord bridge extension을 함께 담고 있습니다. 웹 채팅은 `pie-chat:web`, bridge worker는 `pie-chat:telegram` 또는 `pie-chat:discord` origin으로 usage/cost를 남깁니다. `pie -e apps/chat`로 기존 bridge 흐름을 사용할 수 있으며, 남은 일은 실제 계정 기준 장시간 송수신 검증입니다.
+`apps/chat`은 `pie-chat` 영역으로, Next.js 웹 채팅과 Telegram/Discord bridge extension을 함께 담고 있습니다. 웹 채팅은 `pie-chat:web`, bridge worker는 `pie-chat:telegram` 또는 `pie-chat:discord` origin으로 usage/cost를 남깁니다. 프로젝트 설정에서 `apps/chat`을 local package로 등록해 두었기 때문에 저장소 루트에서 `pie`를 실행하면 `/chat-config`, `/chat-connect` 같은 bridge 명령이 로드됩니다. 남은 일은 실제 계정 기준 장시간 송수신 검증입니다.
 
 다음 큰 작업은 다음 순서로 진행합니다.
 
@@ -38,7 +38,7 @@
 1. 설치와 실행 흐름 안정화
 2. 실제 Telegram/Discord 계정 기준 end-to-end 송수신 검증
 3. dashboard 사용성 문구와 필터 개선
-4. root build 포함 여부 별도 결정
+4. root build/dev 회귀 확인과 배포 흐름 정리
 ```
 
 ## 기본 방향

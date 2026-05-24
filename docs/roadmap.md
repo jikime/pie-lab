@@ -173,7 +173,7 @@ pie -p "README.md를 요약해줘" @README.md
 
 - `apps/chat`은 Next.js 16 기반 웹 채팅 앱과 Telegram/Discord bridge extension을 함께 담습니다.
 - 웹 채팅은 `apps/server`의 `/v1/chat/completions` streaming endpoint를 호출하며 기본 모델은 `auto:chat`입니다.
-- 기존 `pi-chat` bridge 흐름을 `apps/chat/extension` 아래로 이식했고, `pie -e apps/chat`로 `/chat-config`, `/chat-connect`, `/chat-spawn-all`, `/chat-workers` 등을 사용할 수 있습니다.
+- 기존 `pi-chat` bridge 흐름을 `apps/chat/extension` 아래로 이식했고, 프로젝트 설정이 `apps/chat`을 local package로 로드하므로 저장소 루트의 일반 `pie` 세션에서 `/chat-config`, `/chat-connect`, `/chat-spawn-all`, `/chat-workers` 등을 사용할 수 있습니다.
 - Telegram/Discord 채널별 workspace, memory, skills, attachment, tmux worker 구조는 `~/.pie/agent/chat` 기준으로 정리했습니다.
 
 남은 일:
