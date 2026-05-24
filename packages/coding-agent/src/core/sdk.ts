@@ -2,43 +2,31 @@ import { join } from "node:path";
 import { Agent, type AgentMessage, type ThinkingLevel } from "@pie-lab/agent-core";
 import {
 	type AssistantMessage,
-	type AssistantMessageEventStream,
-	type Context,
+	type AssistantMessageEvent,
 	clampThinkingLevel,
 	createAssistantMessageEventStream,
 	type Message,
 	type Model,
-	type SimpleStreamOptions,
 	streamSimple,
 } from "@pie-lab/ai";
-import { checkFallbackError, compressPayloadWithRtk, type RtkStats, resolvePiModelRoutePlan } from "@pie-lab/router";
-import { createQuotaAwareProviderConnectionPreparer } from "@pie-lab/shared";
-import {
-	createJsonlUsageStore,
-	createJsonProviderConnectionStore,
-	createUsageRecordId,
-	type UsageCost,
-	type UsageRecord,
-	type UsageRecordStatus,
-	type UsageStore,
-	type UsageTokens,
-	type UsageTraceEvent,
-} from "@pie-lab/storage";
-import { getAgentDir } from "../config.js";
-import { AgentSession } from "./agent-session.js";
-import { formatNoModelsAvailableMessage } from "./auth-guidance.js";
-import { AuthStorage } from "./auth-storage.js";
-import { DEFAULT_THINKING_LEVEL } from "./defaults.js";
-import type { ExtensionRunner, LoadExtensionsResult, SessionStartEvent, ToolDefinition } from "./extensions/index.js";
-import { convertToLlm } from "./messages.js";
-import { ModelRegistry } from "./model-registry.js";
-import { findInitialModel } from "./model-resolver.js";
-import type { ResourceLoader } from "./resource-loader.js";
-import { DefaultResourceLoader } from "./resource-loader.js";
-import { getDefaultSessionDir, SessionManager } from "./session-manager.js";
-import { SettingsManager } from "./settings-manager.js";
-import { isInstallTelemetryEnabled } from "./telemetry.js";
-import { time } from "./timings.js";
+import { resolvePiModelRoutePlan } from "@pie-lab/router";
+import { createUsageRecordId, type UsageRecordStatus, type UsageStore } from "@pie-lab/storage";
+import { getAgentDir } from "../config.ts";
+import { resolvePath } from "../utils/paths.ts";
+import { AgentSession } from "./agent-session.ts";
+import { formatNoModelsAvailableMessage } from "./auth-guidance.ts";
+import { AuthStorage } from "./auth-storage.ts";
+import { DEFAULT_THINKING_LEVEL } from "./defaults.ts";
+import type { ExtensionRunner, LoadExtensionsResult, SessionStartEvent, ToolDefinition } from "./extensions/index.ts";
+import { convertToLlm } from "./messages.ts";
+import { ModelRegistry } from "./model-registry.ts";
+import { findInitialModel } from "./model-resolver.ts";
+import type { ResourceLoader } from "./resource-loader.ts";
+import { DefaultResourceLoader } from "./resource-loader.ts";
+import { getDefaultSessionDir, SessionManager } from "./session-manager.ts";
+import { SettingsManager } from "./settings-manager.ts";
+import { isInstallTelemetryEnabled } from "./telemetry.ts";
+import { time } from "./timings.ts";
 import {
 	createBashTool,
 	createCodingTools,
@@ -51,12 +39,12 @@ import {
 	createWriteTool,
 	type ToolName,
 	withFileMutationQueue,
-} from "./tools/index.js";
+} from "./tools/index.ts";
 
 export interface CreateAgentSessionOptions {
 	/** Working directory for project-local discovery. Default: process.cwd() */
 	cwd?: string;
-	/** Global config directory. Default: ~/.pie/agent */
+	/** Global config directory. Default: ~/.pi/agent */
 	agentDir?: string;
 
 	/** Auth storage for credentials. Default: AuthStorage.create(agentDir/auth.json) */
@@ -82,7 +70,7 @@ export interface CreateAgentSessionOptions {
 	/**
 	 * Optional allowlist of tool names.
 	 *
-	 * When omitted, pie enables the default built-in tools (read, bash, edit, write)
+	 * When omitted, pi enables the default built-in tools (read, bash, edit, write)
 	 * and leaves extension/custom tools enabled unless `noTools` changes that default.
 	 * When provided, only the listed tool names are enabled.
 	 */
@@ -98,10 +86,10 @@ export interface CreateAgentSessionOptions {
 
 	/** Settings manager. Default: SettingsManager.create(cwd, agentDir) */
 	settingsManager?: SettingsManager;
+	/** Optional usage recorder for routed SDK calls. */
+	usageStore?: UsageStore;
 	/** Session start event metadata for extension runtime startup. */
 	sessionStartEvent?: SessionStartEvent;
-	/** Usage store for routed model attempts. Pass null to disable usage recording. */
-	usageStore?: UsageStore | null;
 }
 
 /** Result from createAgentSession */
@@ -116,7 +104,7 @@ export interface CreateAgentSessionResult {
 
 // Re-exports
 
-export * from "./agent-session-runtime.js";
+export * from "./agent-session-runtime.ts";
 export type {
 	ExtensionAPI,
 	ExtensionCommandContext,
@@ -125,10 +113,10 @@ export type {
 	SlashCommandInfo,
 	SlashCommandSource,
 	ToolDefinition,
-} from "./extensions/index.js";
-export type { PromptTemplate } from "./prompt-templates.js";
-export type { Skill } from "./skills.js";
-export type { Tool } from "./tools/index.js";
+} from "./extensions/index.ts";
+export type { PromptTemplate } from "./prompt-templates.ts";
+export type { Skill } from "./skills.ts";
+export type { Tool } from "./tools/index.ts";
 
 export {
 	withFileMutationQueue,
@@ -153,15 +141,23 @@ function getDefaultAgentDir(): string {
 function getAttributionHeaders(
 	model: Model<any>,
 	settingsManager: SettingsManager,
+	sessionId?: string,
 ): Record<string, string> | undefined {
+	if (
+		sessionId &&
+		(model.provider === "opencode" || model.provider === "opencode-go" || model.baseUrl.includes("opencode.ai"))
+	) {
+		return { "x-opencode-session": sessionId, "x-opencode-client": "pi" };
+	}
+
 	if (!isInstallTelemetryEnabled(settingsManager)) {
 		return undefined;
 	}
 
 	if (model.provider === "openrouter" || model.baseUrl.includes("openrouter.ai")) {
 		return {
-			"HTTP-Referer": "https://pielab.ai",
-			"X-OpenRouter-Title": "pie",
+			"HTTP-Referer": "https://pi.dev",
+			"X-OpenRouter-Title": "pi",
 			"X-OpenRouter-Categories": "cli-agent",
 		};
 	}
@@ -173,480 +169,48 @@ function getAttributionHeaders(
 		model.baseUrl.includes("gateway.ai.cloudflare.com")
 	) {
 		return {
-			"User-Agent": "pie-coding-agent",
+			"User-Agent": "pi-coding-agent",
 		};
 	}
 
 	return undefined;
 }
 
-const EMPTY_USAGE = {
-	input: 0,
-	output: 0,
-	cacheRead: 0,
-	cacheWrite: 0,
-	totalTokens: 0,
-	cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-};
-
-type RoutedAttemptResult = { status: "completed" } | { status: "retry"; error: unknown };
-
-function createRoutedStream(
-	model: Model<any>,
-	context: Context,
-	options: SimpleStreamOptions | undefined,
-	modelRegistry: ModelRegistry,
-	settingsManager: SettingsManager,
-	usageStore: UsageStore | null,
-	agentRunId: string,
-): AssistantMessageEventStream {
-	const outer = createAssistantMessageEventStream();
-
-	void runRoutedStream(outer, model, context, options, modelRegistry, settingsManager, usageStore, agentRunId).catch(
-		(error) => {
-			const reason = options?.signal?.aborted ? "aborted" : "error";
-			finishWithError(outer, model, error, reason);
-		},
-	);
-
-	return outer;
-}
-
-async function runRoutedStream(
-	outer: AssistantMessageEventStream,
-	model: Model<any>,
-	context: Context,
-	options: SimpleStreamOptions | undefined,
-	modelRegistry: ModelRegistry,
-	settingsManager: SettingsManager,
-	usageStore: UsageStore | null,
-	agentRunId: string,
-): Promise<void> {
-	const plan = await resolvePiModelRoutePlan({
-		requestedModel: model,
-		catalog: modelRegistry,
-		policy: await modelRegistry.getRouterPolicy(),
-	});
-	const requestId = createUsageRecordId("request");
-	let lastError: unknown;
-	let lastModel: Model<any> = model;
-
-	for (const [index, route] of plan.routes.entries()) {
-		const routedModel = route.model;
-		const canRetry = index < plan.routes.length - 1;
-		lastModel = routedModel;
-
-		if (options?.signal?.aborted) {
-			finishWithError(outer, routedModel, new Error("Request aborted"), "aborted");
-			return;
-		}
-
-		const auth = await modelRegistry.getApiKeyAndHeaders(routedModel);
-		if (!auth.ok) {
-			lastError = new Error(auth.error);
-			await recordUsageAttempt({
-				usageStore,
-				requestId,
-				agentRunId,
-				requestedModel: plan.requestedModel,
-				routingMode: plan.routingMode,
-				route,
-				attemptIndex: index,
-				attemptCount: plan.routes.length,
-				status: "error",
-				error: lastError,
-			});
-			if (shouldRetryRoutedAttempt(canRetry, lastError)) continue;
-			finishWithError(outer, routedModel, lastError, "error");
-			return;
-		}
-
-		let attemptStream: AssistantMessageEventStream;
-		const tokenSaverStats: RtkStats[] = [];
-		try {
-			attemptStream = streamSimple(
-				routedModel,
-				context,
-				createRoutedStreamOptions(routedModel, options, auth, settingsManager, tokenSaverStats),
-			);
-		} catch (error) {
-			lastError = error;
-			await modelRegistry.markProviderConnectionUnavailable(auth.connectionId, routedModel, error);
-			await recordUsageAttempt({
-				usageStore,
-				requestId,
-				agentRunId,
-				requestedModel: plan.requestedModel,
-				routingMode: plan.routingMode,
-				route,
-				attemptIndex: index,
-				attemptCount: plan.routes.length,
-				status: options?.signal?.aborted ? "aborted" : "error",
-				connectionId: auth.connectionId,
-				error,
-			});
-			if (!options?.signal?.aborted && shouldRetryRoutedAttempt(canRetry, error)) continue;
-			finishWithError(outer, routedModel, error, options?.signal?.aborted ? "aborted" : "error");
-			return;
-		}
-
-		const result = await forwardRoutedAttempt(
-			outer,
-			attemptStream,
-			routedModel,
-			canRetry,
-			async (status, message, error) => {
-				if (status === "success") {
-					await modelRegistry.clearProviderConnectionError(auth.connectionId, routedModel);
-				} else if (status === "error") {
-					await modelRegistry.markProviderConnectionUnavailable(auth.connectionId, routedModel, error ?? message);
-				}
-				await recordUsageAttempt({
-					usageStore,
-					requestId,
-					agentRunId,
-					requestedModel: plan.requestedModel,
-					routingMode: plan.routingMode,
-					route,
-					attemptIndex: index,
-					attemptCount: plan.routes.length,
-					status,
-					connectionId: auth.connectionId,
-					message,
-					error,
-					tokenSaverStats,
-				});
-			},
-		);
-		if (result.status === "completed") return;
-		lastError = result.error;
-	}
-
-	finishWithError(outer, lastModel, lastError ?? new Error("No routed model attempt succeeded"), "error");
-}
-
-function createRoutedStreamOptions(
-	model: Model<any>,
-	options: SimpleStreamOptions | undefined,
-	auth: { apiKey?: string; headers?: Record<string, string> },
-	settingsManager: SettingsManager,
-	tokenSaverStats: RtkStats[],
-): SimpleStreamOptions {
-	const providerRetrySettings = settingsManager.getProviderRetrySettings();
-	const attributionHeaders = getAttributionHeaders(model, settingsManager);
-	return {
-		...options,
-		apiKey: auth.apiKey,
-		timeoutMs: options?.timeoutMs ?? providerRetrySettings.timeoutMs,
-		maxRetries: options?.maxRetries ?? providerRetrySettings.maxRetries,
-		maxRetryDelayMs: options?.maxRetryDelayMs ?? providerRetrySettings.maxRetryDelayMs,
-		headers:
-			attributionHeaders || auth.headers || options?.headers
-				? { ...attributionHeaders, ...auth.headers, ...options?.headers }
-				: undefined,
-		onPayload: createRtkPayloadHook(options?.onPayload, tokenSaverStats),
-	};
-}
-
-async function forwardRoutedAttempt(
-	outer: AssistantMessageEventStream,
-	attemptStream: AssistantMessageEventStream,
-	model: Model<any>,
-	canRetry: boolean,
-	recordAttempt: (
-		status: UsageRecordStatus,
-		message: AssistantMessage | undefined,
-		error: unknown | undefined,
-	) => Promise<void>,
-): Promise<RoutedAttemptResult> {
-	let forwardedEvent = false;
-
+function formatUnknownError(error: unknown): string {
+	if (error instanceof Error) return error.message;
+	if (typeof error === "string") return error;
 	try {
-		for await (const event of attemptStream) {
-			if (
-				event.type === "error" &&
-				!forwardedEvent &&
-				event.reason === "error" &&
-				shouldRetryRoutedAttempt(canRetry, event.error)
-			) {
-				await recordAttempt("error", event.error, event.error);
-				return { status: "retry", error: event.error };
-			}
-
-			if (event.type === "done") {
-				await recordAttempt("success", event.message, undefined);
-			} else if (event.type === "error") {
-				await recordAttempt(event.reason, event.error, event.error);
-			}
-
-			forwardedEvent = true;
-			outer.push(event);
-
-			if (event.type === "done" || event.type === "error") {
-				outer.end(await attemptStream.result());
-				return { status: "completed" };
-			}
-		}
-	} catch (error) {
-		if (!forwardedEvent && shouldRetryRoutedAttempt(canRetry, error)) {
-			await recordAttempt("error", undefined, error);
-			return { status: "retry", error };
-		}
-		await recordAttempt("error", undefined, error);
-		finishWithError(outer, model, error, "error");
-		return { status: "completed" };
-	}
-
-	const finalMessage = await attemptStream.result();
-	if (finalMessage.stopReason === "error" && !forwardedEvent && shouldRetryRoutedAttempt(canRetry, finalMessage)) {
-		await recordAttempt("error", finalMessage, finalMessage);
-		return { status: "retry", error: finalMessage };
-	}
-	await recordAttempt(
-		statusFromMessage(finalMessage),
-		finalMessage,
-		finalMessage.stopReason === "error" ? finalMessage : undefined,
-	);
-	if (finalMessage.stopReason === "aborted") {
-		outer.push({ type: "error", reason: "aborted", error: finalMessage });
-	} else if (finalMessage.stopReason === "error") {
-		outer.push({ type: "error", reason: "error", error: finalMessage });
-	}
-	outer.end(finalMessage);
-	return { status: "completed" };
-}
-
-function shouldRetryRoutedAttempt(canRetry: boolean, error: unknown): boolean {
-	if (!canRetry) return false;
-	const decision = checkFallbackError(extractStatusCode(error), formatErrorMessage(error));
-	return decision.shouldFallback;
-}
-
-function extractStatusCode(error: unknown): number | undefined {
-	if (!error || typeof error !== "object") return undefined;
-	const record = error as Record<string, unknown>;
-
-	for (const key of ["status", "statusCode", "code"]) {
-		if (typeof record[key] === "number") return record[key];
-	}
-
-	const response = record.response;
-	if (response && typeof response === "object" && typeof (response as Record<string, unknown>).status === "number") {
-		return (response as Record<string, number>).status;
-	}
-
-	return undefined;
-}
-
-async function recordUsageAttempt(options: {
-	usageStore: UsageStore | null;
-	requestId: string;
-	agentRunId: string;
-	requestedModel: string;
-	routingMode: "fixed" | "router" | "fallback";
-	route: Awaited<ReturnType<typeof resolvePiModelRoutePlan<Model<any>>>>["routes"][number];
-	attemptIndex: number;
-	attemptCount: number;
-	status: UsageRecordStatus;
-	connectionId?: string;
-	message?: AssistantMessage;
-	error?: unknown;
-	tokenSaverStats?: RtkStats[];
-}): Promise<void> {
-	if (!options.usageStore) return;
-
-	const { usage, cost } = usageAndCostFromMessage(options.message);
-	try {
-		await options.usageStore.recordUsage({
-			id: createUsageRecordId(),
-			requestId: options.requestId,
-			timestamp: new Date().toISOString(),
-			requestedModel: options.requestedModel,
-			routingMode: options.routingMode,
-			routeSource: options.route.route.source,
-			resolvedProvider: options.route.route.resolvedProvider,
-			resolvedModel: options.route.route.resolvedModel,
-			connectionId: options.connectionId ?? options.route.route.connectionId,
-			attemptIndex: options.attemptIndex,
-			attemptCount: options.attemptCount,
-			endpoint: usageEndpointFromEnvironment(),
-			clientOrigin: usageClientOriginFromEnvironment(),
-			agentRunId: options.agentRunId,
-			usage,
-			cost,
-			tokenSaver: toUsageTokenSaver(options.tokenSaverStats),
-			inputTokens: usage?.input,
-			outputTokens: usage?.output,
-			costUsd: cost?.total,
-			status: options.status,
-			errorMessage: errorMessageFromAttempt(options.error, options.message),
-			trace: createUsageAttemptTrace(options, usage, cost),
-		});
+		return JSON.stringify(error);
 	} catch {
-		// Usage logging must not break the active model stream.
+		return String(error);
 	}
 }
 
-function createUsageAttemptTrace(
-	options: {
-		requestId: string;
-		agentRunId: string;
-		requestedModel: string;
-		routingMode: "fixed" | "router" | "fallback";
-		route: Awaited<ReturnType<typeof resolvePiModelRoutePlan<Model<any>>>>["routes"][number];
-		attemptIndex: number;
-		attemptCount: number;
-		status: UsageRecordStatus;
-		connectionId?: string;
-		message?: AssistantMessage;
-		error?: unknown;
-		tokenSaverStats?: RtkStats[];
-	},
-	usage: UsageTokens | undefined,
-	cost: UsageCost | undefined,
-): UsageTraceEvent[] {
-	const timestamp = new Date().toISOString();
-	const connectionId = options.connectionId ?? options.route.route.connectionId;
-	const errorMessage = errorMessageFromAttempt(options.error, options.message);
-	return [
-		{
-			timestamp,
-			phase: "attempt.recorded",
-			message: errorMessage,
-			provider: options.route.route.resolvedProvider,
-			model: options.route.route.resolvedModel,
-			connectionId,
-			attemptIndex: options.attemptIndex,
-			status: options.status,
-			metadata: {
-				requestId: options.requestId,
-				agentRunId: options.agentRunId,
-				requestedModel: options.requestedModel,
-				routingMode: options.routingMode,
-				routeSource: options.route.route.source,
-				attemptCount: options.attemptCount,
-				totalTokens: usage?.totalTokens,
-				costUsd: cost?.total,
-				rtkBytesSaved: toUsageTokenSaver(options.tokenSaverStats)?.bytesSaved,
-			},
-		},
-	];
-}
-
-function createRtkPayloadHook(
-	previousOnPayload: SimpleStreamOptions["onPayload"],
-	statsSink: RtkStats[],
-): SimpleStreamOptions["onPayload"] {
-	if (process.env.PIE_LAB_RTK_ENABLED === "false" || process.env.PIE_ADK_RTK_ENABLED === "false") {
-		return previousOnPayload;
-	}
-
-	return async (payload, model) => {
-		const inputPayload = previousOnPayload ? ((await previousOnPayload(payload, model)) ?? payload) : payload;
-		const result = compressPayloadWithRtk(inputPayload, true);
-		if (result.stats && result.stats.hits.length > 0) {
-			statsSink.push(result.stats);
-			if (result.logLine) console.log(result.logLine);
-		}
-		return result.payload;
-	};
-}
-
-function toUsageTokenSaver(statsList: RtkStats[] | undefined): UsageRecord["tokenSaver"] {
-	if (!statsList || statsList.length === 0) return undefined;
-	const bytesBefore = statsList.reduce((sum, stats) => sum + stats.bytesBefore, 0);
-	const bytesAfter = statsList.reduce((sum, stats) => sum + stats.bytesAfter, 0);
-	const hits = statsList.flatMap((stats) => stats.hits);
-	return {
-		provider: "rtk",
-		bytesBefore,
-		bytesAfter,
-		bytesSaved: Math.max(0, bytesBefore - bytesAfter),
-		hits: hits.length,
-		filters: [...new Set(hits.map((hit) => hit.filter))],
-	};
-}
-
-function usageAndCostFromMessage(message: AssistantMessage | undefined): { usage?: UsageTokens; cost?: UsageCost } {
-	if (!message) return {};
-	return {
-		usage: {
-			input: message.usage.input,
-			output: message.usage.output,
-			cacheRead: message.usage.cacheRead,
-			cacheWrite: message.usage.cacheWrite,
-			totalTokens: message.usage.totalTokens,
-		},
-		cost: {
-			input: message.usage.cost.input,
-			output: message.usage.cost.output,
-			cacheRead: message.usage.cost.cacheRead,
-			cacheWrite: message.usage.cost.cacheWrite,
-			total: message.usage.cost.total,
-			currency: "USD",
-			pricingSource: "pie-metadata",
-		},
-	};
-}
-
-function usageClientOriginFromEnvironment(): string | undefined {
-	return normalizeUsageMetadata(process.env.PIE_LAB_USAGE_ORIGIN ?? process.env.PIE_ADK_USAGE_ORIGIN);
-}
-
-function usageEndpointFromEnvironment(): string | undefined {
-	return normalizeUsageMetadata(process.env.PIE_LAB_USAGE_ENDPOINT ?? process.env.PIE_ADK_USAGE_ENDPOINT);
-}
-
-function normalizeUsageMetadata(value: string | undefined): string | undefined {
-	const normalized = value?.trim();
-	return normalized ? normalized.slice(0, 120) : undefined;
-}
-
-function statusFromMessage(message: AssistantMessage): UsageRecordStatus {
-	if (message.stopReason === "aborted") return "aborted";
-	if (message.stopReason === "error") return "error";
-	return "success";
-}
-
-function errorMessageFromAttempt(error: unknown, message: AssistantMessage | undefined): string | undefined {
-	if (message?.errorMessage) return message.errorMessage;
-	if (error === undefined) return undefined;
-	return formatErrorMessage(error);
-}
-
-function finishWithError(
-	stream: AssistantMessageEventStream,
-	model: Model<any>,
-	error: unknown,
-	reason: "error" | "aborted",
-): void {
-	const message = createErrorMessage(model, error, reason);
-	stream.push({ type: "error", reason, error: message });
-	stream.end(message);
-}
-
-function createErrorMessage(model: Model<any>, error: unknown, stopReason: "error" | "aborted"): AssistantMessage {
+function createStreamErrorMessage(model: Model<any>, error: unknown): AssistantMessage {
 	return {
 		role: "assistant",
 		content: [],
 		api: model.api,
 		provider: model.provider,
 		model: model.id,
-		usage: EMPTY_USAGE,
-		stopReason,
-		errorMessage: formatErrorMessage(error),
+		usage: {
+			input: 0,
+			output: 0,
+			cacheRead: 0,
+			cacheWrite: 0,
+			totalTokens: 0,
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+		},
+		stopReason: "error",
+		errorMessage: formatUnknownError(error),
 		timestamp: Date.now(),
 	};
 }
 
-function formatErrorMessage(error: unknown): string {
-	if (isAssistantMessage(error) && error.errorMessage) return error.errorMessage;
-	if (error instanceof Error) return error.message;
-	return String(error);
-}
-
-function isAssistantMessage(value: unknown): value is AssistantMessage {
-	return typeof value === "object" && value !== null && (value as AssistantMessage).role === "assistant";
+function getMessageErrorText(message: AssistantMessage): string | undefined {
+	if (message.errorMessage) return message.errorMessage;
+	const firstText = message.content.find((item) => item.type === "text");
+	return firstText?.text;
 }
 
 /**
@@ -685,28 +249,19 @@ function isAssistantMessage(value: unknown): value is AssistantMessage {
  * ```
  */
 export async function createAgentSession(options: CreateAgentSessionOptions = {}): Promise<CreateAgentSessionResult> {
-	const cwd = options.cwd ?? options.sessionManager?.getCwd() ?? process.cwd();
-	const agentDir = options.agentDir ?? getDefaultAgentDir();
+	const cwd = resolvePath(options.cwd ?? options.sessionManager?.getCwd() ?? process.cwd());
+	const agentDir = options.agentDir ? resolvePath(options.agentDir) : getDefaultAgentDir();
 	let resourceLoader = options.resourceLoader;
 
 	// Use provided or create AuthStorage and ModelRegistry
 	const authPath = options.agentDir ? join(agentDir, "auth.json") : undefined;
 	const modelsPath = options.agentDir ? join(agentDir, "models.json") : undefined;
 	const authStorage = options.authStorage ?? AuthStorage.create(authPath);
-	const providerConnectionStore = createJsonProviderConnectionStore(join(agentDir, "provider-connections.json"));
-	const modelRegistry =
-		options.modelRegistry ??
-		ModelRegistry.create(authStorage, modelsPath, {
-			providerConnectionStore,
-			prepareProviderConnections: createQuotaAwareProviderConnectionPreparer({
-				providerConnectionStore,
-			}),
-		});
+	const modelRegistry = options.modelRegistry ?? ModelRegistry.create(authStorage, modelsPath);
 
 	const settingsManager = options.settingsManager ?? SettingsManager.create(cwd, agentDir);
 	const sessionManager = options.sessionManager ?? SessionManager.create(cwd, getDefaultSessionDir(cwd, agentDir));
-	const usageStore =
-		options.usageStore === undefined ? createJsonlUsageStore(join(agentDir, "usage.jsonl")) : options.usageStore;
+	const usageStore = options.usageStore;
 
 	if (!resourceLoader) {
 		resourceLoader = new DefaultResourceLoader({ cwd, agentDir, settingsManager });
@@ -829,16 +384,166 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 			tools: [],
 		},
 		convertToLlm: convertToLlmWithBlockImages,
-		streamFn: (model, context, options) =>
-			createRoutedStream(
-				model,
-				context,
-				options,
-				modelRegistry,
-				settingsManager,
-				usageStore,
-				sessionManager.getSessionId(),
-			),
+		streamFn: async (model, context, options) => {
+			const outer = createAssistantMessageEventStream();
+			const requestId = createUsageRecordId("request");
+
+			void (async () => {
+				try {
+					const routerPolicy = await modelRegistry.getRouterPolicy();
+					const plan = await resolvePiModelRoutePlan({
+						requestedModel: model,
+						catalog: modelRegistry,
+						policy: routerPolicy,
+					});
+					const attemptCount = plan.routes.length;
+
+					for (let attemptIndex = 0; attemptIndex < plan.routes.length; attemptIndex++) {
+						const resolved = plan.routes[attemptIndex];
+						const route = resolved.route;
+						const resolvedModel = resolved.model;
+						let connectionId = route.connectionId;
+
+						const recordUsage = async (
+							message: AssistantMessage,
+							status: UsageRecordStatus,
+							errorMessage?: string,
+						): Promise<void> => {
+							const usage = message.usage;
+							await usageStore?.recordUsage({
+								id: createUsageRecordId(),
+								requestId,
+								timestamp: new Date().toISOString(),
+								requestedModel: plan.requestedModel,
+								routingMode: plan.routingMode,
+								routeSource: route.source,
+								resolvedProvider: route.resolvedProvider,
+								resolvedModel: route.resolvedModel,
+								connectionId,
+								attemptIndex,
+								attemptCount,
+								usage: usage
+									? {
+											input: usage.input,
+											output: usage.output,
+											cacheRead: usage.cacheRead,
+											cacheWrite: usage.cacheWrite,
+											totalTokens: usage.totalTokens,
+										}
+									: undefined,
+								cost: usage?.cost
+									? {
+											input: usage.cost.input,
+											output: usage.cost.output,
+											cacheRead: usage.cost.cacheRead,
+											cacheWrite: usage.cost.cacheWrite,
+											total: usage.cost.total,
+											currency: "USD",
+											pricingSource: "pie-metadata",
+										}
+									: undefined,
+								costUsd: usage?.cost.total,
+								status,
+								errorMessage,
+							});
+						};
+
+						try {
+							const auth = await modelRegistry.getApiKeyAndHeaders(resolvedModel);
+							if (!auth.ok) {
+								throw new Error(auth.error);
+							}
+							connectionId = auth.connectionId ?? connectionId;
+
+							const providerRetrySettings = settingsManager.getProviderRetrySettings();
+							const attributionHeaders = getAttributionHeaders(
+								resolvedModel,
+								settingsManager,
+								options?.sessionId,
+							);
+							const inner = await streamSimple(resolvedModel, context, {
+								...options,
+								apiKey: auth.apiKey,
+								timeoutMs: options?.timeoutMs ?? providerRetrySettings.timeoutMs,
+								maxRetries: options?.maxRetries ?? providerRetrySettings.maxRetries,
+								maxRetryDelayMs: options?.maxRetryDelayMs ?? providerRetrySettings.maxRetryDelayMs,
+								headers:
+									attributionHeaders || auth.headers || options?.headers
+										? { ...attributionHeaders, ...auth.headers, ...options?.headers }
+										: undefined,
+							});
+
+							const bufferedEvents: AssistantMessageEvent[] = [];
+							let shouldTryNextRoute = false;
+							for await (const event of inner) {
+								bufferedEvents.push(event);
+
+								if (event.type === "done") {
+									await recordUsage(event.message, "success");
+									for (const bufferedEvent of bufferedEvents) outer.push(bufferedEvent);
+									return;
+								}
+
+								if (event.type === "error") {
+									const errorText = getMessageErrorText(event.error);
+									await recordUsage(
+										event.error,
+										event.error.stopReason === "aborted" ? "aborted" : "error",
+										errorText,
+									);
+									await modelRegistry.markProviderConnectionUnavailable(
+										connectionId,
+										resolvedModel,
+										event.error,
+									);
+
+									const emittedContent = bufferedEvents.some(
+										(bufferedEvent) => bufferedEvent.type !== "error",
+									);
+									if (attemptIndex < attemptCount - 1 && !emittedContent) {
+										shouldTryNextRoute = true;
+										break;
+									}
+
+									for (const bufferedEvent of bufferedEvents) outer.push(bufferedEvent);
+									return;
+								}
+							}
+
+							if (shouldTryNextRoute) {
+								continue;
+							}
+
+							const errorMessage = createStreamErrorMessage(
+								resolvedModel,
+								"Provider stream ended without a final event.",
+							);
+							await recordUsage(errorMessage, "error", errorMessage.errorMessage);
+							await modelRegistry.markProviderConnectionUnavailable(connectionId, resolvedModel, errorMessage);
+							if (attemptIndex < attemptCount - 1) {
+								continue;
+							}
+							outer.push({ type: "error", reason: "error", error: errorMessage });
+							return;
+						} catch (error) {
+							const errorMessage = createStreamErrorMessage(resolvedModel, error);
+							await recordUsage(errorMessage, "error", errorMessage.errorMessage);
+							await modelRegistry.markProviderConnectionUnavailable(connectionId, resolvedModel, error);
+							if (attemptIndex < attemptCount - 1) {
+								continue;
+							}
+							outer.push({ type: "error", reason: "error", error: errorMessage });
+							return;
+						}
+					}
+				} catch (error) {
+					const errorMessage = createStreamErrorMessage(model, error);
+					outer.push({ type: "error", reason: "error", error: errorMessage });
+				}
+			})();
+
+			return outer;
+		},
 		onPayload: async (payload, _model) => {
 			const runner = extensionRunnerRef.current;
 			if (!runner?.hasHandlers("before_provider_request")) {

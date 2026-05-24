@@ -8,7 +8,7 @@ import {
 } from "@pie-lab/tui";
 import { existsSync, readFileSync } from "fs";
 import { join } from "path";
-import { getAgentDir } from "../config.js";
+import { getAgentDir } from "../config.ts";
 
 export interface AppKeybindings {
 	"app.interrupt": true;

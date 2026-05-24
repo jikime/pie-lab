@@ -2,14 +2,14 @@
  * Print mode (single-shot): Send prompts, output result, exit.
  *
  * Used for:
- * - `pie -p "prompt"` - text output
- * - `pie --mode json "prompt"` - JSON event stream
+ * - `pi -p "prompt"` - text output
+ * - `pi --mode json "prompt"` - JSON event stream
  */
 
 import type { AssistantMessage, ImageContent } from "@pie-lab/ai";
-import type { AgentSessionRuntime } from "../core/agent-session-runtime.js";
-import { flushRawStdout, writeRawStdout } from "../core/output-guard.js";
-import { killTrackedDetachedChildren } from "../utils/shell.js";
+import type { AgentSessionRuntime } from "../core/agent-session-runtime.ts";
+import { flushRawStdout, writeRawStdout } from "../core/output-guard.ts";
+import { killTrackedDetachedChildren } from "../utils/shell.ts";
 
 /**
  * Options for print mode.

@@ -5,8 +5,8 @@
 import type { Api, Model } from "@pie-lab/ai";
 import { fuzzyFilter } from "@pie-lab/tui";
 import chalk from "chalk";
-import { formatNoModelsAvailableMessage } from "../core/auth-guidance.js";
-import type { ModelRegistry } from "../core/model-registry.js";
+import { formatNoModelsAvailableMessage } from "../core/auth-guidance.ts";
+import type { ModelRegistry } from "../core/model-registry.ts";
 
 /**
  * Format a number as human-readable (e.g., 200000 -> "200K", 1000000 -> "1M")

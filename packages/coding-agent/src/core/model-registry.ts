@@ -45,6 +45,7 @@ import { type Static, Type } from "typebox";
 import { Compile } from "typebox/compile";
 import type { TLocalizedValidationError } from "typebox/error";
 import { getAgentDir } from "../config.js";
+import { normalizePath } from "../utils/paths.js";
 import type { AuthCredential, AuthStatus, AuthStorage } from "./auth-storage.js";
 import { BUILT_IN_PROVIDER_DISPLAY_NAMES } from "./provider-display-names.js";
 import {
@@ -397,12 +398,16 @@ export class ModelRegistry {
 	private loadError: string | undefined = undefined;
 	private providerConnectionStore: ProviderConnectionStore | undefined;
 	private prepareProviderConnections: ModelRegistryOptions["prepareProviderConnections"] | undefined;
+	readonly authStorage: AuthStorage;
+	private modelsJsonPath: string | undefined;
 
 	private constructor(
-		readonly authStorage: AuthStorage,
-		private modelsJsonPath: string | undefined,
+		authStorage: AuthStorage,
+		modelsJsonPath: string | undefined,
 		options: ModelRegistryOptions = {},
 	) {
+		this.authStorage = authStorage;
+		this.modelsJsonPath = modelsJsonPath ? normalizePath(modelsJsonPath) : undefined;
 		this.providerConnectionStore = options.providerConnectionStore;
 		this.prepareProviderConnections = options.prepareProviderConnections;
 		this.loadModels();

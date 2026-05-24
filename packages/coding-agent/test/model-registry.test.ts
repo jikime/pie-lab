@@ -7,8 +7,8 @@ import { getOAuthProvider } from "@pie-lab/ai/oauth";
 import { PIE_LAB_ROUTER_PROVIDER } from "@pie-lab/router";
 import { createInMemoryProviderConnectionStore, type ProviderConnection } from "@pie-lab/storage";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
-import { AuthStorage } from "../src/core/auth-storage.js";
-import { clearApiKeyCache, ModelRegistry, type ProviderConfigInput } from "../src/core/model-registry.js";
+import { AuthStorage } from "../src/core/auth-storage.ts";
+import { clearApiKeyCache, ModelRegistry, type ProviderConfigInput } from "../src/core/model-registry.ts";
 
 describe("ModelRegistry", () => {
 	let tempDir: string;

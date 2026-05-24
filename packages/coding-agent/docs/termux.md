@@ -16,14 +16,14 @@ pkg update && pkg upgrade
 # Install dependencies
 pkg install nodejs termux-api git
 
-# Install pie CLI
+# Install pi
 npm install -g --ignore-scripts @pie-lab/coding-agent
 
 # Create config directory
-mkdir -p ~/.pie/agent
+mkdir -p ~/.pi/agent
 
-# Run pie
-pie
+# Run pi
+pi
 ```
 
 ## Clipboard Support
@@ -34,7 +34,7 @@ Image clipboard is not supported on Termux (the `ctrl+v` image paste feature wil
 
 ## Example AGENTS.md for Termux
 
-Create `~/.pie/agent/AGENTS.md` to help the agent understand the Termux environment:
+Create `~/.pi/agent/AGENTS.md` to help the agent understand the Termux environment:
 
 ````markdown
 # Agent Environment: Termux on Android

@@ -6,8 +6,11 @@ import type { IndexedDBConfig, StorageBackend, StorageTransaction } from "../typ
  */
 export class IndexedDBStorageBackend implements StorageBackend {
 	private dbPromise: Promise<IDBDatabase> | null = null;
+	private config: IndexedDBConfig;
 
-	constructor(private config: IndexedDBConfig) {}
+	constructor(config: IndexedDBConfig) {
+		this.config = config;
+	}
 
 	private async getDB(): Promise<IDBDatabase> {
 		if (!this.dbPromise) {

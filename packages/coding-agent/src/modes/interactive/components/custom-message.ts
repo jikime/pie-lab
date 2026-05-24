@@ -1,9 +1,9 @@
 import type { TextContent } from "@pie-lab/ai";
 import type { Component } from "@pie-lab/tui";
 import { Box, Container, Markdown, type MarkdownTheme, Spacer, Text } from "@pie-lab/tui";
-import type { MessageRenderer } from "../../../core/extensions/types.js";
-import type { CustomMessage } from "../../../core/messages.js";
-import { getMarkdownTheme, theme } from "../theme/theme.js";
+import type { MessageRenderer } from "../../../core/extensions/types.ts";
+import type { CustomMessage } from "../../../core/messages.ts";
+import { getMarkdownTheme, theme } from "../theme/theme.ts";
 
 /**
  * Component that renders a custom message entry from extensions.

@@ -2,7 +2,7 @@ import type { AgentTool } from "@pie-lab/agent-core";
 import { fauxAssistantMessage, fauxThinking, fauxToolCall } from "@pie-lab/ai";
 import { Type } from "typebox";
 import { afterEach, describe, expect, it } from "vitest";
-import { createHarness, type Harness } from "./harness.js";
+import { createHarness, type Harness } from "./harness.ts";
 
 function normalizeEventOrder(events: Harness["events"]): string[] {
 	const normalized: string[] = [];

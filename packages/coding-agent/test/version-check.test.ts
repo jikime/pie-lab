@@ -6,7 +6,7 @@ import {
 	getLatestPiRelease,
 	getLatestPiVersion,
 	isNewerPackageVersion,
-} from "../src/utils/version-check.js";
+} from "../src/utils/version-check.ts";
 
 const originalSkipVersionCheck = process.env[ENV_SKIP_VERSION_CHECK];
 const originalOffline = process.env[ENV_OFFLINE];

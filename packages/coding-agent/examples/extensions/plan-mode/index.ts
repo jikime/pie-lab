@@ -16,7 +16,7 @@ import type { AgentMessage } from "@pie-lab/agent-core";
 import type { AssistantMessage, TextContent } from "@pie-lab/ai";
 import type { ExtensionAPI, ExtensionContext } from "@pie-lab/coding-agent";
 import { Key } from "@pie-lab/tui";
-import { extractTodoItems, isSafeCommand, markCompletedSteps, type TodoItem } from "./utils.js";
+import { extractTodoItems, isSafeCommand, markCompletedSteps, type TodoItem } from "./utils.ts";
 
 // Tools
 const PLAN_MODE_TOOLS = ["read", "bash", "grep", "find", "ls", "questionnaire"];

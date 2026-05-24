@@ -20,36 +20,36 @@ Pi packages bundle extensions, skills, prompt templates, and themes so you can s
 > **Security:** Pi packages run with full system access. Extensions execute arbitrary code, and skills can instruct the model to perform any action including running executables. Review source code before installing third-party packages.
 
 ```bash
-pie install npm:@foo/bar@1.0.0
-pie install git:github.com/user/repo@v1
-pie install https://github.com/user/repo  # raw URLs work too
-pie install /absolute/path/to/package
-pie install ./relative/path/to/package
+pi install npm:@foo/bar@1.0.0
+pi install git:github.com/user/repo@v1
+pi install https://github.com/user/repo  # raw URLs work too
+pi install /absolute/path/to/package
+pi install ./relative/path/to/package
 
-pie remove npm:@foo/bar
-pie list                     # show installed packages from settings
-pie update                   # update pie and all non-pinned packages
-pie update --extensions      # update all non-pinned packages only
-pie update --self            # update pie only
-pie update --self --force    # reinstall pi even if current
-pie update npm:@foo/bar      # update one package
-pie update --extension npm:@foo/bar
+pi remove npm:@foo/bar
+pi list                     # show installed packages from settings
+pi update                   # update pi, update packages, and reconcile pinned git refs
+pi update --extensions      # update packages and reconcile pinned git refs only
+pi update --self            # update pi only
+pi update --self --force    # reinstall pi even if current
+pi update npm:@foo/bar      # update one package
+pi update --extension npm:@foo/bar
 ```
 
 These commands manage pi packages, not the pi CLI installation. To uninstall pi itself, see [Quickstart](quickstart.md#uninstall).
 
-By default, `install` and `remove` write to user settings (`~/.pie/agent/settings.json`). Use `-l` to write to project settings (`.pie/settings.json`) instead. Project settings can be shared with your team, and pi installs any missing packages automatically on startup.
+By default, `install` and `remove` write to user settings (`~/.pi/agent/settings.json`). Use `-l` to write to project settings (`.pi/settings.json`) instead. Project settings can be shared with your team, and pi installs any missing packages automatically on startup.
 
 To try a package without installing it, use `--extension` or `-e`. This installs to a temporary directory for the current run only:
 
 ```bash
-pie -e npm:@foo/bar
-pie -e git:github.com/user/repo
+pi -e npm:@foo/bar
+pi -e git:github.com/user/repo
 ```
 
 ## Package Sources
 
-Pi accepts three source types in settings and `pie install`.
+Pi accepts three source types in settings and `pi install`.
 
 ### npm
 
@@ -58,9 +58,9 @@ npm:@scope/pkg@1.2.3
 npm:pkg
 ```
 
-- Versioned specs are pinned and skipped by package updates (`pie update`, `pie update --extensions`).
-- User installs go under `~/.pie/agent/npm/`.
-- Project installs go under `.pie/npm/`.
+- Versioned specs are pinned and skipped by package updates (`pi update`, `pi update --extensions`).
+- User installs go under `~/.pi/agent/npm/`.
+- Project installs go under `.pi/npm/`.
 - Set `npmCommand` in `settings.json` to pin npm package lookup and install operations to a specific wrapper command such as `mise` or `asdf`.
 
 Example:
@@ -85,20 +85,21 @@ ssh://git@github.com/user/repo@v1
 - HTTPS and SSH URLs are both supported.
 - SSH URLs use your configured SSH keys automatically (respects `~/.ssh/config`).
 - For non-interactive runs (for example CI), you can set `GIT_TERMINAL_PROMPT=0` to disable credential prompts and set `GIT_SSH_COMMAND` (for example `ssh -o BatchMode=yes -o ConnectTimeout=5`) to fail fast.
-- Refs pin the package and skip package updates (`pie update`, `pie update --extensions`).
-- Cloned to `~/.pie/agent/git/<host>/<path>` (global) or `.pie/git/<host>/<path>` (project).
-- Runs `npm install` after clone or pull if `package.json` exists.
+- Refs are pinned tags or commits. `pi update` and `pi update --extensions` do not move them to newer refs, but they do reconcile an existing clone to the configured ref.
+- Use `pi install git:host/user/repo@new-ref` to update settings and move an existing package to a new pinned ref.
+- Cloned to `~/.pi/agent/git/<host>/<path>` (global) or `.pi/git/<host>/<path>` (project).
+- When reconciliation changes the checkout, pi resets and cleans the clone, then runs `npm install` if `package.json` exists.
 
 **SSH examples:**
 ```bash
 # git@host:path shorthand (requires git: prefix)
-pie install git:git@github.com:user/repo
+pi install git:git@github.com:user/repo
 
 # ssh:// protocol format
-pie install ssh://git@github.com/user/repo
+pi install ssh://git@github.com/user/repo
 
 # With version ref
-pie install git:git@github.com:user/repo@v1.0.0
+pi install git:git@github.com:user/repo@v1.0.0
 ```
 
 ### Local Paths
@@ -131,7 +132,7 @@ Paths are relative to the package root. Arrays support glob patterns and `!exclu
 
 ### Gallery Metadata
 
-The [package gallery](https://pielab.ai/packages) displays packages tagged with `pi-package`. Add `video` or `image` fields to show a preview:
+The [package gallery](https://pi.dev/packages) displays packages tagged with `pi-package`. Add `video` or `image` fields to show a preview:
 
 ```json
 {
@@ -214,7 +215,7 @@ Filter what a package loads using the object form in settings:
 
 ## Enable and Disable Resources
 
-Use `pie config` to enable or disable extensions, skills, prompt templates, and themes from installed packages and local directories. Works for both global (`~/.pie/agent`) and project (`.pie/`) scopes.
+Use `pi config` to enable or disable extensions, skills, prompt templates, and themes from installed packages and local directories. Works for both global (`~/.pi/agent`) and project (`.pi/`) scopes.
 
 ## Scope and Deduplication
 

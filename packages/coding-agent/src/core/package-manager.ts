@@ -27,19 +27,21 @@ import type { Readable } from "node:stream";
 import { globSync } from "glob";
 import ignore from "ignore";
 import { minimatch } from "minimatch";
-import { CONFIG_DIR_NAME, ENV_OFFLINE, isTruthyEnv } from "../config.js";
-import { spawnProcess, spawnProcessSync } from "../utils/child-process.js";
-import { type GitSource, parseGitUrl } from "../utils/git.js";
-import { canonicalizePath, isLocalPath } from "../utils/paths.js";
-import { isStdoutTakenOver } from "./output-guard.js";
-import type { PackageSource, SettingsManager } from "./settings-manager.js";
+import { CONFIG_DIR_NAME } from "../config.ts";
+import { spawnProcess, spawnProcessSync } from "../utils/child-process.ts";
+import { type GitSource, parseGitUrl } from "../utils/git.ts";
+import { canonicalizePath, isLocalPath, markPathIgnoredByCloudSync, resolvePath } from "../utils/paths.ts";
+import { isStdoutTakenOver } from "./output-guard.ts";
+import type { PackageSource, SettingsManager } from "./settings-manager.ts";
 
 const NETWORK_TIMEOUT_MS = 10000;
 const UPDATE_CHECK_CONCURRENCY = 4;
 const GIT_UPDATE_CONCURRENCY = 4;
 
 function isOfflineModeEnabled(): boolean {
-	return isTruthyEnv(ENV_OFFLINE, "PI_OFFLINE");
+	const value = process.env.PI_OFFLINE;
+	if (!value) return false;
+	return value === "1" || value.toLowerCase() === "true" || value.toLowerCase() === "yes";
 }
 
 export interface PathMetadata {
@@ -761,8 +763,8 @@ export class DefaultPackageManager implements PackageManager {
 	private progressCallback: ProgressCallback | undefined;
 
 	constructor(options: PackageManagerOptions) {
-		this.cwd = options.cwd;
-		this.agentDir = options.agentDir;
+		this.cwd = resolvePath(options.cwd);
+		this.agentDir = resolvePath(options.agentDir);
 		this.settingsManager = options.settingsManager;
 	}
 
@@ -776,9 +778,21 @@ export class DefaultPackageManager implements PackageManager {
 			scope === "project" ? this.settingsManager.getProjectSettings() : this.settingsManager.getGlobalSettings();
 		const currentPackages = currentSettings.packages ?? [];
 		const normalizedSource = this.normalizePackageSourceForSettings(source, scope);
-		const exists = currentPackages.some((existing) => this.packageSourcesMatch(existing, source, scope));
-		if (exists) {
-			return false;
+		const matchIndex = currentPackages.findIndex((existing) => this.packageSourcesMatch(existing, source, scope));
+		if (matchIndex !== -1) {
+			const existing = currentPackages[matchIndex];
+			if (this.getPackageSourceString(existing) === normalizedSource) {
+				return false;
+			}
+			const nextPackages = [...currentPackages];
+			nextPackages[matchIndex] =
+				typeof existing === "string" ? normalizedSource : { ...existing, source: normalizedSource };
+			if (scope === "project") {
+				this.settingsManager.setProjectPackages(nextPackages);
+			} else {
+				this.settingsManager.setPackages(nextPackages);
+			}
+			return true;
 		}
 		const nextPackages = [...currentPackages, normalizedSource];
 		if (scope === "project") {
@@ -1033,14 +1047,15 @@ export class DefaultPackageManager implements PackageManager {
 
 		for (const entry of sources) {
 			const parsed = this.parseSource(entry.source);
-			if (parsed.type === "local" || parsed.pinned) {
-				continue;
-			}
+			// Pinned npm versions are fixed. Pinned git refs are configured checkout targets,
+			// so include them to reconcile an existing clone when the configured ref changes.
 			if (parsed.type === "npm") {
-				npmCandidates.push({ ...entry, parsed });
-				continue;
+				if (!parsed.pinned) {
+					npmCandidates.push({ ...entry, parsed });
+				}
+			} else if (parsed.type === "git") {
+				gitCandidates.push({ ...entry, parsed });
 			}
-			gitCandidates.push({ ...entry, parsed });
 		}
 
 		const npmCheckTasks = npmCandidates.map((entry) => async () => ({
@@ -1721,6 +1736,12 @@ export class DefaultPackageManager implements PackageManager {
 	private async installGit(source: GitSource, scope: SourceScope): Promise<void> {
 		const targetDir = this.getGitInstallPath(source, scope);
 		if (existsSync(targetDir)) {
+			if (source.ref) {
+				await this.ensureGitRef(targetDir, ["fetch", "origin", source.ref], "FETCH_HEAD");
+				return;
+			}
+			const target = await this.getLocalGitUpdateTarget(targetDir);
+			await this.ensureGitRef(targetDir, target.fetchArgs, target.ref);
 			return;
 		}
 		const gitRoot = this.getGitInstallRoot(scope);
@@ -1746,24 +1767,33 @@ export class DefaultPackageManager implements PackageManager {
 			return;
 		}
 
-		const target = await this.getLocalGitUpdateTarget(targetDir);
+		if (source.ref) {
+			await this.ensureGitRef(targetDir, ["fetch", "origin", source.ref], "FETCH_HEAD");
+			return;
+		}
 
+		const target = await this.getLocalGitUpdateTarget(targetDir);
+		await this.ensureGitRef(targetDir, target.fetchArgs, target.ref);
+	}
+
+	private async ensureGitRef(targetDir: string, fetchArgs: string[], ref: string): Promise<void> {
 		// Fetch only the ref we will reset to, avoiding unrelated branch/tag noise.
-		await this.runCommand("git", target.fetchArgs, { cwd: targetDir });
+		await this.runCommand("git", fetchArgs, { cwd: targetDir });
 
 		const localHead = await this.runCommandCapture("git", ["rev-parse", "HEAD"], {
 			cwd: targetDir,
 			timeoutMs: NETWORK_TIMEOUT_MS,
 		});
-		const refreshedTargetHead = await this.runCommandCapture("git", ["rev-parse", target.ref], {
+		const commitRef = `${ref}^{commit}`;
+		const targetHead = await this.runCommandCapture("git", ["rev-parse", commitRef], {
 			cwd: targetDir,
 			timeoutMs: NETWORK_TIMEOUT_MS,
 		});
-		if (localHead.trim() === refreshedTargetHead.trim()) {
+		if (localHead.trim() === targetHead.trim()) {
 			return;
 		}
 
-		await this.runCommand("git", ["reset", "--hard", target.ref], { cwd: targetDir });
+		await this.runCommand("git", ["reset", "--hard", commitRef], { cwd: targetDir });
 
 		// Clean untracked files (extensions should be pristine)
 		await this.runCommand("git", ["clean", "-fdx"], { cwd: targetDir });
@@ -1820,10 +1850,11 @@ export class DefaultPackageManager implements PackageManager {
 		if (!existsSync(installRoot)) {
 			mkdirSync(installRoot, { recursive: true });
 		}
+		markPathIgnoredByCloudSync(installRoot);
 		this.ensureGitIgnore(installRoot);
 		const packageJsonPath = join(installRoot, "package.json");
 		if (!existsSync(packageJsonPath)) {
-			const pkgJson = { name: "pie-extensions", private: true };
+			const pkgJson = { name: "pi-extensions", private: true };
 			writeFileSync(packageJsonPath, JSON.stringify(pkgJson, null, 2), "utf-8");
 		}
 	}
@@ -1930,7 +1961,7 @@ export class DefaultPackageManager implements PackageManager {
 			.update(`${prefix}-${suffix ?? ""}`)
 			.digest("hex")
 			.slice(0, 8);
-		return join(tmpdir(), "pie-extensions", prefix, hash, suffix ?? "");
+		return join(tmpdir(), "pi-extensions", prefix, hash, suffix ?? "");
 	}
 
 	private getBaseDirForScope(scope: SourceScope): string {
@@ -1944,19 +1975,11 @@ export class DefaultPackageManager implements PackageManager {
 	}
 
 	private resolvePath(input: string): string {
-		const trimmed = input.trim();
-		if (trimmed === "~") return getHomeDir();
-		if (trimmed.startsWith("~/")) return join(getHomeDir(), trimmed.slice(2));
-		if (trimmed.startsWith("~")) return join(getHomeDir(), trimmed.slice(1));
-		return resolve(this.cwd, trimmed);
+		return resolvePath(input, this.cwd, { homeDir: getHomeDir(), trim: true });
 	}
 
 	private resolvePathFromBase(input: string, baseDir: string): string {
-		const trimmed = input.trim();
-		if (trimmed === "~") return getHomeDir();
-		if (trimmed.startsWith("~/")) return join(getHomeDir(), trimmed.slice(2));
-		if (trimmed.startsWith("~")) return join(getHomeDir(), trimmed.slice(1));
-		return resolve(baseDir, trimmed);
+		return resolvePath(input, baseDir, { homeDir: getHomeDir(), trim: true });
 	}
 
 	private collectPackageResources(
@@ -2222,7 +2245,7 @@ export class DefaultPackageManager implements PackageManager {
 			}
 		};
 
-		// Project extensions from .pie/
+		// Project extensions from .pi/
 		addResources(
 			"extensions",
 			collectAutoExtensionEntries(projectDirs.extensions),
@@ -2231,7 +2254,7 @@ export class DefaultPackageManager implements PackageManager {
 			projectBaseDir,
 		);
 
-		// Project skills from .pie/
+		// Project skills from .pi/
 		addResources(
 			"skills",
 			collectAutoSkillEntries(projectDirs.skills, "pi"),
@@ -2271,7 +2294,7 @@ export class DefaultPackageManager implements PackageManager {
 			projectBaseDir,
 		);
 
-		// User extensions from ~/.pie/agent/
+		// User extensions from ~/.pi/agent/
 		addResources(
 			"extensions",
 			collectAutoExtensionEntries(userDirs.extensions),
@@ -2280,7 +2303,7 @@ export class DefaultPackageManager implements PackageManager {
 			globalBaseDir,
 		);
 
-		// User skills from ~/.pie/agent/
+		// User skills from ~/.pi/agent/
 		addResources(
 			"skills",
 			collectAutoSkillEntries(userDirs.skills, "pi"),

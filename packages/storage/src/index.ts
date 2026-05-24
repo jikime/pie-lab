@@ -540,7 +540,11 @@ export function createInMemoryProviderConnectionStore(
 }
 
 export class JsonlUsageStore implements UsageStore {
-	constructor(private readonly filePath: string) {}
+	private readonly filePath: string;
+
+	constructor(filePath: string) {
+		this.filePath = filePath;
+	}
 
 	async recordUsage(record: UsageRecord): Promise<void> {
 		await mkdir(dirname(this.filePath), { recursive: true });
@@ -568,7 +572,11 @@ export function createJsonlUsageStore(filePath: string): JsonlUsageStore {
 }
 
 export class JsonProviderConnectionStore implements ProviderConnectionStore {
-	constructor(private readonly filePath: string) {}
+	private readonly filePath: string;
+
+	constructor(filePath: string) {
+		this.filePath = filePath;
+	}
 
 	async getProviderConnections(filter: ProviderConnectionFilter = {}): Promise<ProviderConnection[]> {
 		const state = await this.readState();

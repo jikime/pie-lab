@@ -2,7 +2,8 @@ import { accessSync, constants, existsSync, readFileSync, realpathSync } from "f
 import { homedir } from "os";
 import { basename, dirname, join, resolve, sep, win32 } from "path";
 import { fileURLToPath } from "url";
-import { spawnProcessSync } from "./utils/child-process.js";
+import { spawnProcessSync } from "./utils/child-process.ts";
+import { normalizePath } from "./utils/paths.ts";
 
 // =============================================================================
 // Package Detection
@@ -110,21 +111,21 @@ function getSelfUpdateCommandForMethod(
 			return undefined;
 		case "pnpm":
 			return makeSelfUpdateCommand(
-				makeSelfUpdateCommandStep("pnpm", ["install", "-g", updatePackageName]),
+				makeSelfUpdateCommandStep("pnpm", ["install", "-g", "--ignore-scripts", updatePackageName]),
 				updatePackageName === installedPackageName
 					? undefined
 					: makeSelfUpdateCommandStep("pnpm", ["remove", "-g", installedPackageName]),
 			);
 		case "yarn":
 			return makeSelfUpdateCommand(
-				makeSelfUpdateCommandStep("yarn", ["global", "add", updatePackageName]),
+				makeSelfUpdateCommandStep("yarn", ["global", "add", "--ignore-scripts", updatePackageName]),
 				updatePackageName === installedPackageName
 					? undefined
 					: makeSelfUpdateCommandStep("yarn", ["global", "remove", installedPackageName]),
 			);
 		case "bun":
 			return makeSelfUpdateCommand(
-				makeSelfUpdateCommandStep("bun", ["install", "-g", updatePackageName]),
+				makeSelfUpdateCommandStep("bun", ["install", "-g", "--ignore-scripts", updatePackageName]),
 				updatePackageName === installedPackageName
 					? undefined
 					: makeSelfUpdateCommandStep("bun", ["uninstall", "-g", installedPackageName]),
@@ -330,9 +331,7 @@ export function getPackageDir(): string {
 	// Allow override via environment variable (useful for Nix/Guix where store paths tokenize poorly)
 	const envDir = process.env.PIE_PACKAGE_DIR ?? process.env.PI_PACKAGE_DIR;
 	if (envDir) {
-		if (envDir === "~") return homedir();
-		if (envDir.startsWith("~/")) return homedir() + envDir.slice(1);
-		return envDir;
+		return normalizePath(envDir);
 	}
 
 	if (isBunBinary) {
@@ -486,9 +485,7 @@ export function isTruthyEnv(name: string, legacyName?: string): boolean {
 }
 
 export function expandTildePath(path: string): string {
-	if (path === "~") return homedir();
-	if (path.startsWith("~/")) return homedir() + path.slice(1);
-	return path;
+	return normalizePath(path);
 }
 
 const DEFAULT_SHARE_VIEWER_URL = "https://pielab.ai/session/";

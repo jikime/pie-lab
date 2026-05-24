@@ -3,7 +3,7 @@ import { fauxAssistantMessage, fauxToolCall } from "@pie-lab/ai";
 import type { ExtensionAPI } from "@pie-lab/coding-agent";
 import { Type } from "typebox";
 import { afterEach, describe, expect, it } from "vitest";
-import { createHarness, getAssistantTexts, getUserTexts, type Harness } from "../harness.js";
+import { createHarness, getAssistantTexts, getUserTexts, type Harness } from "../harness.ts";
 
 describe("issue #2023 queued slash-command follow-up", () => {
 	const harnesses: Harness[] = [];

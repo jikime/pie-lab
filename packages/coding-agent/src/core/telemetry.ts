@@ -1,5 +1,4 @@
-import { ENV_TELEMETRY, getEnvWithLegacy } from "../config.js";
-import type { SettingsManager } from "./settings-manager.js";
+import type { SettingsManager } from "./settings-manager.ts";
 
 function isTruthyEnvFlag(value: string | undefined): boolean {
 	if (!value) return false;
@@ -8,7 +7,7 @@ function isTruthyEnvFlag(value: string | undefined): boolean {
 
 export function isInstallTelemetryEnabled(
 	settingsManager: SettingsManager,
-	telemetryEnv: string | undefined = getEnvWithLegacy(ENV_TELEMETRY, "PI_TELEMETRY"),
+	telemetryEnv: string | undefined = process.env.PI_TELEMETRY,
 ): boolean {
 	return telemetryEnv !== undefined ? isTruthyEnvFlag(telemetryEnv) : settingsManager.getEnableInstallTelemetry();
 }

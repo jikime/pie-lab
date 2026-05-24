@@ -60,7 +60,11 @@ function getLanguageFromFilename(filename?: string): string {
 }
 
 export class ArtifactsToolRenderer implements ToolRenderer<ArtifactsParams, undefined> {
-	constructor(public artifactsPanel?: ArtifactsPanel) {}
+	public artifactsPanel?: ArtifactsPanel;
+
+	constructor(artifactsPanel?: ArtifactsPanel) {
+		this.artifactsPanel = artifactsPanel;
+	}
 
 	render(
 		params: ArtifactsParams | undefined,

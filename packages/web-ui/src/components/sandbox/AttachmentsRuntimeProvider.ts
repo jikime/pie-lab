@@ -10,7 +10,11 @@ import type { SandboxRuntimeProvider } from "./SandboxRuntimeProvider.js";
  * Attachments are read-only snapshot data - no messaging needed.
  */
 export class AttachmentsRuntimeProvider implements SandboxRuntimeProvider {
-	constructor(private attachments: Attachment[]) {}
+	private attachments: Attachment[];
+
+	constructor(attachments: Attachment[]) {
+		this.attachments = attachments;
+	}
 
 	getData(): Record<string, any> {
 		const attachmentsData = this.attachments.map((a) => ({

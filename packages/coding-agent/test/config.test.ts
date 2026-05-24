@@ -7,7 +7,7 @@ import {
 	getSelfUpdateCommand,
 	getSelfUpdateUnavailableInstruction,
 	getUpdateInstruction,
-} from "../src/config.js";
+} from "../src/config.ts";
 
 const execPathDescriptor = Object.getOwnPropertyDescriptor(process, "execPath");
 const originalPath = process.env.PATH;
@@ -51,8 +51,8 @@ afterEach(() => {
 function createNpmPrefixInstall(template = "pi-prefix-"): { prefix: string; packageDir: string } {
 	const prefix = mkdtempSync(join(tmpdir(), template));
 	const root = join(prefix, "lib", "node_modules");
-	const scopeDir = join(root, "@pie-lab");
-	const packageDir = join(scopeDir, "coding-agent");
+	const scopeDir = join(root, "@earendil-works");
+	const packageDir = join(scopeDir, "pi-coding-agent");
 	mkdirSync(packageDir, { recursive: true });
 	tempDir = prefix;
 	process.env.PI_PACKAGE_DIR = packageDir;
@@ -64,7 +64,7 @@ function createPnpmGlobalInstall(): { root: string; packageDir: string } {
 	const temp = mkdtempSync(join(tmpdir(), "pi-pnpm-"));
 	const binDir = join(temp, "bin");
 	const root = join(temp, "pnpm", "global", "5", "node_modules");
-	const packageDir = join(root, "@mariozechner", "coding-agent");
+	const packageDir = join(root, "@mariozechner", "pi-coding-agent");
 	mkdirSync(packageDir, { recursive: true });
 	mkdirSync(binDir, { recursive: true });
 	writeFileSync(join(binDir, process.platform === "win32" ? "pnpm.cmd" : "pnpm"), createFakePnpmScript(root));
@@ -79,7 +79,7 @@ function createPnpmGlobalInstall(): { root: string; packageDir: string } {
 			"@mariozechner+pi-coding-agent@0.0.0",
 			"node_modules",
 			"@mariozechner",
-			"coding-agent",
+			"pi-coding-agent",
 			"dist",
 			"cli.js",
 		),
@@ -91,7 +91,7 @@ function createYarnGlobalInstall(): { globalDir: string; packageDir: string } {
 	const temp = mkdtempSync(join(tmpdir(), "pi-yarn-"));
 	const binDir = join(temp, "bin");
 	const globalDir = join(temp, "yarn", "global");
-	const packageDir = join(globalDir, "node_modules", "@mariozechner", "coding-agent");
+	const packageDir = join(globalDir, "node_modules", "@mariozechner", "pi-coding-agent");
 	mkdirSync(packageDir, { recursive: true });
 	mkdirSync(binDir, { recursive: true });
 	writeFileSync(join(binDir, process.platform === "win32" ? "yarn.cmd" : "yarn"), createFakeYarnScript(globalDir));
@@ -99,7 +99,7 @@ function createYarnGlobalInstall(): { globalDir: string; packageDir: string } {
 	tempDir = temp;
 	process.env.PATH = `${binDir}${delimiter}${originalPath ?? ""}`;
 	process.env.PI_PACKAGE_DIR = packageDir;
-	setExecPath(join(globalDir, ".yarn", "@mariozechner", "coding-agent", "dist", "cli.js"));
+	setExecPath(join(globalDir, ".yarn", "@mariozechner", "pi-coding-agent", "dist", "cli.js"));
 	return { globalDir, packageDir };
 }
 
@@ -108,8 +108,8 @@ function createBunGlobalInstall(): { packageDir: string } {
 	const prefix = join(temp, ".bun");
 	const bunBin = join(prefix, "bin");
 	const root = join(prefix, "install", "global", "node_modules");
-	const scopeDir = join(root, "@pie-lab");
-	const packageDir = join(scopeDir, "coding-agent");
+	const scopeDir = join(root, "@earendil-works");
+	const packageDir = join(scopeDir, "pi-coding-agent");
 	mkdirSync(packageDir, { recursive: true });
 	mkdirSync(bunBin, { recursive: true });
 	writeFileSync(join(bunBin, process.platform === "win32" ? "bun.cmd" : "bun"), createFakeBunScript(bunBin));
@@ -148,11 +148,13 @@ function createFakeBunScript(bunBin: string): string {
 describe("detectInstallMethod", () => {
 	test("detects pnpm from Windows .pnpm install paths", () => {
 		setExecPath(
-			"C:\\Users\\Admin\\Documents\\pnpm-repository\\global\\5\\.pnpm\\@pie-lab+coding-agent@0.67.68\\node_modules\\@pie-lab\\coding-agent\\dist\\cli.js",
+			"C:\\Users\\Admin\\Documents\\pnpm-repository\\global\\5\\.pnpm\\@earendil-works+pi-coding-agent@0.67.68\\node_modules\\@earendil-works\\pi-coding-agent\\dist\\cli.js",
 		);
 
 		expect(detectInstallMethod()).toBe("pnpm");
-		expect(getUpdateInstruction("@pie-lab/coding-agent")).toBe("Run: pnpm install -g @pie-lab/coding-agent");
+		expect(getUpdateInstruction("@pie-lab/coding-agent")).toBe(
+			"Run: pnpm install -g --ignore-scripts @pie-lab/coding-agent",
+		);
 	});
 
 	test("does not self-update unknown wrapper installs", () => {
@@ -231,7 +233,7 @@ describe("detectInstallMethod", () => {
 	});
 
 	test("does not infer Windows npm custom prefixes from package paths", () => {
-		const packageDir = "C:\\Users\\Admin\\npm prefix\\node_modules\\@pie-lab\\coding-agent";
+		const packageDir = "C:\\Users\\Admin\\npm prefix\\node_modules\\@earendil-works\\pi-coding-agent";
 		process.env.PI_PACKAGE_DIR = packageDir;
 		setExecPath(`${packageDir}\\dist\\cli.js`);
 
@@ -249,8 +251,8 @@ describe("detectInstallMethod", () => {
 		expect(detectInstallMethod()).toBe("bun");
 		expect(command).toEqual({
 			command: "bun",
-			args: ["install", "-g", "@pie-lab/coding-agent"],
-			display: "bun install -g @pie-lab/coding-agent",
+			args: ["install", "-g", "--ignore-scripts", "@pie-lab/coding-agent"],
+			display: "bun install -g --ignore-scripts @pie-lab/coding-agent",
 		});
 	});
 
@@ -262,8 +264,8 @@ describe("detectInstallMethod", () => {
 		expect(detectInstallMethod()).toBe("pnpm");
 		expect(command).toEqual({
 			command: "pnpm",
-			args: ["install", "-g", "@new-scope/pi"],
-			display: "pnpm remove -g @mariozechner/pi-coding-agent && pnpm install -g @new-scope/pi",
+			args: ["install", "-g", "--ignore-scripts", "@new-scope/pi"],
+			display: "pnpm remove -g @mariozechner/pi-coding-agent && pnpm install -g --ignore-scripts @new-scope/pi",
 			steps: [
 				{
 					command: "pnpm",
@@ -272,8 +274,8 @@ describe("detectInstallMethod", () => {
 				},
 				{
 					command: "pnpm",
-					args: ["install", "-g", "@new-scope/pi"],
-					display: "pnpm install -g @new-scope/pi",
+					args: ["install", "-g", "--ignore-scripts", "@new-scope/pi"],
+					display: "pnpm install -g --ignore-scripts @new-scope/pi",
 				},
 			],
 		});
@@ -284,7 +286,7 @@ describe("detectInstallMethod", () => {
 		const binDir = join(temp, "bin");
 		const root = join(temp, "Library", "pnpm", "global", "v11");
 		const packageName = "@pie-lab/coding-agent";
-		const globalPackageDir = join(root, "11e9a", "node_modules", "@pie-lab", "coding-agent");
+		const globalPackageDir = join(root, "11e9a", "node_modules", "@earendil-works", "pi-coding-agent");
 		const storePackageDir = join(
 			temp,
 			"Library",
@@ -292,13 +294,13 @@ describe("detectInstallMethod", () => {
 			"store",
 			"v11",
 			"links",
-			"@pie-lab",
-			"coding-agent",
+			"@earendil-works",
+			"pi-coding-agent",
 			"0.75.0",
 			"hash",
 			"node_modules",
-			"@pie-lab",
-			"coding-agent",
+			"@earendil-works",
+			"pi-coding-agent",
 		);
 		mkdirSync(globalPackageDir, { recursive: true });
 		mkdirSync(storePackageDir, { recursive: true });
@@ -317,8 +319,8 @@ describe("detectInstallMethod", () => {
 		expect(detectInstallMethod()).toBe("pnpm");
 		expect(command).toEqual({
 			command: "pnpm",
-			args: ["install", "-g", packageName],
-			display: `pnpm install -g ${packageName}`,
+			args: ["install", "-g", "--ignore-scripts", packageName],
+			display: `pnpm install -g --ignore-scripts ${packageName}`,
 		});
 	});
 
@@ -330,8 +332,8 @@ describe("detectInstallMethod", () => {
 		expect(detectInstallMethod()).toBe("yarn");
 		expect(command).toEqual({
 			command: "yarn",
-			args: ["global", "add", "@new-scope/pi"],
-			display: "yarn global remove @mariozechner/pi-coding-agent && yarn global add @new-scope/pi",
+			args: ["global", "add", "--ignore-scripts", "@new-scope/pi"],
+			display: "yarn global remove @mariozechner/pi-coding-agent && yarn global add --ignore-scripts @new-scope/pi",
 			steps: [
 				{
 					command: "yarn",
@@ -340,8 +342,8 @@ describe("detectInstallMethod", () => {
 				},
 				{
 					command: "yarn",
-					args: ["global", "add", "@new-scope/pi"],
-					display: "yarn global add @new-scope/pi",
+					args: ["global", "add", "--ignore-scripts", "@new-scope/pi"],
+					display: "yarn global add --ignore-scripts @new-scope/pi",
 				},
 			],
 		});
@@ -355,8 +357,8 @@ describe("detectInstallMethod", () => {
 		expect(detectInstallMethod()).toBe("bun");
 		expect(command).toEqual({
 			command: "bun",
-			args: ["install", "-g", "@new-scope/pi"],
-			display: "bun uninstall -g @mariozechner/pi-coding-agent && bun install -g @new-scope/pi",
+			args: ["install", "-g", "--ignore-scripts", "@new-scope/pi"],
+			display: "bun uninstall -g @mariozechner/pi-coding-agent && bun install -g --ignore-scripts @new-scope/pi",
 			steps: [
 				{
 					command: "bun",
@@ -365,8 +367,8 @@ describe("detectInstallMethod", () => {
 				},
 				{
 					command: "bun",
-					args: ["install", "-g", "@new-scope/pi"],
-					display: "bun install -g @new-scope/pi",
+					args: ["install", "-g", "--ignore-scripts", "@new-scope/pi"],
+					display: "bun install -g --ignore-scripts @new-scope/pi",
 				},
 			],
 		});

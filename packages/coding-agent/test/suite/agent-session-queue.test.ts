@@ -3,7 +3,7 @@ import { fauxAssistantMessage, fauxToolCall } from "@pie-lab/ai";
 import type { ExtensionAPI } from "@pie-lab/coding-agent";
 import { Type } from "typebox";
 import { afterEach, describe, expect, it } from "vitest";
-import { createHarness, getAssistantTexts, getMessageText, getUserTexts, type Harness } from "./harness.js";
+import { createHarness, getAssistantTexts, getMessageText, getUserTexts, type Harness } from "./harness.ts";
 
 async function createWaitingHarness(
 	options: {

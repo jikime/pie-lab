@@ -1,8 +1,8 @@
 import * as os from "node:os";
 import type { ImageContent, TextContent } from "@pie-lab/ai";
 import { getCapabilities, getImageDimensions, imageFallback } from "@pie-lab/tui";
-import { stripAnsi } from "../../utils/ansi.js";
-import { sanitizeBinaryOutput } from "../../utils/shell.js";
+import { stripAnsi } from "../../utils/ansi.ts";
+import { sanitizeBinaryOutput } from "../../utils/shell.ts";
 
 export function shortenPath(path: unknown): string {
 	if (typeof path !== "string") return "";

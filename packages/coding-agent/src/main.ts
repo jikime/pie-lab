@@ -5,59 +5,48 @@
  * createAgentSession() options. The SDK does the heavy lifting.
  */
 
-import { resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { type ImageContent, modelsAreEqual } from "@pie-lab/ai";
 import { ProcessTerminal, setKeybindings, TUI } from "@pie-lab/tui";
 import chalk from "chalk";
-import { type Args, type Mode, parseArgs, printHelp } from "./cli/args.js";
-import { processFileArguments } from "./cli/file-processor.js";
-import { buildInitialMessage } from "./cli/initial-message.js";
-import { listModels } from "./cli/list-models.js";
-import { selectSession } from "./cli/session-picker.js";
-import {
-	ENV_OFFLINE,
-	ENV_SESSION_DIR,
-	ENV_SKIP_VERSION_CHECK,
-	ENV_STARTUP_BENCHMARK,
-	expandTildePath,
-	getAgentDir,
-	getEnvWithLegacy,
-	getPackageDir,
-	isTruthyEnv,
-	VERSION,
-} from "./config.js";
-import { type CreateAgentSessionRuntimeFactory, createAgentSessionRuntime } from "./core/agent-session-runtime.js";
+import { type Args, type Mode, parseArgs, printHelp } from "./cli/args.ts";
+import { processFileArguments } from "./cli/file-processor.ts";
+import { buildInitialMessage } from "./cli/initial-message.ts";
+import { listModels } from "./cli/list-models.ts";
+import { selectSession } from "./cli/session-picker.ts";
+import { ENV_SESSION_DIR, expandTildePath, getAgentDir, getPackageDir, VERSION } from "./config.ts";
+import { type CreateAgentSessionRuntimeFactory, createAgentSessionRuntime } from "./core/agent-session-runtime.ts";
 import {
 	type AgentSessionRuntimeDiagnostic,
 	createAgentSessionFromServices,
 	createAgentSessionServices,
-} from "./core/agent-session-services.js";
-import { formatNoModelsAvailableMessage } from "./core/auth-guidance.js";
-import { AuthStorage } from "./core/auth-storage.js";
-import { exportFromFile } from "./core/export-html/index.js";
-import type { ExtensionFactory } from "./core/extensions/types.js";
-import { KeybindingsManager } from "./core/keybindings.js";
-import type { ModelRegistry } from "./core/model-registry.js";
-import { resolveCliModel, resolveModelScope, type ScopedModel } from "./core/model-resolver.js";
-import { restoreStdout, takeOverStdout } from "./core/output-guard.js";
-import type { CreateAgentSessionOptions } from "./core/sdk.js";
+} from "./core/agent-session-services.ts";
+import { formatNoModelsAvailableMessage } from "./core/auth-guidance.ts";
+import { AuthStorage } from "./core/auth-storage.ts";
+import { exportFromFile } from "./core/export-html/index.ts";
+import type { ExtensionFactory } from "./core/extensions/types.ts";
+import { configureHttpDispatcher } from "./core/http-dispatcher.ts";
+import { KeybindingsManager } from "./core/keybindings.ts";
+import type { ModelRegistry } from "./core/model-registry.ts";
+import { resolveCliModel, resolveModelScope, type ScopedModel } from "./core/model-resolver.ts";
+import { restoreStdout, takeOverStdout } from "./core/output-guard.ts";
+import type { CreateAgentSessionOptions } from "./core/sdk.ts";
 import {
 	formatMissingSessionCwdPrompt,
 	getMissingSessionCwdIssue,
 	MissingSessionCwdError,
 	type SessionCwdIssue,
-} from "./core/session-cwd.js";
-import { SessionManager } from "./core/session-manager.js";
-import { SettingsManager } from "./core/settings-manager.js";
-import { printTimings, resetTimings, time } from "./core/timings.js";
-import { runMigrations, showDeprecationWarnings } from "./migrations.js";
-import { InteractiveMode, runPrintMode, runRpcMode } from "./modes/index.js";
-import { ExtensionSelectorComponent } from "./modes/interactive/components/extension-selector.js";
-import { initTheme, stopThemeWatcher } from "./modes/interactive/theme/theme.js";
-import { handleConfigCommand, handlePackageCommand } from "./package-manager-cli.js";
-import { isLocalPath } from "./utils/paths.js";
-import { cleanupWindowsSelfUpdateQuarantine } from "./utils/windows-self-update.js";
+} from "./core/session-cwd.ts";
+import { SessionManager } from "./core/session-manager.ts";
+import { SettingsManager } from "./core/settings-manager.ts";
+import { printTimings, resetTimings, time } from "./core/timings.ts";
+import { runMigrations, showDeprecationWarnings } from "./migrations.ts";
+import { InteractiveMode, runPrintMode, runRpcMode } from "./modes/index.ts";
+import { ExtensionSelectorComponent } from "./modes/interactive/components/extension-selector.ts";
+import { initTheme, stopThemeWatcher } from "./modes/interactive/theme/theme.ts";
+import { handleConfigCommand, handlePackageCommand } from "./package-manager-cli.ts";
+import { isLocalPath, normalizePath, resolvePath } from "./utils/paths.ts";
+import { cleanupWindowsSelfUpdateQuarantine } from "./utils/windows-self-update.ts";
 
 /**
  * Read all content from piped stdin.
@@ -98,6 +87,11 @@ function reportDiagnostics(diagnostics: readonly AgentSessionRuntimeDiagnostic[]
 		const prefix = diagnostic.type === "error" ? "Error: " : diagnostic.type === "warning" ? "Warning: " : "";
 		console.error(color(`${prefix}${diagnostic.message}`));
 	}
+}
+
+function isTruthyEnvFlag(value: string | undefined): boolean {
+	if (!value) return false;
+	return value === "1" || value.toLowerCase() === "true" || value.toLowerCase() === "yes";
 }
 
 type AppMode = "interactive" | "print" | "json" | "rpc";
@@ -152,9 +146,9 @@ type ResolvedSession =
  * If it looks like a path, use as-is. Otherwise try to match as session ID prefix.
  */
 async function resolveSessionPath(sessionArg: string, cwd: string, sessionDir?: string): Promise<ResolvedSession> {
-	// If it looks like a file path, use as-is
+	// If it looks like a file path, resolve it before handing it to the session manager.
 	if (sessionArg.includes("/") || sessionArg.includes("\\") || sessionArg.endsWith(".jsonl")) {
-		return { type: "path", path: sessionArg };
+		return { type: "path", path: resolvePath(sessionArg, cwd) };
 	}
 
 	// Try to match as session ID in current project first
@@ -386,7 +380,7 @@ function buildSessionOptions(
 }
 
 function resolveCliPaths(cwd: string, paths: string[] | undefined): string[] | undefined {
-	return paths?.map((value) => (isLocalPath(value) ? resolve(cwd, value) : value));
+	return paths?.map((value) => (isLocalPath(value) ? resolvePath(value, cwd) : value));
 }
 
 async function promptForMissingSessionCwd(
@@ -429,10 +423,10 @@ export interface MainOptions {
 
 export async function main(args: string[], options?: MainOptions) {
 	resetTimings();
-	const offlineMode = args.includes("--offline") || isTruthyEnv(ENV_OFFLINE, "PI_OFFLINE");
+	const offlineMode = args.includes("--offline") || isTruthyEnvFlag(process.env.PI_OFFLINE);
 	if (offlineMode) {
-		process.env[ENV_OFFLINE] = "1";
-		process.env[ENV_SKIP_VERSION_CHECK] = "1";
+		process.env.PI_OFFLINE = "1";
+		process.env.PI_SKIP_VERSION_CHECK = "1";
 	}
 
 	if (process.platform === "win32") {
@@ -504,9 +498,9 @@ export async function main(args: string[], options?: MainOptions) {
 	// settings, resources, provider registrations, and models must be resolved only after
 	// the target session cwd is known. The startup-cwd settings manager is used only for
 	// sessionDir lookup during session selection.
-	const envSessionDir = getEnvWithLegacy(ENV_SESSION_DIR, "PI_CODING_AGENT_SESSION_DIR");
+	const envSessionDir = process.env[ENV_SESSION_DIR];
 	const sessionDir =
-		parsed.sessionDir ??
+		(parsed.sessionDir ? normalizePath(parsed.sessionDir) : undefined) ??
 		(envSessionDir ? expandTildePath(envSessionDir) : undefined) ??
 		startupSettingsManager.getSessionDir();
 	let sessionManager = await createSessionManager(parsed, cwd, sessionDir, startupSettingsManager);
@@ -623,6 +617,7 @@ export async function main(args: string[], options?: MainOptions) {
 	});
 	const { services, session, modelFallbackMessage } = runtime;
 	const { settingsManager, modelRegistry, resourceLoader } = services;
+	configureHttpDispatcher(settingsManager.getHttpIdleTimeoutMs());
 
 	if (parsed.help) {
 		const extensionFlags = resourceLoader
@@ -674,9 +669,9 @@ export async function main(args: string[], options?: MainOptions) {
 		process.exit(1);
 	}
 
-	const startupBenchmark = isTruthyEnv(ENV_STARTUP_BENCHMARK, "PI_STARTUP_BENCHMARK");
+	const startupBenchmark = isTruthyEnvFlag(process.env.PI_STARTUP_BENCHMARK);
 	if (startupBenchmark && appMode !== "interactive") {
-		console.error(chalk.red(`Error: ${ENV_STARTUP_BENCHMARK} only supports interactive mode`));
+		console.error(chalk.red("Error: PI_STARTUP_BENCHMARK only supports interactive mode"));
 		process.exit(1);
 	}
 

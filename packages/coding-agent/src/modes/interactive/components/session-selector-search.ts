@@ -1,5 +1,5 @@
 import { fuzzyMatch } from "@pie-lab/tui";
-import type { SessionInfo } from "../../../core/session-manager.js";
+import type { SessionInfo } from "../../../core/session-manager.ts";
 
 export type SortMode = "threaded" | "recent" | "relevance";
 
