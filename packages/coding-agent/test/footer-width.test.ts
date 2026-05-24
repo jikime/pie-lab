@@ -17,6 +17,8 @@ function createSession(options: {
 	sessionName: string;
 	modelId?: string;
 	provider?: string;
+	assistantModel?: string;
+	assistantProvider?: string;
 	reasoning?: boolean;
 	thinkingLevel?: string;
 	usage?: AssistantUsage;
@@ -30,6 +32,8 @@ function createSession(options: {
 						type: "message",
 						message: {
 							role: "assistant",
+							provider: options.assistantProvider ?? options.provider ?? "test",
+							model: options.assistantModel ?? options.modelId ?? "test-model",
 							usage,
 						},
 					},
@@ -84,6 +88,10 @@ describe("formatCwdForFooter", () => {
 	});
 });
 
+function stripAnsi(text: string): string {
+	return text.replace(/\x1b\[[0-9;]*m/g, "");
+}
+
 describe("FooterComponent width handling", () => {
 	beforeAll(() => {
 		initTheme(undefined, false);
@@ -122,5 +130,83 @@ describe("FooterComponent width handling", () => {
 		for (const line of lines) {
 			expect(visibleWidth(line)).toBeLessThanOrEqual(width);
 		}
+	});
+
+	it("renders readable labels for path, usage, context, and model fields", () => {
+		const session = createSession({
+			sessionName: "work",
+			modelId: "claude-sonnet-4-6",
+			provider: "claude-code-adk",
+			reasoning: true,
+			thinkingLevel: "high",
+			usage: {
+				input: 12_345,
+				output: 6_789,
+				cacheRead: 1234,
+				cacheWrite: 567,
+				cost: { total: 0.123 },
+			},
+		});
+		const footer = new FooterComponent(session, createFooterData(2));
+
+		const lines = footer.render(150).map(stripAnsi);
+
+		expect(lines[0]).toContain("dir /tmp/project");
+		expect(lines[0]).toContain("git main");
+		expect(lines[0]).toContain("session work");
+		expect(lines[1]).toContain("tok");
+		expect(lines[1]).toContain("cache");
+		expect(lines[1]).toContain("cost $0.123");
+		expect(lines[1]).toContain("ctx 12.3%/200k auto");
+		expect(lines[1]).toContain("model claude-code-adk/claude-sonnet-4-6");
+		expect(lines[1]).toContain("think high");
+	});
+
+	it("keeps the selected model visible before lower-priority usage fields", () => {
+		const width = 64;
+		const session = createSession({
+			sessionName: "work",
+			modelId: "claude-sonnet-4-6",
+			provider: "claude-code-adk",
+			reasoning: true,
+			thinkingLevel: "high",
+			usage: {
+				input: 999_999,
+				output: 888_888,
+				cacheRead: 777_777,
+				cacheWrite: 666_666,
+				cost: { total: 123.456 },
+			},
+		});
+		const footer = new FooterComponent(session, createFooterData(2));
+
+		const lines = footer.render(width).map(stripAnsi);
+
+		expect(lines[1]).toContain("model claude-code-adk/claude-sonnet-4-6");
+		for (const line of footer.render(width)) {
+			expect(visibleWidth(line)).toBeLessThanOrEqual(width);
+		}
+	});
+
+	it("shows the last resolved routed model for router aliases", () => {
+		const session = createSession({
+			sessionName: "work",
+			modelId: "auto:coding",
+			provider: "pie-lab-router",
+			assistantProvider: "google",
+			assistantModel: "gemini-2.5-pro",
+			usage: {
+				input: 12_345,
+				output: 6_789,
+				cacheRead: 0,
+				cacheWrite: 0,
+				cost: { total: 0.123 },
+			},
+		});
+		const footer = new FooterComponent(session, createFooterData(2));
+
+		const lines = footer.render(150).map(stripAnsi);
+
+		expect(lines[1]).toContain("route auto:coding -> google/gemini-2.5-pro");
 	});
 });

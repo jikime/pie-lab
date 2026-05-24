@@ -11,6 +11,7 @@
 - [마이그레이션 계획](./migration-plan.md): 기존 프로젝트에서 어떤 코드를 가져오고 어떻게 재배치할지 정리합니다.
 - [로드맵](./roadmap.md): MVP부터 이후 확장까지의 단계별 개발 계획입니다.
 - [사용량과 비용 측정](./usage-accounting.md): routing 이후 실제 사용량과 비용을 어디서 어떻게 기록할지 정리합니다.
+- [Claude Agent SDK provider](./claude-agent-sdk-provider.md): Claude Code 로컬 구독/로그인 흐름을 router 후보로 쓰는 방법을 정리합니다.
 - [채팅 사용법](./chat-usage.md): 웹 채팅과 Telegram/Discord bridge 설정, 연결, 문제 해결 방법을 정리합니다.
 - [pie-chat E2E 검증 체크리스트](./chat-e2e-checklist.md): 실제 Telegram/Discord 채널에서 bridge를 검증하는 기준을 정리합니다.
 - [dashboard-next 이관 범위](./dashboard-next-migration.md): 기존 dashboard 기능을 Next.js dashboard로 옮길 때의 기준과 우선순위를 정리합니다.
@@ -24,7 +25,7 @@
 
 ## 현재 통합 상태
 
-현재 `pie-lab`은 `pi` 기반 CLI/TUI를 유지하면서 `9router`의 핵심 라우팅, fallback, provider connection, quota, cooldown, usage/cost 기록을 `pie` 내부 호출과 local `/v1` API에 연결한 상태입니다.
+현재 `pie-lab`은 `pi` 기반 CLI/TUI를 유지하면서 `9router`의 핵심 라우팅, fallback, provider connection, quota, cooldown, usage/cost 기록을 `pie` 내부 호출과 local `/v1` API에 연결한 상태입니다. 또한 최신 `Claude Agent SDK`를 `claude-code-adk` 로컬 provider로 추가해, `auto:coding` 같은 router 요청이 Claude Code 로컬 로그인/구독 흐름을 후보로 사용할 수 있게 했습니다.
 
 `apps/server`는 OpenAI-compatible chat completions, streaming SSE, embeddings, web search/fetch, TTS/STT, image generation endpoint를 제공합니다. `apps/dashboard`는 usage, provider, quota, budget, proxy, routing policy, request detail, raw trace 같은 운영 화면의 기준 구현입니다. `apps/dashboard-next`는 Next.js 16, Tailwind CSS 4, shadcn/ui 기반의 차세대 dashboard이며 usage detail, provider setup, OAuth redirect login, quota detail, model availability, routing policy form, budget form, proxy 관리, media endpoint test form까지 이관한 상태입니다.
 

@@ -1941,3 +1941,71 @@ npm --workspace @pie-lab/dashboard-next run build
 ```bash
 npm --workspace @pie-lab/coding-agent run build
 ```
+
+## 2026-05-24: Claude Agent SDK provider 1차 통합
+
+완료한 일:
+
+- `@pie-lab/ai`에 `claude-agent-sdk` API와 `claude-code-adk` provider를 추가했습니다.
+- `@anthropic-ai/claude-agent-sdk`를 dependency로 추가하고, provider는 lazy import로 로드되게 했습니다.
+- 등록 모델은 `claude-sonnet-4-6`, `claude-opus-4-7`, `claude-haiku-4-5`입니다.
+- `streamClaudeAgentSdk()`가 SDK `query()`를 호출하고, `stream_event`, `assistant`, `result` event를 pie-lab `AssistantMessageEventStream`으로 변환합니다.
+- SDK `modelUsage`와 `total_cost_usd`를 pie-lab `Usage` 형식으로 변환합니다.
+- `ModelRegistry`에서 `claude-code-adk`를 API key 없는 local provider로 처리했습니다.
+- 빈 router policy 기준 `auto:coding`이 `claude-code-adk/claude-sonnet-4-6`으로 resolve되는 테스트를 추가했습니다.
+
+주의:
+
+- 이 provider는 기존 Anthropic Messages API provider의 대체가 아니라 별도 로컬 실행 provider입니다.
+- Claude Code Agent SDK는 자체 tool 실행 계층을 포함하므로, 개인 로컬 개발용 경로로 다룹니다.
+
+검증:
+
+```bash
+npm --workspace @pie-lab/ai run build
+npm --workspace @pie-lab/coding-agent run build
+npm --workspace @pie-lab/ai test -- claude-agent-sdk-models.test.ts lazy-module-load.test.ts
+npm --workspace @pie-lab/coding-agent test -- model-registry.test.ts
+```
+
+## 2026-05-24: Claude Code ADK 선택 경로 명확화
+
+확인한 점:
+
+- `claude-code-adk/claude-sonnet-4-6`을 정확히 지정하면 route plan은 `claude-code-adk` provider로 resolve됩니다.
+- `anthropic/claude-opus-4-7` 또는 `api: anthropic-messages`로 기록되는 요청은 Claude Code ADK가 아니라 기존 Anthropic provider 요청입니다.
+- 저장된 router policy가 `auto:coding` alias를 직접 지정하고 있으면, 빈 policy의 기본 ADK 우선순위보다 저장된 policy가 우선합니다.
+
+완료한 일:
+
+- `/model` 선택 완료 메시지를 model id만이 아니라 `provider/model` 형태로 표시하게 했습니다.
+- model selector 상세 영역에 `Model Ref: provider/model`을 표시하게 했습니다.
+- Anthropic subscription 경고 문구에 Claude Code ADK를 쓰려면 `claude-code-adk/claude-sonnet-4-6`을 선택해야 한다는 안내를 넣었습니다.
+- branch summary/compaction 같은 보조 LLM 호출에서도 `claude-code-adk` local provider가 API key 없이 동작할 수 있게 보완했습니다.
+
+## 2026-05-24: Claude Agent SDK provider headless 실행 보정
+
+확인한 점:
+
+- `@anthropic-ai/claude-agent-sdk@0.3.150`의 `query()`는 직접 `claude -p`를 조립하는 wrapper가 아니라, 로컬 Claude Code subprocess를 `--output-format stream-json`, `--input-format stream-json` 형태로 실행합니다.
+- 같은 Claude Code binary를 직접 headless stream-json으로 호출하면 로컬 로그인/구독 경로가 정상 동작했습니다.
+- 기존 provider 구현은 `pi`의 LLM system prompt와 transcript wrapper를 Claude Code SDK에 그대로 전달해서 일반 Claude Code headless 호출과 다르게 동작했습니다.
+- SDK 버전 다운그레이드는 해결책으로 채택하지 않았고, dependency는 `@anthropic-ai/claude-agent-sdk@0.3.150` 기준을 유지했습니다.
+
+완료한 일:
+
+- `claude-code-adk` provider에서 `pi` system prompt를 기본 append하지 않도록 변경했습니다.
+- 단일 사용자 요청은 transcript wrapper 없이 그대로 Claude Code에 전달하게 했습니다.
+- 이전 대화가 있는 경우에만 이전 transcript를 참고용 context로 붙이고, 최신 사용자 요청을 별도로 구분합니다.
+- `systemPrompt`, `appendSystemPrompt`, `includePieSystemPrompt` option을 추가해 필요 시 명시적으로 system prompt를 조정할 수 있게 했습니다.
+
+검증:
+
+```bash
+npm --workspace @pie-lab/ai run build
+npm --workspace @pie-lab/coding-agent run build
+npm --workspace @pie-lab/ai test -- claude-agent-sdk-models.test.ts lazy-module-load.test.ts
+npm --workspace @pie-lab/coding-agent test -- model-registry.test.ts
+node packages/coding-agent/dist/cli.js --no-session --no-tools --model claude-code-adk/claude-sonnet-4-6 -p "Reply with OK only."
+node packages/coding-agent/dist/cli.js --no-session --no-tools --model auto:coding -p "Reply with OK only."
+```

@@ -3,8 +3,54 @@ import type { Api, KnownProvider, Model, ModelThinkingLevel, Usage } from "./typ
 
 const modelRegistry: Map<string, Map<string, Model<Api>>> = new Map();
 
+const CLAUDE_AGENT_SDK_MODELS = {
+	"claude-sonnet-4-6": {
+		id: "claude-sonnet-4-6",
+		name: "Claude Code Sonnet 4.6",
+		api: "claude-agent-sdk",
+		provider: "claude-code-adk",
+		baseUrl: "claude-code://local",
+		reasoning: true,
+		thinkingLevelMap: { xhigh: "max" },
+		input: ["text", "image"],
+		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+		contextWindow: 200000,
+		maxTokens: 64000,
+	} satisfies Model<"claude-agent-sdk">,
+	"claude-opus-4-7": {
+		id: "claude-opus-4-7",
+		name: "Claude Code Opus 4.7",
+		api: "claude-agent-sdk",
+		provider: "claude-code-adk",
+		baseUrl: "claude-code://local",
+		reasoning: true,
+		thinkingLevelMap: { xhigh: "xhigh" },
+		input: ["text", "image"],
+		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+		contextWindow: 200000,
+		maxTokens: 64000,
+	} satisfies Model<"claude-agent-sdk">,
+	"claude-haiku-4-5": {
+		id: "claude-haiku-4-5",
+		name: "Claude Code Haiku 4.5",
+		api: "claude-agent-sdk",
+		provider: "claude-code-adk",
+		baseUrl: "claude-code://local",
+		reasoning: true,
+		input: ["text", "image"],
+		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+		contextWindow: 200000,
+		maxTokens: 64000,
+	} satisfies Model<"claude-agent-sdk">,
+};
+
+const BUILT_IN_MODELS = {
+	...MODELS,
+	"claude-code-adk": CLAUDE_AGENT_SDK_MODELS,
+};
+
 // Initialize registry from MODELS on module load
-for (const [provider, models] of Object.entries(MODELS)) {
+for (const [provider, models] of Object.entries(BUILT_IN_MODELS)) {
 	const providerModels = new Map<string, Model<Api>>();
 	for (const [id, model] of Object.entries(models)) {
 		providerModels.set(id, model as Model<Api>);
@@ -14,10 +60,14 @@ for (const [provider, models] of Object.entries(MODELS)) {
 
 type ModelApi<
 	TProvider extends KnownProvider,
-	TModelId extends keyof (typeof MODELS)[TProvider],
-> = (typeof MODELS)[TProvider][TModelId] extends { api: infer TApi } ? (TApi extends Api ? TApi : never) : never;
+	TModelId extends keyof (typeof BUILT_IN_MODELS)[TProvider],
+> = (typeof BUILT_IN_MODELS)[TProvider][TModelId] extends { api: infer TApi }
+	? TApi extends Api
+		? TApi
+		: never
+	: never;
 
-export function getModel<TProvider extends KnownProvider, TModelId extends keyof (typeof MODELS)[TProvider]>(
+export function getModel<TProvider extends KnownProvider, TModelId extends keyof (typeof BUILT_IN_MODELS)[TProvider]>(
 	provider: TProvider,
 	modelId: TModelId,
 ): Model<ModelApi<TProvider, TModelId>> {
@@ -31,9 +81,11 @@ export function getProviders(): KnownProvider[] {
 
 export function getModels<TProvider extends KnownProvider>(
 	provider: TProvider,
-): Model<ModelApi<TProvider, keyof (typeof MODELS)[TProvider]>>[] {
+): Model<ModelApi<TProvider, keyof (typeof BUILT_IN_MODELS)[TProvider]>>[] {
 	const models = modelRegistry.get(provider);
-	return models ? (Array.from(models.values()) as Model<ModelApi<TProvider, keyof (typeof MODELS)[TProvider]>>[]) : [];
+	return models
+		? (Array.from(models.values()) as Model<ModelApi<TProvider, keyof (typeof BUILT_IN_MODELS)[TProvider]>>[])
+		: [];
 }
 
 export function calculateCost<TApi extends Api>(model: Model<TApi>, usage: Usage): Usage["cost"] {

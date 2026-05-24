@@ -7,6 +7,7 @@ const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const aiEntryUrl = new URL("../src/index.ts", import.meta.url).href;
 
 const SDK_SPECIFIERS = [
+	"@anthropic-ai/claude-agent-sdk",
 	"@anthropic-ai/sdk",
 	"openai",
 	"@google/genai",

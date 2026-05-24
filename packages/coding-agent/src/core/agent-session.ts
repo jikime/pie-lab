@@ -346,7 +346,7 @@ export class AgentSession {
 	}
 
 	private async _getRequiredRequestAuth(model: Model<any>): Promise<{
-		apiKey: string;
+		apiKey?: string;
 		headers?: Record<string, string>;
 	}> {
 		const result = await this._modelRegistry.getApiKeyAndHeaders(model);
@@ -358,6 +358,9 @@ export class AgentSession {
 		}
 		if (result.apiKey) {
 			return { apiKey: result.apiKey, headers: result.headers };
+		}
+		if (this._modelRegistry.usesLocalAuthProvider(model)) {
+			return { headers: result.headers };
 		}
 
 		const isOAuth = this._modelRegistry.isUsingOAuth(model);

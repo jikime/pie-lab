@@ -10,6 +10,7 @@ export * from "./models.ts";
 export type { BedrockOptions, BedrockThinkingDisplay } from "./providers/amazon-bedrock.ts";
 export type { AnthropicEffort, AnthropicOptions, AnthropicThinkingDisplay } from "./providers/anthropic.ts";
 export type { AzureOpenAIResponsesOptions } from "./providers/azure-openai-responses.ts";
+export type { ClaudeAgentSdkOptions } from "./providers/claude-agent-sdk.ts";
 export * from "./providers/faux.ts";
 export type { GoogleOptions } from "./providers/google.ts";
 export type { GoogleThinkingLevel } from "./providers/google-shared.ts";

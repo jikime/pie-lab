@@ -4,7 +4,7 @@ import { join } from "node:path";
 import type { AnthropicMessagesCompat, Api, Context, Model, OpenAICompletionsCompat } from "@pie-lab/ai";
 import { getApiProvider } from "@pie-lab/ai";
 import { getOAuthProvider } from "@pie-lab/ai/oauth";
-import { PIE_LAB_ROUTER_PROVIDER } from "@pie-lab/router";
+import { PIE_LAB_ROUTER_PROVIDER, resolvePiModelRoute } from "@pie-lab/router";
 import { createInMemoryProviderConnectionStore, type ProviderConnection } from "@pie-lab/storage";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { AuthStorage } from "../src/core/auth-storage.ts";
@@ -119,6 +119,34 @@ describe("ModelRegistry", () => {
 			});
 			const withAuth = ModelRegistry.create(authStorage, modelsJsonPath);
 			expect(withAuth.getAvailable().some((model) => model.provider === PIE_LAB_ROUTER_PROVIDER)).toBe(true);
+		});
+
+		test("treats claude-code-adk as a local provider without API key storage", async () => {
+			const registry = ModelRegistry.create(authStorage, modelsJsonPath);
+			const model = registry.find("claude-code-adk", "claude-sonnet-4-6");
+
+			expect(model).toBeDefined();
+			expect(registry.hasConfiguredAuth(model!)).toBe(true);
+			expect(registry.usesLocalAuthProvider(model!)).toBe(true);
+			await expect(registry.getApiKeyAndHeaders(model!)).resolves.toEqual({ ok: true });
+			expect(registry.getAvailable().some((item) => item.provider === PIE_LAB_ROUTER_PROVIDER)).toBe(true);
+		});
+
+		test("can resolve auto:coding to the Claude Code ADK local provider", async () => {
+			const registry = ModelRegistry.create(authStorage, modelsJsonPath);
+
+			await expect(
+				resolvePiModelRoute({
+					requestedModel: "auto:coding",
+					catalog: registry,
+					policy: {},
+				}),
+			).resolves.toMatchObject({
+				route: {
+					resolvedProvider: "claude-code-adk",
+					resolvedModel: "claude-sonnet-4-6",
+				},
+			});
 		});
 	});
 

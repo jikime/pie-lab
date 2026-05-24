@@ -40,6 +40,7 @@ pie start
 - rate-limit/quota 오류를 9router 원본 cooldown 규칙으로 분류합니다.
 - provider connection/settings store가 있고, 계정 선택 helper가 `fill-first`, `round-robin`, sticky round-robin을 계산합니다.
 - 내부 `coding-agent` stream 경로에서 stream 시작 전 실패는 다음 route 후보로 fallback됩니다.
+- `Claude Agent SDK` 기반 `claude-code-adk` provider가 router 후보로 등록됩니다.
 - fallback attempt의 success/error/aborted 결과가 usage record로 저장됩니다.
 - 저장된 usage record를 `/usage`와 `/usage/summary`에서 조회할 수 있습니다.
 - dashboard에서 usage summary와 최근 record를 확인할 수 있습니다.
@@ -112,6 +113,8 @@ pie -p "README.md를 요약해줘" @README.md
 - request detail viewer와 fallback timeline
 - request detail raw event trace
 - routing policy import/export, combo reorder, model suggestion
+- Claude Code 로컬 로그인/구독을 사용하는 `claude-code-adk` provider
+- Claude Agent SDK 최신 버전 기준 headless stream-json 실행과 Claude Code 자체 prompt 우선 처리
 
 성공 기준:
 

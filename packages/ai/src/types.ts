@@ -10,6 +10,7 @@ export type KnownApi =
 	| "azure-openai-responses"
 	| "openai-codex-responses"
 	| "anthropic-messages"
+	| "claude-agent-sdk"
 	| "bedrock-converse-stream"
 	| "google-generative-ai"
 	| "google-vertex";
@@ -23,6 +24,7 @@ export type ImagesApi = KnownImagesApi | (string & {});
 export type KnownProvider =
 	| "amazon-bedrock"
 	| "anthropic"
+	| "claude-code-adk"
 	| "google"
 	| "google-vertex"
 	| "openai"

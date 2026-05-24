@@ -235,6 +235,8 @@ const ROUTER_VIRTUAL_MODELS: Model<Api>[] = PIE_LAB_ROUTER_MODEL_IDS.map((id) =>
 	maxTokens: 32768,
 }));
 
+const LOCAL_AUTH_PROVIDERS = new Set(["claude-code-adk"]);
+
 function formatValidationPath(error: TLocalizedValidationError): string {
 	if (error.keyword === "required") {
 		const requiredProperties = (error.params as { requiredProperties?: string[] }).requiredProperties;
@@ -806,11 +808,15 @@ export class ModelRegistry {
 	 * Get API key for a model.
 	 */
 	hasConfiguredAuth(model: Model<Api>): boolean {
+		if (LOCAL_AUTH_PROVIDERS.has(model.provider)) {
+			return true;
+		}
 		if (model.provider === PIE_LAB_ROUTER_PROVIDER) {
 			return this.models.some(
 				(m) =>
 					m.provider !== PIE_LAB_ROUTER_PROVIDER &&
-					(this.authStorage.hasAuth(m.provider) ||
+					(LOCAL_AUTH_PROVIDERS.has(m.provider) ||
+						this.authStorage.hasAuth(m.provider) ||
 						this.providerRequestConfigs.get(m.provider)?.apiKey !== undefined),
 			);
 		}
@@ -818,6 +824,13 @@ export class ModelRegistry {
 			this.authStorage.hasAuth(model.provider) ||
 			this.providerRequestConfigs.get(model.provider)?.apiKey !== undefined
 		);
+	}
+
+	/**
+	 * Check whether a provider authenticates through local runtime state rather than request credentials.
+	 */
+	usesLocalAuthProvider(model: Model<Api>): boolean {
+		return LOCAL_AUTH_PROVIDERS.has(model.provider);
 	}
 
 	private getModelRequestKey(provider: string, modelId: string): string {
@@ -857,6 +870,9 @@ export class ModelRegistry {
 	 */
 	async getApiKeyAndHeaders(model: Model<Api>): Promise<ResolvedRequestAuth> {
 		try {
+			if (LOCAL_AUTH_PROVIDERS.has(model.provider)) {
+				return { ok: true };
+			}
 			const providerConfig = this.providerRequestConfigs.get(model.provider);
 			const providerConnectionAuth = await this.getProviderConnectionAuth(model);
 			if (providerConnectionAuth.status === "unavailable") {
@@ -1050,6 +1066,10 @@ export class ModelRegistry {
 	 * This intentionally does not execute command-backed config values.
 	 */
 	getProviderAuthStatus(provider: string): AuthStatus {
+		if (LOCAL_AUTH_PROVIDERS.has(provider)) {
+			return { configured: true, source: "local" };
+		}
+
 		const authStatus = this.authStorage.getAuthStatus(provider);
 		if (authStatus.source) {
 			return authStatus;

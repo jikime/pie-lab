@@ -188,7 +188,7 @@ function isDeadTerminalError(error: unknown): boolean {
 }
 
 const ANTHROPIC_SUBSCRIPTION_AUTH_WARNING =
-	"Anthropic subscription auth is active. Third-party harness usage draws from extra usage and is billed per token, not your Claude plan limits. Manage extra usage at https://claude.ai/settings/usage.";
+	"Anthropic provider subscription auth is active. This uses third-party extra usage, not the Claude Code local execution path. For local Claude Code login/subscription routing, select claude-code-adk/claude-sonnet-4-6.";
 
 function isAnthropicSubscriptionAuthKey(apiKey: string | undefined): boolean {
 	return typeof apiKey === "string" && apiKey.startsWith("sk-ant-oat");
@@ -390,9 +390,13 @@ function formatStartupDirectory(cwd: string): string {
 	return cwd.split(path.sep).join("/");
 }
 
-function formatStartupModel(model: Model<any> | undefined, thinkingLevel: string | undefined): string {
+function formatModelReference(model: Model<any> | undefined): string {
 	if (!model || isUnknownModel(model)) return "unknown";
-	const modelId = model.provider === "pie-lab-router" ? model.id : `${model.provider}/${model.id}`;
+	return model.provider === "pie-lab-router" ? model.id : `${model.provider}/${model.id}`;
+}
+
+function formatStartupModel(model: Model<any> | undefined, thinkingLevel: string | undefined): string {
+	const modelId = formatModelReference(model);
 	return thinkingLevel && thinkingLevel !== "off" ? `${modelId} ${thinkingLevel}` : modelId;
 }
 
@@ -885,7 +889,7 @@ export class InteractiveMode {
 			const modelList = this.session.scopedModels
 				.map((sm) => {
 					const thinkingStr = sm.thinkingLevel ? `:${sm.thinkingLevel}` : "";
-					return `${sm.model.id}${thinkingStr}`;
+					return `${formatModelReference(sm.model)}${thinkingStr}`;
 				})
 				.join(", ");
 			const cycleKeys = this.keybindings.getKeys("app.model.cycleForward");
@@ -4318,7 +4322,7 @@ export class InteractiveMode {
 				await this.session.setModel(model);
 				this.footer.invalidate();
 				this.updateEditorBorderColor();
-				this.showStatus(`Model: ${model.id}`);
+				this.showStatus(`Model: ${formatModelReference(model)}`);
 				void this.maybeWarnAboutAnthropicSubscriptionAuth(model);
 				this.checkDaxnutsEasterEgg(model);
 			} catch (error) {
@@ -4401,7 +4405,7 @@ export class InteractiveMode {
 						this.footer.invalidate();
 						this.updateEditorBorderColor();
 						done();
-						this.showStatus(`Model: ${model.id}`);
+						this.showStatus(`Model: ${formatModelReference(model)}`);
 						void this.maybeWarnAboutAnthropicSubscriptionAuth(model);
 						this.checkDaxnutsEasterEgg(model);
 					} catch (error) {

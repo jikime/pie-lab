@@ -1,8 +1,9 @@
 import { isAbsolute, relative, resolve, sep } from "node:path";
-import { type Component, truncateToWidth, visibleWidth } from "@pie-lab/tui";
+import { PIE_LAB_ROUTER_PROVIDER } from "@pie-lab/router";
+import { type Component, truncateToWidth } from "@pie-lab/tui";
 import type { AgentSession } from "../../../core/agent-session.ts";
 import type { ReadonlyFooterDataProvider } from "../../../core/footer-data-provider.ts";
-import { theme } from "../theme/theme.ts";
+import { type ThemeColor, theme } from "../theme/theme.ts";
 
 /**
  * Sanitize text for display in a single-line status.
@@ -39,6 +40,50 @@ export function formatCwdForFooter(cwd: string, home: string | undefined): strin
 
 	if (!isInsideHome) return cwd;
 	return relativeToHome === "" ? "~" : `~${sep}${relativeToHome}`;
+}
+
+function footerLabel(text: string): string {
+	return theme.fg("border", text);
+}
+
+function footerValue(text: string, color: ThemeColor = "text"): string {
+	return theme.fg(color, text);
+}
+
+function footerMetric(label: string, value: string, color: ThemeColor = "text"): string {
+	return `${footerLabel(label)} ${footerValue(value, color)}`;
+}
+
+function joinFooterParts(parts: string[]): string {
+	return parts.filter(Boolean).join(theme.fg("muted", " | "));
+}
+
+function formatCost(totalCost: number, usingSubscription: boolean): string {
+	return `$${totalCost.toFixed(3)}${usingSubscription ? " sub" : ""}`;
+}
+
+function contextColor(percent: number, unknown: boolean): ThemeColor {
+	if (unknown) return "warning";
+	if (percent > 90) return "error";
+	if (percent > 70) return "warning";
+	return "success";
+}
+
+function thinkingColor(thinkingLevel: string): ThemeColor {
+	switch (thinkingLevel) {
+		case "minimal":
+			return "thinkingMinimal";
+		case "low":
+			return "thinkingLow";
+		case "medium":
+			return "thinkingMedium";
+		case "high":
+			return "thinkingHigh";
+		case "xhigh":
+			return "thinkingXhigh";
+		default:
+			return "dim";
+	}
 }
 
 /**
@@ -88,6 +133,8 @@ export class FooterComponent implements Component {
 		let totalCacheRead = 0;
 		let totalCacheWrite = 0;
 		let totalCost = 0;
+		let lastAssistantProvider: string | undefined;
+		let lastAssistantModel: string | undefined;
 
 		for (const entry of this.session.sessionManager.getEntries()) {
 			if (entry.type === "message" && entry.message.role === "assistant") {
@@ -96,6 +143,8 @@ export class FooterComponent implements Component {
 				totalCacheRead += entry.message.usage.cacheRead;
 				totalCacheWrite += entry.message.usage.cacheWrite;
 				totalCost += entry.message.usage.cost.total;
+				lastAssistantProvider = entry.message.provider;
+				lastAssistantModel = entry.message.model;
 			}
 		}
 
@@ -107,115 +156,88 @@ export class FooterComponent implements Component {
 		const contextPercent = contextUsage?.percent !== null ? contextPercentValue.toFixed(1) : "?";
 
 		// Replace home directory with ~
-		let pwd = formatCwdForFooter(this.session.sessionManager.getCwd(), process.env.HOME || process.env.USERPROFILE);
+		const pwd = formatCwdForFooter(this.session.sessionManager.getCwd(), process.env.HOME || process.env.USERPROFILE);
 
-		// Add git branch if available
 		const branch = this.footerData.getGitBranch();
-		if (branch) {
-			pwd = `${pwd} (${branch})`;
-		}
 
-		// Add session name if set
 		const sessionName = this.session.sessionManager.getSessionName();
-		if (sessionName) {
-			pwd = `${pwd} • ${sessionName}`;
-		}
+
+		const pathParts = [footerMetric("dir", pwd)];
+		if (branch) pathParts.push(footerMetric("git", branch, "success"));
+		if (sessionName) pathParts.push(footerMetric("session", sessionName, "warning"));
+		const pathLine = joinFooterParts(pathParts);
 
 		// Build stats line
-		const statsParts = [];
-		if (totalInput) statsParts.push(`↑${formatTokens(totalInput)}`);
-		if (totalOutput) statsParts.push(`↓${formatTokens(totalOutput)}`);
-		if (totalCacheRead) statsParts.push(`R${formatTokens(totalCacheRead)}`);
-		if (totalCacheWrite) statsParts.push(`W${formatTokens(totalCacheWrite)}`);
+		const usageParts = [];
+		const tokenParts = [];
+		if (totalInput) tokenParts.push(footerValue(`↑${formatTokens(totalInput)}`, "borderAccent"));
+		if (totalOutput) tokenParts.push(footerValue(`↓${formatTokens(totalOutput)}`, "success"));
+		if (tokenParts.length > 0) usageParts.push(`${footerLabel("tok")} ${tokenParts.join(" ")}`);
 
 		// Show cost with "(sub)" indicator if using OAuth subscription
 		const usingSubscription = state.model ? this.session.modelRegistry.isUsingOAuth(state.model) : false;
 		if (totalCost || usingSubscription) {
-			const costStr = `$${totalCost.toFixed(3)}${usingSubscription ? " (sub)" : ""}`;
-			statsParts.push(costStr);
+			usageParts.push(
+				footerMetric("cost", formatCost(totalCost, usingSubscription), usingSubscription ? "success" : "warning"),
+			);
 		}
 
-		// Colorize context percentage based on usage
-		let contextPercentStr: string;
-		const autoIndicator = this.autoCompactEnabled ? " (auto)" : "";
+		const cacheParts = [];
+		if (totalCacheRead) cacheParts.push(footerValue(`R${formatTokens(totalCacheRead)}`, "muted"));
+		if (totalCacheWrite) cacheParts.push(footerValue(`W${formatTokens(totalCacheWrite)}`, "muted"));
+		if (cacheParts.length > 0) usageParts.push(`${footerLabel("cache")} ${cacheParts.join(" ")}`);
+
+		const autoIndicator = this.autoCompactEnabled ? " auto" : "";
 		const contextPercentDisplay =
 			contextPercent === "?"
 				? `?/${formatTokens(contextWindow)}${autoIndicator}`
 				: `${contextPercent}%/${formatTokens(contextWindow)}${autoIndicator}`;
-		if (contextPercentValue > 90) {
-			contextPercentStr = theme.fg("error", contextPercentDisplay);
-		} else if (contextPercentValue > 70) {
-			contextPercentStr = theme.fg("warning", contextPercentDisplay);
-		} else {
-			contextPercentStr = contextPercentDisplay;
-		}
-		statsParts.push(contextPercentStr);
+		const contextPart = footerMetric(
+			"ctx",
+			contextPercentDisplay,
+			contextColor(contextPercentValue, contextPercent === "?"),
+		);
 
-		let statsLeft = statsParts.join(" ");
-
-		// Add model name on the right side, plus thinking level if model supports it
+		// Add model or router alias on the right side, plus thinking level if model supports it.
 		const modelName = state.model?.id || "no-model";
-
-		let statsLeftWidth = visibleWidth(statsLeft);
-
-		// If statsLeft is too wide, truncate it
-		if (statsLeftWidth > width) {
-			statsLeft = truncateToWidth(statsLeft, width, "...");
-			statsLeftWidth = visibleWidth(statsLeft);
-		}
-
-		// Calculate available space for padding (minimum 2 spaces between stats and model)
-		const minPadding = 2;
+		const providerName = state.model?.provider;
+		const isRouterModel = providerName === PIE_LAB_ROUTER_PROVIDER;
 
 		// Add thinking level indicator if model supports reasoning
-		let rightSideWithoutProvider = modelName;
+		const identityParts: string[] = [];
+		if (state.model) {
+			if (isRouterModel) {
+				const routedModel =
+					lastAssistantProvider && lastAssistantModel
+						? `${footerValue(lastAssistantProvider, "borderAccent")}${theme.fg("muted", "/")}${footerValue(lastAssistantModel)}`
+						: undefined;
+				identityParts.push(
+					routedModel
+						? `${footerMetric("route", modelName, "warning")} ${theme.fg("muted", "->")} ${routedModel}`
+						: footerMetric("route", modelName, "warning"),
+				);
+			} else if (this.footerData.getAvailableProviderCount() > 1 && providerName) {
+				identityParts.push(
+					`${footerLabel("model")} ${footerValue(providerName, "borderAccent")}${theme.fg("muted", "/")}${footerValue(modelName)}`,
+				);
+			} else {
+				identityParts.push(footerMetric("model", modelName));
+			}
+		} else {
+			identityParts.push(footerMetric("model", "none", "warning"));
+		}
+
 		if (state.model?.reasoning) {
 			const thinkingLevel = state.thinkingLevel || "off";
-			rightSideWithoutProvider =
-				thinkingLevel === "off" ? `${modelName} • thinking off` : `${modelName} • ${thinkingLevel}`;
+			identityParts.push(footerMetric("think", thinkingLevel, thinkingColor(thinkingLevel)));
 		}
 
-		// Prepend the provider in parentheses if there are multiple providers and there's enough room
-		let rightSide = rightSideWithoutProvider;
-		if (this.footerData.getAvailableProviderCount() > 1 && state.model) {
-			rightSide = `(${state.model!.provider}) ${rightSideWithoutProvider}`;
-			if (statsLeftWidth + minPadding + visibleWidth(rightSide) > width) {
-				// Too wide, fall back
-				rightSide = rightSideWithoutProvider;
-			}
-		}
-
-		const rightSideWidth = visibleWidth(rightSide);
-		const totalNeeded = statsLeftWidth + minPadding + rightSideWidth;
-
-		let statsLine: string;
-		if (totalNeeded <= width) {
-			// Both fit - add padding to right-align model
-			const padding = " ".repeat(width - statsLeftWidth - rightSideWidth);
-			statsLine = statsLeft + padding + rightSide;
-		} else {
-			// Need to truncate right side
-			const availableForRight = width - statsLeftWidth - minPadding;
-			if (availableForRight > 0) {
-				const truncatedRight = truncateToWidth(rightSide, availableForRight, "");
-				const truncatedRightWidth = visibleWidth(truncatedRight);
-				const padding = " ".repeat(Math.max(0, width - statsLeftWidth - truncatedRightWidth));
-				statsLine = statsLeft + padding + truncatedRight;
-			} else {
-				// Not enough space for right side at all
-				statsLine = statsLeft;
-			}
-		}
-
-		// Apply dim to each part separately. statsLeft may contain color codes (for context %)
-		// that end with a reset, which would clear an outer dim wrapper. So we dim the parts
-		// before and after the colored section independently.
-		const dimStatsLeft = theme.fg("dim", statsLeft);
-		const remainder = statsLine.slice(statsLeft.length); // padding + rightSide
-		const dimRemainder = theme.fg("dim", remainder);
-
-		const pwdLine = truncateToWidth(theme.fg("dim", pwd), width, theme.fg("dim", "..."));
-		const lines = [pwdLine, dimStatsLeft + dimRemainder];
+		const statsLine = truncateToWidth(
+			joinFooterParts([...identityParts, contextPart, ...usageParts]),
+			width,
+			theme.fg("muted", "..."),
+		);
+		const lines = [truncateToWidth(pathLine, width, theme.fg("dim", "...")), statsLine];
 
 		// Add extension statuses on a single line, sorted by key alphabetically
 		const extensionStatuses = this.footerData.getExtensionStatuses();

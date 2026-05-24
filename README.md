@@ -100,6 +100,7 @@ I regularly publish my own `pi-mono` work sessions here:
 
 - `/v1/chat/completions` non-stream 및 streaming/SSE
 - router alias, fallback route plan, account selection, quota-aware selection
+- Claude Code 로컬 로그인/구독을 router 후보로 쓰는 `claude-code-adk` provider
 - provider connection/proxy pool/model cooldown 관리 API
 - fallback chain/combo policy, alias/intent mapping 관리 API와 dashboard preview
 - usage/cost dashboard, request detail/fallback timeline, account selection 이유 표시
@@ -109,6 +110,8 @@ I regularly publish my own `pi-mono` work sessions here:
 - media alias, `extra_body` passthrough, Cohere/Ollama/ElevenLabs coverage를 포함한 `/v1/embeddings`, `/v1/search`, `/v1/web/fetch`, `/v1/audio/speech`, `/v1/audio/transcriptions`, `/v1/images/generations`
 - Next.js dashboard에서 usage origin/endpoint 집계, budget form, proxy pool 수정/삭제/binding, media endpoint test form 제공
 - Pie Chat 웹 요청은 `pie-chat:web`, Telegram/Discord bridge 요청은 `pie-chat:telegram`/`pie-chat:discord` origin으로 usage/cost 기록
+
+Claude Code 로컬 로그인/구독 경로를 직접 쓰려면 `anthropic/claude-*`가 아니라 `claude-code-adk/claude-sonnet-4-6`처럼 provider까지 포함해 선택합니다. `anthropic` provider는 Anthropic Messages API 경로라서 extra usage 제한을 그대로 받을 수 있습니다. `claude-code-adk`는 최신 Claude Agent SDK의 headless stream-json 실행 경로를 사용하며, `pi`의 기존 system prompt를 기본으로 덧붙이지 않고 Claude Code 자체 agent prompt를 우선합니다.
 
 `pie-chat` is based on the existing [jikime/pi-chat](https://github.com/jikime/pi-chat) source and routed through pie-lab.
 

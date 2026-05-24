@@ -966,3 +966,44 @@ provider 호출 성공
 ```txt
 - 설치와 실행 흐름 안정화
 ```
+
+## Claude Agent SDK provider 결정
+
+Claude Code의 로컬 로그인/구독 흐름을 router 후보로 쓰기 위해 `claude-code-adk` provider를 추가했습니다.
+
+이 provider는 기존 `anthropic` provider를 대체하지 않습니다. 기존 `anthropic` provider는 Anthropic Messages API 또는 OAuth 기반 직접 호출 경로이고, `claude-code-adk`는 `@anthropic-ai/claude-agent-sdk`의 `query()`를 사용하는 Claude Code 로컬 실행 경로입니다.
+
+현재 등록 모델:
+
+```txt
+claude-code-adk/claude-sonnet-4-6
+claude-code-adk/claude-opus-4-7
+claude-code-adk/claude-haiku-4-5
+```
+
+기본 구조:
+
+```txt
+pie agent/session
+  -> router resolve
+  -> claude-code-adk model
+  -> @pie-lab/ai provider registry
+  -> Claude Agent SDK query()
+  -> 로컬 Claude Code 실행 계층
+```
+
+`ModelRegistry`는 `claude-code-adk`를 local provider로 취급합니다. 그래서 API key가 없어도 사용 가능한 provider로 표시하고, 빈 policy 기준 `auto:coding`은 `claude-code-adk/claude-sonnet-4-6`으로 resolve될 수 있습니다.
+
+선택 시에는 provider를 포함한 `claude-code-adk/claude-sonnet-4-6` 형태를 명시해야 합니다. `anthropic/claude-opus-4-7` 또는 `api: anthropic-messages`로 기록되면 기존 Anthropic provider를 사용한 것이며, Claude Code ADK 경로가 아닙니다.
+
+주의할 점:
+
+- 이 경로는 순수 LLM completion API가 아니라 Claude Code agent 실행 계층입니다.
+- Claude Code가 자체 tool을 사용할 수 있고 repository 파일을 수정할 수 있습니다.
+- 공개 third-party proxy처럼 claude.ai 로그인/구독을 대신 제공하는 방향으로 확장하지 않습니다.
+- 기존 Anthropic API/OAuth 경로는 fallback 또는 직접 모델 선택용으로 계속 유지합니다.
+- branch summary/compaction 같은 보조 호출도 local provider에서는 API key 없이 실행될 수 있게 맞춥니다.
+- SDK는 직접 `claude -p` 명령을 조립하는 wrapper가 아니라, 로컬 Claude Code subprocess와 `stream-json`으로 통신하는 headless 실행 경로입니다.
+- SDK 버전 다운그레이드는 해결책으로 채택하지 않습니다. 현재 기준은 `@anthropic-ai/claude-agent-sdk@0.3.150`입니다.
+- Claude Code는 자체 agent system prompt를 갖고 있으므로, `pi`의 기존 LLM system prompt는 기본으로 append하지 않습니다.
+- 단일 사용자 요청은 transcript wrapper 없이 그대로 전달하고, 이전 대화가 있을 때만 이전 transcript를 참고용 context로 붙입니다.
