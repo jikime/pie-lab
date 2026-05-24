@@ -80,7 +80,6 @@ Imported baseline details are tracked in [docs/origins.md](./docs/origins.md).
 | [apps/server](./apps/server) | Local OpenAI-compatible API and operations API |
 | [apps/dashboard](./apps/dashboard) | Next.js operations dashboard |
 | [apps/chat](./apps/chat) | Pie Chat web UI and Telegram/Discord bridge extension |
-| [apps/dashboard_old](./apps/dashboard_old) | Archived Vite dashboard kept for reference |
 | [.pie/settings.json](./.pie/settings.json) | Project-local package settings, including the chat bridge extension |
 
 ## Requirements
@@ -330,11 +329,19 @@ For long-running workers:
 /chat-open-all
 ```
 
-Worker mode requires `tmux` and a `pie` command on `PATH`. If you are using only `./pie-test.sh`, link the local CLI first:
+Worker mode requires `tmux` and a `pie` command on `PATH` because tmux workers launch `pie` directly. The `pie` executable comes from `@pie-lab/coding-agent`; the chat bridge itself is loaded from `apps/chat` through `.pie/settings.json`.
+
+If you are using only `./pie-test.sh`, link the local CLI first:
 
 ```bash
 npm run build
 npm link --workspace @pie-lab/coding-agent
+```
+
+For one-off bridge testing without project settings, load the chat extension explicitly:
+
+```bash
+pie -e apps/chat
 ```
 
 Chat bridge state is stored in:
