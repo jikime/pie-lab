@@ -275,11 +275,26 @@ const STARTUP_ASCII_WIDTH = 22;
 const STARTUP_BOX_MAX_WIDTH = 112;
 const STARTUP_BOX_MIN_WIDTH = 72;
 
-type StartupArtColor = "art" | "feet" | "filling" | "face" | "sparkle";
+const STARTUP_PIXEL_COLORS = {
+	crust: { rgb: [180, 105, 45], color256: 130 },
+	filling: { rgb: [245, 158, 66], color256: 215 },
+	cream: { rgb: [255, 244, 214], color256: 230 },
+	berry: { rgb: [220, 58, 88], color256: 167 },
+	plate: { rgb: [78, 176, 214], color256: 74 },
+	orange: { rgb: [249, 115, 22], color256: 202 },
+	yellow: { rgb: [234, 179, 8], color256: 220 },
+	red: { rgb: [239, 68, 68], color256: 203 },
+	green: { rgb: [132, 204, 22], color256: 112 },
+	cyan: { rgb: [34, 211, 238], color256: 80 },
+	blue: { rgb: [59, 130, 246], color256: 33 },
+	purple: { rgb: [139, 92, 246], color256: 99 },
+} satisfies Record<string, StartupColor>;
 
-type StartupArtSegment = {
+type StartupPixelColor = keyof typeof STARTUP_PIXEL_COLORS;
+
+type StartupPixelSegment = {
 	text: string;
-	color: StartupArtColor;
+	color?: StartupPixelColor;
 };
 
 type StartupLayout = {
@@ -334,43 +349,52 @@ function getStartupLayout(): StartupLayout {
 	};
 }
 
-function startupArtLine(palette: StartupPalette, segments: StartupArtSegment[]): string {
+function startupPixelLine(segments: StartupPixelSegment[]): string {
 	const width = segments.reduce((total, segment) => total + segment.text.length, 0);
-	const line = segments.map((segment) => startupFg(segment.text, palette[segment.color])).join("");
+	const line = segments
+		.map((segment) => (segment.color ? startupFg(segment.text, STARTUP_PIXEL_COLORS[segment.color]) : segment.text))
+		.join("");
 	return `${line}${" ".repeat(Math.max(0, STARTUP_ASCII_WIDTH - width))}`;
 }
 
-function renderStartupAsciiArt(palette: StartupPalette): string[] {
+function renderStartupPixelArt(): string[] {
 	return [
-		startupArtLine(palette, [
-			{ text: "   *", color: "sparkle" },
-			{ text: "    .-.    ", color: "art" },
-			{ text: "*", color: "sparkle" },
+		startupPixelLine([{ text: "        " }, { text: "██", color: "berry" }]),
+		startupPixelLine([
+			{ text: "    " },
+			{ text: "██", color: "cream" },
+			{ text: "██", color: "cream" },
+			{ text: "██", color: "cream" },
 		]),
-		startupArtLine(palette, [{ text: "      .'   '.", color: "art" }]),
-		startupArtLine(palette, [
-			{ text: "  --", color: "feet" },
-			{ text: " / ", color: "art" },
-			{ text: "o   o", color: "face" },
-			{ text: " \\ ", color: "art" },
-			{ text: "--", color: "feet" },
+		startupPixelLine([{ text: "  " }, { text: "████████████", color: "crust" }]),
+		startupPixelLine([
+			{ text: "  " },
+			{ text: "██", color: "crust" },
+			{ text: "████████", color: "filling" },
+			{ text: "██", color: "crust" },
 		]),
-		startupArtLine(palette, [
-			{ text: "    /    ", color: "art" },
-			{ text: "v", color: "face" },
-			{ text: "    \\", color: "art" },
+		startupPixelLine([
+			{ text: "  " },
+			{ text: "██", color: "crust" },
+			{ text: "██", color: "filling" },
+			{ text: "████", color: "berry" },
+			{ text: "██", color: "filling" },
+			{ text: "██", color: "crust" },
 		]),
-		startupArtLine(palette, [
-			{ text: "   /  ", color: "art" },
-			{ text: ".-pie-.", color: "filling" },
-			{ text: "  \\", color: "art" },
+		startupPixelLine([
+			{ text: "    " },
+			{ text: "██", color: "crust" },
+			{ text: "██████", color: "filling" },
+			{ text: "██", color: "crust" },
 		]),
-		startupArtLine(palette, [{ text: "  /__/_______\\__\\", color: "art" }]),
-		startupArtLine(palette, [
-			{ text: "     /_/", color: "feet" },
-			{ text: "   ", color: "art" },
-			{ text: "\\_\\", color: "feet" },
+		startupPixelLine([
+			{ text: "      " },
+			{ text: "██", color: "crust" },
+			{ text: "████", color: "filling" },
+			{ text: "██", color: "crust" },
 		]),
+		startupPixelLine([{ text: "        " }, { text: "████", color: "crust" }]),
+		startupPixelLine([{ text: "  " }, { text: "██████████████", color: "plate" }]),
 	];
 }
 
@@ -458,7 +482,7 @@ function renderStartupTipLine(palette: StartupPalette, command: string, descript
 
 function renderStartupBox(palette: StartupPalette, options: StartupBoxOptions): string {
 	const layout = getStartupLayout();
-	const artLines = renderStartupAsciiArt(palette).map((line) => centerStartupLine(line, layout.leftWidth));
+	const artLines = renderStartupPixelArt().map((line) => centerStartupLine(line, layout.leftWidth));
 	const startupHintLine = (text: string): string =>
 		startupFg(truncateStartupText(text, layout.rightWidth), palette.hint);
 	const startupTipLine = (command: string, description: string): string => {

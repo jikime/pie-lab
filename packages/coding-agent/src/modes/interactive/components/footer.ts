@@ -1,9 +1,88 @@
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import { PIE_LAB_ROUTER_PROVIDER } from "@pie-lab/router";
-import { type Component, truncateToWidth } from "@pie-lab/tui";
+import { type Component, getCapabilities, truncateToWidth } from "@pie-lab/tui";
 import type { AgentSession } from "../../../core/agent-session.ts";
 import type { ReadonlyFooterDataProvider } from "../../../core/footer-data-provider.ts";
-import { type ThemeColor, theme } from "../theme/theme.ts";
+import { detectTerminalBackground, theme } from "../theme/theme.ts";
+
+type FooterColor = {
+	rgb: [number, number, number];
+	color256: number;
+};
+
+type FooterPalette = {
+	label: FooterColor;
+	value: FooterColor;
+	primary: FooterColor;
+	secondary: FooterColor;
+	path: FooterColor;
+	model: FooterColor;
+	status: FooterColor;
+	warning: FooterColor;
+	error: FooterColor;
+	muted: FooterColor;
+};
+
+type FooterColorName = keyof FooterPalette;
+
+const FOOTER_PALETTES: Record<"dark" | "light" | "universal", FooterPalette> = {
+	dark: {
+		label: { rgb: [148, 163, 184], color256: 109 },
+		value: { rgb: [226, 232, 240], color256: 254 },
+		primary: { rgb: [96, 165, 250], color256: 75 },
+		secondary: { rgb: [103, 181, 209], color256: 110 },
+		path: { rgb: [72, 187, 142], color256: 72 },
+		model: { rgb: [224, 128, 64], color256: 173 },
+		status: { rgb: [72, 187, 142], color256: 72 },
+		warning: { rgb: [222, 165, 54], color256: 178 },
+		error: { rgb: [224, 102, 102], color256: 167 },
+		muted: { rgb: [148, 163, 184], color256: 109 },
+	},
+	light: {
+		label: { rgb: [71, 85, 105], color256: 60 },
+		value: { rgb: [17, 24, 39], color256: 235 },
+		primary: { rgb: [37, 99, 190], color256: 26 },
+		secondary: { rgb: [24, 112, 132], color256: 30 },
+		path: { rgb: [30, 120, 91], color256: 29 },
+		model: { rgb: [176, 86, 35], color256: 130 },
+		status: { rgb: [30, 120, 91], color256: 29 },
+		warning: { rgb: [166, 104, 28], color256: 136 },
+		error: { rgb: [170, 48, 48], color256: 124 },
+		muted: { rgb: [71, 85, 105], color256: 60 },
+	},
+	universal: {
+		label: { rgb: [71, 85, 105], color256: 60 },
+		value: { rgb: [55, 65, 81], color256: 240 },
+		primary: { rgb: [37, 99, 190], color256: 26 },
+		secondary: { rgb: [24, 112, 132], color256: 30 },
+		path: { rgb: [30, 120, 91], color256: 29 },
+		model: { rgb: [176, 86, 35], color256: 130 },
+		status: { rgb: [30, 120, 91], color256: 29 },
+		warning: { rgb: [166, 104, 28], color256: 136 },
+		error: { rgb: [170, 48, 48], color256: 124 },
+		muted: { rgb: [107, 114, 128], color256: 243 },
+	},
+};
+
+function getFooterPalette(): FooterPalette {
+	const detection = detectTerminalBackground();
+	if (detection.confidence === "high") {
+		return FOOTER_PALETTES[detection.theme];
+	}
+	if (theme.name === "light" || theme.name === "dark") {
+		return FOOTER_PALETTES[theme.name];
+	}
+	return FOOTER_PALETTES.universal;
+}
+
+function footerFg(text: string, colorName: FooterColorName, bold = false): string {
+	const color = getFooterPalette()[colorName];
+	const ansi = getCapabilities().trueColor
+		? `\x1b[38;2;${color.rgb[0]};${color.rgb[1]};${color.rgb[2]}m`
+		: `\x1b[38;5;${color.color256}m`;
+	const styled = `${ansi}${text}\x1b[39m`;
+	return bold ? `\x1b[1m${styled}\x1b[22m` : styled;
+}
 
 /**
  * Sanitize text for display in a single-line status.
@@ -43,46 +122,43 @@ export function formatCwdForFooter(cwd: string, home: string | undefined): strin
 }
 
 function footerLabel(text: string): string {
-	return theme.fg("border", text);
+	return footerFg(text, "label");
 }
 
-function footerValue(text: string, color: ThemeColor = "text"): string {
-	return theme.fg(color, text);
+function footerValue(text: string, color: FooterColorName = "value", bold = false): string {
+	return footerFg(text, color, bold);
 }
 
-function footerMetric(label: string, value: string, color: ThemeColor = "text"): string {
-	return `${footerLabel(label)} ${footerValue(value, color)}`;
+function footerMetric(label: string, value: string, color: FooterColorName = "value", bold = false): string {
+	return `${footerLabel(label)} ${footerValue(value, color, bold)}`;
 }
 
 function joinFooterParts(parts: string[]): string {
-	return parts.filter(Boolean).join(theme.fg("muted", " | "));
+	return parts.filter(Boolean).join(footerFg(" | ", "muted"));
 }
 
 function formatCost(totalCost: number, usingSubscription: boolean): string {
 	return `$${totalCost.toFixed(3)}${usingSubscription ? " sub" : ""}`;
 }
 
-function contextColor(percent: number, unknown: boolean): ThemeColor {
+function contextColor(percent: number, unknown: boolean): FooterColorName {
 	if (unknown) return "warning";
 	if (percent > 90) return "error";
 	if (percent > 70) return "warning";
-	return "success";
+	return "status";
 }
 
-function thinkingColor(thinkingLevel: string): ThemeColor {
+function thinkingColor(thinkingLevel: string): FooterColorName {
 	switch (thinkingLevel) {
-		case "minimal":
-			return "thinkingMinimal";
-		case "low":
-			return "thinkingLow";
-		case "medium":
-			return "thinkingMedium";
 		case "high":
-			return "thinkingHigh";
 		case "xhigh":
-			return "thinkingXhigh";
+			return "warning";
+		case "minimal":
+		case "low":
+		case "medium":
+			return "status";
 		default:
-			return "dim";
+			return "muted";
 	}
 }
 
@@ -162,23 +238,23 @@ export class FooterComponent implements Component {
 
 		const sessionName = this.session.sessionManager.getSessionName();
 
-		const pathParts = [footerMetric("dir", pwd)];
-		if (branch) pathParts.push(footerMetric("git", branch, "success"));
-		if (sessionName) pathParts.push(footerMetric("session", sessionName, "warning"));
+		const pathParts = [footerMetric("dir", pwd, "path", true)];
+		if (branch) pathParts.push(footerMetric("git", branch));
+		if (sessionName) pathParts.push(footerMetric("session", sessionName));
 		const pathLine = joinFooterParts(pathParts);
 
 		// Build stats line
 		const usageParts = [];
 		const tokenParts = [];
-		if (totalInput) tokenParts.push(footerValue(`↑${formatTokens(totalInput)}`, "borderAccent"));
-		if (totalOutput) tokenParts.push(footerValue(`↓${formatTokens(totalOutput)}`, "success"));
+		if (totalInput) tokenParts.push(footerValue(`↑${formatTokens(totalInput)}`));
+		if (totalOutput) tokenParts.push(footerValue(`↓${formatTokens(totalOutput)}`));
 		if (tokenParts.length > 0) usageParts.push(`${footerLabel("tok")} ${tokenParts.join(" ")}`);
 
 		// Show cost with "(sub)" indicator if using OAuth subscription
 		const usingSubscription = state.model ? this.session.modelRegistry.isUsingOAuth(state.model) : false;
 		if (totalCost || usingSubscription) {
 			usageParts.push(
-				footerMetric("cost", formatCost(totalCost, usingSubscription), usingSubscription ? "success" : "warning"),
+				footerMetric("cost", formatCost(totalCost, usingSubscription), usingSubscription ? "status" : "warning"),
 			);
 		}
 
@@ -209,19 +285,19 @@ export class FooterComponent implements Component {
 			if (isRouterModel) {
 				const routedModel =
 					lastAssistantProvider && lastAssistantModel
-						? `${footerValue(lastAssistantProvider, "borderAccent")}${theme.fg("muted", "/")}${footerValue(lastAssistantModel)}`
+						? `${footerValue(lastAssistantProvider, "primary", true)}${footerFg("/", "muted")}${footerValue(lastAssistantModel, "model", true)}`
 						: undefined;
 				identityParts.push(
 					routedModel
-						? `${footerMetric("route", modelName, "warning")} ${theme.fg("muted", "->")} ${routedModel}`
-						: footerMetric("route", modelName, "warning"),
+						? `${footerMetric("route", modelName, "model", true)} ${footerFg("->", "muted")} ${routedModel}`
+						: footerMetric("route", modelName, "model", true),
 				);
 			} else if (this.footerData.getAvailableProviderCount() > 1 && providerName) {
 				identityParts.push(
-					`${footerLabel("model")} ${footerValue(providerName, "borderAccent")}${theme.fg("muted", "/")}${footerValue(modelName)}`,
+					`${footerLabel("model")} ${footerValue(providerName, "primary", true)}${footerFg("/", "muted")}${footerValue(modelName, "model", true)}`,
 				);
 			} else {
-				identityParts.push(footerMetric("model", modelName));
+				identityParts.push(footerMetric("model", modelName, "model", true));
 			}
 		} else {
 			identityParts.push(footerMetric("model", "none", "warning"));
@@ -235,9 +311,9 @@ export class FooterComponent implements Component {
 		const statsLine = truncateToWidth(
 			joinFooterParts([...identityParts, contextPart, ...usageParts]),
 			width,
-			theme.fg("muted", "..."),
+			footerFg("...", "muted"),
 		);
-		const lines = [truncateToWidth(pathLine, width, theme.fg("dim", "...")), statsLine];
+		const lines = [truncateToWidth(pathLine, width, footerFg("...", "muted")), statsLine];
 
 		// Add extension statuses on a single line, sorted by key alphabetically
 		const extensionStatuses = this.footerData.getExtensionStatuses();
@@ -247,7 +323,7 @@ export class FooterComponent implements Component {
 				.map(([, text]) => sanitizeStatusText(text));
 			const statusLine = sortedStatuses.join(" ");
 			// Truncate to terminal width with dim ellipsis for consistency with footer style
-			lines.push(truncateToWidth(statusLine, width, theme.fg("dim", "...")));
+			lines.push(truncateToWidth(statusLine, width, footerFg("...", "muted")));
 		}
 
 		return lines;
