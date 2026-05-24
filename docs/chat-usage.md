@@ -35,6 +35,8 @@ google/gemini-3.1-pro-preview
 google/gemini-2.5-flash
 ```
 
+웹 채팅 요청은 API server로 전달될 때 `clientOrigin=pie-chat:web`으로 usage record에 저장됩니다. dashboard-next의 `Usage -> Origins` 탭에서 웹 채팅 비용과 CLI/bridge 비용을 분리해서 볼 수 있습니다.
+
 ## Telegram/Discord Bridge 실행
 
 Telegram/Discord bridge는 Next.js 웹 서버가 아니라 `pie` extension으로 실행합니다.
@@ -139,6 +141,8 @@ Telegram/Discord 메시지
 중요한 점은, 터미널에 직접 입력한 메시지는 로컬 `pie` 대화입니다. 이 경우 응답은 터미널에만 표시되고 Telegram/Discord로 자동 전송되지 않습니다.
 
 Telegram/Discord로 응답을 보내려면 메시지가 반드시 원격 채팅에서 들어온 턴이어야 합니다.
+
+bridge worker에서 발생한 모델 호출은 `clientOrigin=pie-chat:telegram` 또는 `clientOrigin=pie-chat:discord`로 usage record에 저장됩니다. 따라서 같은 모델을 사용해도 웹 채팅, Telegram, Discord, 일반 CLI 비용을 dashboard-next에서 구분할 수 있습니다.
 
 ## 자주 쓰는 명령
 
@@ -253,5 +257,6 @@ Discord에서 자주 생기는 원인은 다음과 같습니다.
 - 저장 경로: `~/.pie/agent/chat`
 - worker 실행 명령: `pie`
 - 웹 채팅 앱: `apps/chat/src`
+- usage origin: `pie-chat:web`, `pie-chat:telegram`, `pie-chat:discord`
 
 웹 채팅과 Telegram/Discord bridge는 같은 `apps/chat`에 있지만 실행 방식은 다릅니다. 웹 채팅은 Next.js 서버로 실행하고, Telegram/Discord bridge는 `pie -e apps/chat`로 실행합니다.

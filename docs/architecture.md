@@ -23,11 +23,6 @@ pie-lab/
     server/
     chat/
 
-  examples/
-    simple-chat/
-    file-summary-agent/
-    coding-review-agent/
-
   docs/
 ```
 
@@ -175,7 +170,6 @@ pie status
 pie provider list
 pie provider add
 pie model list
-pie agent run ./agents/code-reviewer
 ```
 
 ### apps/chat
@@ -269,29 +263,17 @@ router는 provider를 직접 구현하지 않습니다. 어떤 provider와 모�
 
 ### packages/agent
 
-`pi`의 기존 agent/runtime 흐름을 존중하면서 확장하는 ADK layer입니다.
+`pi`의 기존 agent/runtime 흐름을 보존하는 영역입니다.
 
 담당 기능:
 
-- `defineAgent`
 - `defineTool`
-- `runAgent`
 - tool execution loop
 - context persistence
-- agent config loading
-- agent run event stream
+- Agent/AgentHarness 기반 실행 흐름
+- skill, prompt-template, extension 연동
 
-초기 agent runtime은 단순해야 합니다.
-
-```txt
-user input
-  -> context 구성
-  -> model 호출
-  -> tool call 실행
-  -> tool result 추가
-  -> 필요 시 model 재호출
-  -> final response 반환
-```
+기존 coding-agent 실행 경로가 router, quota, usage/cost 기록을 안정적으로 통과하도록 유지합니다.
 
 ### packages/storage
 
@@ -644,22 +626,6 @@ type ModelSelection =
       primary: string;
       fallback?: string | string[];
     };
-```
-
-agent 정의에서는 다음처럼 사용합니다.
-
-```ts
-defineAgent({
-  name: "code-reviewer",
-  model: {
-    mode: "router",
-    intent: "coding",
-    constraints: {
-      requireTools: true,
-      latency: "normal"
-    }
-  }
-});
 ```
 
 OpenAI-compatible endpoint로 들어온 문자열 model은 server 진입점에서 `ModelSelection`으로 normalize합니다.

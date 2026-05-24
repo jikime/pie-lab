@@ -132,7 +132,7 @@ interface AttemptFallbackDecision {
 }
 
 const CORS_HEADERS = {
-	"access-control-allow-headers": "content-type, authorization",
+	"access-control-allow-headers": "content-type, authorization, x-pie-client-origin, x-pie-origin",
 	"access-control-allow-methods": "GET, POST, OPTIONS",
 	"access-control-allow-origin": "*",
 };
@@ -214,6 +214,9 @@ export async function handleChatCompletionsRequest(
 	}
 
 	const requestId = options.requestIdFactory();
+	const clientOrigin = normalizeClientOriginHeader(
+		request.headers["x-pie-client-origin"] ?? request.headers["x-pie-origin"],
+	);
 	const body = await readJsonBody<OpenAIChatCompletionRequest>(request);
 	const validationError = validateChatCompletionRequest(body);
 	if (validationError) {
@@ -263,6 +266,7 @@ export async function handleChatCompletionsRequest(
 			authResolver: options.authResolver,
 			usageStore: options.usageStore,
 			budgetSettings,
+			clientOrigin,
 			now: options.now,
 		});
 		return;
@@ -305,6 +309,7 @@ export async function handleChatCompletionsRequest(
 				attemptIndex,
 				budgetStatus,
 				trace,
+				clientOrigin,
 			});
 			if (canFallback) continue;
 			writeJson(
@@ -376,6 +381,7 @@ export async function handleChatCompletionsRequest(
 				attemptIndex,
 				attemptCount: plan.routes.length,
 				endpoint: DEFAULT_ENDPOINT,
+				clientOrigin,
 				usage: toUsageTokens(assistant),
 				cost: toUsageCost(assistant),
 				tokenSaver: toUsageTokenSaver(tokenSaverStats),
@@ -437,6 +443,7 @@ export async function handleChatCompletionsRequest(
 				attemptIndex,
 				attemptCount: plan.routes.length,
 				endpoint: DEFAULT_ENDPOINT,
+				clientOrigin,
 				tokenSaver: toUsageTokenSaver(tokenSaverStats),
 				status: "error",
 				errorCode: fallback.statusCode,
@@ -481,6 +488,7 @@ async function handleStreamingChatCompletion(options: {
 	authResolver?: ChatCompletionAuthResolver;
 	usageStore?: UsageStore;
 	budgetSettings?: ProviderConnectionSettings;
+	clientOrigin?: string;
 	now: () => Date;
 }): Promise<void> {
 	const attemptErrors: AttemptError[] = [];
@@ -525,6 +533,7 @@ async function handleStreamingChatCompletion(options: {
 				attemptIndex,
 				budgetStatus,
 				trace,
+				clientOrigin: options.clientOrigin,
 			});
 			if (canFallback) continue;
 			writeJson(
@@ -648,6 +657,7 @@ async function handleStreamingChatCompletion(options: {
 						attemptIndex,
 						attemptCount: options.plan.routes.length,
 						endpoint: DEFAULT_ENDPOINT,
+						clientOrigin: options.clientOrigin,
 						usage: toUsageTokens(event.message),
 						cost: toUsageCost(event.message),
 						tokenSaver: toUsageTokenSaver(tokenSaverStats),
@@ -712,6 +722,7 @@ async function handleStreamingChatCompletion(options: {
 						attemptIndex,
 						attemptCount: options.plan.routes.length,
 						endpoint: DEFAULT_ENDPOINT,
+						clientOrigin: options.clientOrigin,
 						usage: toUsageTokens(event.error),
 						cost: toUsageCost(event.error),
 						tokenSaver: toUsageTokenSaver(tokenSaverStats),
@@ -787,6 +798,7 @@ async function handleStreamingChatCompletion(options: {
 				attemptIndex,
 				attemptCount: options.plan.routes.length,
 				endpoint: DEFAULT_ENDPOINT,
+				clientOrigin: options.clientOrigin,
 				tokenSaver: toUsageTokenSaver(tokenSaverStats),
 				status: "error",
 				errorCode: fallback.statusCode,
@@ -846,6 +858,7 @@ async function handleStreamingChatCompletion(options: {
 				attemptIndex,
 				attemptCount: options.plan.routes.length,
 				endpoint: DEFAULT_ENDPOINT,
+				clientOrigin: options.clientOrigin,
 				tokenSaver: toUsageTokenSaver(tokenSaverStats),
 				status: "error",
 				errorCode: fallback.statusCode,
@@ -1071,6 +1084,7 @@ async function recordBudgetSkippedUsage(
 		attemptIndex: number;
 		budgetStatus: BudgetStatus;
 		trace: UsageTraceEvent[];
+		clientOrigin?: string;
 	},
 ): Promise<void> {
 	await recordUsage(usageStore, {
@@ -1086,6 +1100,7 @@ async function recordBudgetSkippedUsage(
 		attemptIndex: options.attemptIndex,
 		attemptCount: options.plan.routes.length,
 		endpoint: DEFAULT_ENDPOINT,
+		clientOrigin: options.clientOrigin,
 		status: "skipped",
 		errorCode: "budget_limit_exceeded",
 		errorMessage: budgetViolationMessage(options.budgetStatus),
@@ -1684,6 +1699,13 @@ function writeMethodNotAllowed(response: ServerResponse): void {
 			type: "invalid_request_error",
 		},
 	});
+}
+
+function normalizeClientOriginHeader(value: string | string[] | undefined): string | undefined {
+	const raw = Array.isArray(value) ? value[0] : value;
+	const normalized = raw?.trim();
+	if (!normalized) return undefined;
+	return normalized.slice(0, 120);
 }
 
 function isOpenAIChatMessage(value: unknown): value is OpenAIChatMessage {

@@ -303,44 +303,19 @@ pie-lab agent/runtime
   pi provider engine을 우회하는 별도 provider executor 중복
 ```
 
-## 7단계: agent runtime 추가
+## 7단계: 기존 agent runtime 보존
 
-초기 agent runtime은 `packages/agent`에서 시작합니다.
+초기에는 새 agent runtime을 추가하지 않습니다. `pi`에서 이미 가져온 `packages/agent`, `packages/coding-agent`의 Agent, AgentHarness, skill, extension, prompt-template 흐름을 보존하고 router와 usage/cost 기록을 연결합니다.
 
-필수 API:
+현재 우선할 것:
 
-```ts
-defineTool()
-defineAgent()
-runAgent()
-```
-
-초기 예제:
-
-```txt
-examples/simple-chat
-examples/file-summary-agent
-examples/coding-review-agent
-```
-
-agent runtime은 provider를 직접 호출하지 않고 router를 통해 호출합니다.
+- 기존 `pie` CLI 실행
+- `pie -p` 기반 non-interactive 실행
+- skill과 extension 로딩
+- provider 직접 호출이 아니라 router 경유 호출
+- usage/cost 기록
 
 이유는 간단합니다. 그래야 fallback, quota, usage log가 모든 호출에 일관되게 적용됩니다.
-
-agent 정의에서는 문자열 model보다 structured model selection을 우선 지원합니다.
-
-```ts
-defineAgent({
-  name: "code-reviewer",
-  model: {
-    mode: "router",
-    intent: "coding",
-    constraints: {
-      requireTools: true
-    }
-  }
-});
-```
 
 OpenAI-compatible client와 CLI 편의를 위해 문자열 model도 함께 지원합니다.
 
@@ -356,7 +331,6 @@ pie status
 pie provider list
 pie provider add
 pie model list
-pie agent run ./agents/code-reviewer
 ```
 
 dashboard 메뉴 예시:

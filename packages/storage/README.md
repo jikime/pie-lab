@@ -53,7 +53,7 @@ Still pending:
 
 - Syncing provider connection removal when credentials are removed from `auth.json`
 - Dashboard and CLI screens for provider connection setup
-- Proxy pool test endpoint and Vercel relay deploy helper
+- Proxy pool test endpoint
 - Quota storage
 - Pricing override storage
 - Migration from JSONL to a richer local database if needed

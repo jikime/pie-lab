@@ -278,6 +278,42 @@ npm --workspace @pie-lab/dashboard-next run build
 
 - Next.js 페이지 title은 `Pie Lab Dashboard`로 표시됩니다.
 - 사이드바 메뉴는 `Overview`, `Routing`, `Providers`, `Usage`, `Quota`, `Media`, `Proxy`, `Logs`, `Settings`로 렌더링됩니다.
+
+## 2026-05-24: 제외 후보 제거와 dashboard-next 운영 기능 보강
+
+완료한 일:
+
+- 통합 범위에서 제외하기로 한 별도 runner/helper 문구를 제거했습니다.
+- `UsageRecord`에 `clientOrigin`을 추가해 웹 채팅, Telegram/Discord bridge, dashboard media test 같은 호출 출처를 usage/cost에서 구분할 수 있게 했습니다.
+- usage summary에 provider/model뿐 아니라 endpoint/client origin별 집계를 추가했습니다.
+- `/v1/chat/completions`와 media endpoint가 `x-pie-client-origin` 헤더를 usage record에 저장하도록 했습니다.
+- `pie-chat` 웹 앱은 `pie-chat:web` origin으로 server를 호출합니다.
+- `pie-chat` Telegram/Discord bridge worker는 `PIE_LAB_USAGE_ORIGIN=pie-chat:<service>` 환경으로 실행되어 CLI usage 기록에도 chat origin이 남습니다.
+- `apps/dashboard-next` Usage 화면에 Origins/Endpoints 탭과 record별 origin column을 추가했습니다.
+- Settings 화면에 budget form, provider override, 현재 window preview를 추가했습니다.
+- Proxy 화면에 pool update/delete/active/strict toggle, provider connection binding, 현재 binding table을 추가했습니다.
+- Media 화면에 embeddings, web search/fetch, TTS/STT, image endpoint test form을 추가했습니다.
+- Providers 화면에 provider별 OAuth/API token setup guide를 추가했습니다.
+
+검증:
+
+```bash
+npm --workspace @pie-lab/storage run build
+npm --workspace @pie-lab/server run check
+npm --workspace @pie-lab/server run build
+npm --workspace @pie-lab/dashboard-next run lint
+npm --workspace @pie-lab/dashboard-next run build
+npm --workspace @pie-lab/pie-chat run lint
+npm --workspace @pie-lab/pie-chat run check:bridge
+npm --workspace @pie-lab/pie-chat run build
+npm --workspace @pie-lab/coding-agent run build
+```
+
+현재 기준:
+
+- `apps/dashboard-next`는 별도 실행 dashboard로 유지합니다.
+- 실제 Telegram/Discord 계정 기준 장시간 송수신 검증은 수동 확인이 필요합니다.
+- 앞으로 문서에는 통합 범위에서 제외한 runner/helper 기능을 다시 추가하지 않습니다.
 - 브라우저 콘솔 error/warning은 없습니다.
 
 당시 한계:
@@ -857,7 +893,6 @@ npm --workspace @pie-lab/dashboard run build
 현재 한계:
 
 - 당시에는 9router의 proxy pool test endpoint가 아직 없었습니다.
-- 9router의 Vercel relay deploy helper는 아직 없습니다.
 - 그 시점에는 quota 값을 routing/account selection 우선순위에 반영하지 않았습니다.
 
 ## 2026-05-22: provider reset time 기반 quota/rate-limit cooldown 반영
@@ -1033,7 +1068,7 @@ ModelRegistry.getApiKeyAndHeaders(model)
 현재 한계:
 
 - provider 연결 생성/로그인 UI는 아직 9router 수준으로 모두 이식되지 않았습니다.
-- RTK token saver와 Vercel relay deploy helper는 아직 남아 있습니다.
+- RTK token saver는 이후 1차 통합했습니다.
 - quota 상세 dashboard는 현재 기본 조회 중심이며, 9router의 모든 운영 화면을 그대로 옮긴 단계는 아닙니다.
 
 ## 2026-05-23: auth.json과 provider connection 삭제/변경 동기화
@@ -1150,7 +1185,6 @@ npm --workspace @pie-lab/router test -- model-selection.test.ts
 
 현재 한계:
 
-- Vercel relay deploy helper는 아직 없습니다.
 - proxy pool test는 실제 외부 네트워크를 사용하므로 로컬/사내망/방화벽 환경에 따라 실패할 수 있습니다.
 
 ## 2026-05-23: 9router 통합 9단계 구현
@@ -1473,7 +1507,6 @@ npm --workspace @pie-lab/coding-agent test -- sdk-router-fallback.test.ts
 
 당시 남은 큰 항목:
 
-- Vercel deploy helper
 - media endpoint별 provider coverage 확대
 - `pie-chat` 실제 bridge 통합
 
@@ -1505,7 +1538,6 @@ npm --workspace @pie-lab/dashboard run check
 
 현재 남은 큰 항목:
 
-- Vercel deploy helper
 - `pie-chat` 실제 bridge 통합
 
 ## 2026-05-23: 프로젝트 이름을 pie-lab으로 변경
@@ -1777,8 +1809,7 @@ extension loader 확인:
 - 실제 Telegram/Discord 환경에서 `pie-chat` bridge 장시간 end-to-end 검증
 - chat-origin usage/cost dashboard 구분 고도화
 - 기존 `apps/dashboard` 기능을 `apps/dashboard-next`로 단계적 이관
-- `pie agent run` 중심의 ADK 사용 경험 제품화
-- Vercel relay deploy helper
+- 설치와 실행 흐름 안정화
 
 ## 2026-05-24: pie-chat E2E 검증 체크리스트 추가
 
@@ -1795,3 +1826,100 @@ extension loader 확인:
 - `status`, `new`, `compact`, `stop` 원격 명령이 동작해야 합니다.
 - 첨부파일 수신과 `chat_attach` 송신이 동작해야 합니다.
 - 각 요청이 router를 거친 usage record로 남아야 합니다.
+
+## 2026-05-24: dashboard-next 이관 범위 문서화
+
+완료한 일:
+
+- `docs/dashboard-next-migration.md`를 추가했습니다.
+- 기존 `apps/dashboard`를 9router 운영 기능의 기준 구현으로 두고, `apps/dashboard-next`를 제품화 dashboard로 단계적 이관한다는 기준을 정리했습니다.
+- Usage, Logs, Routing, Providers, Quota, Model Availability, Budget, Proxy, Media, Settings, Chat 영역별 이관 상태와 남은 일을 표로 정리했습니다.
+- 우선순위는 `Usage/Logs -> Providers -> Quota/Model Availability -> Routing -> Budget/Proxy/Media -> Chat 상태` 순서로 잡았습니다.
+- `docs/README.md`에서 새 문서로 연결했습니다.
+
+## 2026-05-24: dashboard-next usage detail viewer 1차 구현
+
+완료한 일:
+
+- `apps/dashboard-next`의 usage/logs table에 request detail 버튼을 추가했습니다.
+- `GET /usage/:requestId`를 호출하는 `dashboardApi.usageDetail()`과 관련 타입을 추가했습니다.
+- detail sheet에서 attempt summary, fallback timeline, raw event trace를 볼 수 있게 했습니다.
+- logs page 설명을 request detail과 raw trace 기준으로 갱신했습니다.
+- `docs/dashboard-next-migration.md`에서 Usage/Logs 이관 상태를 현재 구현 기준으로 업데이트했습니다.
+
+검증:
+
+```bash
+npm --workspace @pie-lab/dashboard-next run lint
+npm --workspace @pie-lab/dashboard-next run build
+```
+
+## 2026-05-24: dashboard-next provider connection 관리 1차 구현
+
+완료한 일:
+
+- `apps/dashboard-next`의 Providers 화면에 manual provider connection 생성 form을 추가했습니다.
+- API key, access token, OAuth token 형식의 connection 입력을 받을 수 있게 했습니다.
+- connection 활성화/비활성화와 삭제 버튼을 추가했습니다.
+- `dashboardApi.createProviderConnection()`, `dashboardApi.updateProviderConnection()`, `dashboardApi.deleteProviderConnection()`을 추가했습니다.
+- `docs/dashboard-next-migration.md`에서 Providers 이관 상태를 현재 구현 기준으로 업데이트했습니다.
+
+검증:
+
+```bash
+npm --workspace @pie-lab/dashboard-next run lint
+npm --workspace @pie-lab/dashboard-next run build
+```
+
+## 2026-05-24: dashboard-next OAuth redirect login 1차 구현
+
+완료한 일:
+
+- Providers 화면에서 `GET /oauth/providers`로 지원 OAuth provider 목록을 읽게 했습니다.
+- `GET /oauth/start`를 호출해 Claude, Codex, Gemini CLI OAuth redirect login을 시작할 수 있게 했습니다.
+- redirect callback으로 돌아온 `code`와 `state`를 감지해 `POST /oauth/callback`으로 provider connection을 저장하게 했습니다.
+- OAuth flow state와 code verifier는 `localStorage`에 임시 저장하고, callback 처리 후 삭제하도록 했습니다.
+- `docs/dashboard-next-migration.md`에서 Providers 이관 상태를 OAuth redirect login 포함 기준으로 업데이트했습니다.
+
+검증:
+
+```bash
+npm --workspace @pie-lab/dashboard-next run lint
+npm --workspace @pie-lab/dashboard-next run build
+```
+
+## 2026-05-24: dashboard-next quota/model availability 1차 구현
+
+완료한 일:
+
+- `apps/dashboard-next` Quota 화면에서 `GET /quota/:connectionId` 상세 조회를 열 수 있게 했습니다.
+- quota detail sheet에 plan, selection score, checked time, quota bucket, remaining percentage, reset time을 표시했습니다.
+- `GET /models/availability`를 Quota 화면에 연결해 active cooldown/lock 상태를 볼 수 있게 했습니다.
+- `POST /models/availability`의 `clearCooldown` action을 호출하는 Clear 버튼을 추가했습니다.
+- `dashboardApi.quotaDetail()`, `dashboardApi.modelAvailability()`, `dashboardApi.clearModelCooldown()`과 관련 타입을 추가했습니다.
+- `docs/dashboard-next-migration.md`에서 Quota와 Model Availability 이관 상태를 현재 구현 기준으로 업데이트했습니다.
+
+검증:
+
+```bash
+npm --workspace @pie-lab/dashboard-next run lint
+npm --workspace @pie-lab/dashboard-next run build
+```
+
+## 2026-05-24: dashboard-next routing policy form 1차 구현
+
+완료한 일:
+
+- Routing 화면에 combo, alias, intent 저장 form을 추가했습니다.
+- 기존 `POST /routing-policy/combos`, `POST /routing-policy/aliases`, `POST /routing-policy/intents` API를 dashboard-next에서 호출하게 했습니다.
+- combo, alias, intent 삭제 버튼을 추가했습니다.
+- JSON editor와 preview 기능은 유지하되, form 저장 결과가 policy JSON에도 반영되도록 했습니다.
+- `dashboardApi.saveRoutingCombo()`, `deleteRoutingCombo()`, `saveRoutingAlias()`, `deleteRoutingAlias()`, `saveRoutingIntent()`, `deleteRoutingIntent()`를 추가했습니다.
+- `docs/dashboard-next-migration.md`에서 Routing 이관 상태를 현재 구현 기준으로 업데이트했습니다.
+
+검증:
+
+```bash
+npm --workspace @pie-lab/dashboard-next run lint
+npm --workspace @pie-lab/dashboard-next run build
+```

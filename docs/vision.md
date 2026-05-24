@@ -81,22 +81,11 @@
 
 이 부분은 `9router`의 경험을 적극적으로 흡수합니다.
 
-### 4. agent 중심
+### 4. 기존 agent 경험 보존
 
-`pie-lab`라는 이름에 맞게 agent를 일급 개념으로 둡니다.
+`pie-lab`은 `pi`의 기존 coding-agent, skill, extension, prompt-template 흐름을 우선 보존합니다.
 
-초기 agent 정의는 단순해야 합니다.
-
-```ts
-const agent = defineAgent({
-  name: "code-reviewer",
-  model: "auto:coding",
-  system: "You review code carefully.",
-  tools: [readFileTool, searchTool],
-});
-```
-
-중요한 것은 복잡한 workflow graph가 아니라, 누구나 같은 방식으로 agent를 정의하고 실행할 수 있는 표준입니다.
+지금 중요한 것은 새 DSL보다 기존 실행 경로가 router, quota, usage/cost 기록을 안정적으로 통과하는 것입니다.
 
 ### 5. 로컬 우선
 
@@ -184,7 +173,7 @@ MVP가 성공했다고 볼 수 있는 기준은 다음과 같습니다.
 - `pi`의 기존 기능과 사용 흐름을 가능한 한 보존합니다.
 - 내부 모델 호출은 `pi` 기반 provider engine을 사용합니다.
 - 요청 로그, token, 비용, provider 사용량이 기록됩니다.
-- 간단한 agent를 `pie agent run`으로 실행할 수 있습니다.
+- 기존 `pie` CLI와 `pie -p` 실행이 router와 usage/cost 기록을 거쳐 안정적으로 동작합니다.
 - 실패 또는 quota 소진 시 최소 1단계 fallback이 동작합니다.
 
 `pie-chat` 기반 chat bridge는 MVP 이후 단계에서 통합합니다. MVP에서는 구조상 들어갈 위치와 router 경유 원칙만 확정합니다.

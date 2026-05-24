@@ -57,36 +57,29 @@ pie start
 - dashboard에서 fallback chain/combo policy를 생성, 삭제, preview할 수 있습니다.
 - dashboard에서 alias/intent mapping을 생성, 삭제, preview할 수 있습니다.
 
-## v0.2: ADK 기본 기능
+## v0.2: 기존 agent 사용 경험 정리
 
-목표는 `pi`의 기존 agent/runtime 흐름을 기반으로 `pie-lab`라는 이름에 맞는 agent 개발 경험을 확장하는 것입니다.
+목표는 `pi`의 기존 `coding-agent`, skill, extension, prompt-template, `@pie-lab/agent-core` 흐름을 `pie-lab` 기준으로 정리하는 것입니다.
 
 필수 기능:
 
-- `defineTool`
-- `defineAgent`
-- `runAgent`
-- agent config loading
-- tool execution loop
-- agent run log
-- `pie agent run`
-- examples 3개
+- 기존 `pie` CLI 사용법 정리
+- `pie -p` 기반 non-interactive 실행 정리
+- skill과 extension 사용법 정리
+- router 경유 모델 호출 검증
+- usage/cost 기록 검증
 
-예제:
+현재 기준:
 
-```txt
-examples/simple-chat
-examples/file-summary-agent
-examples/coding-review-agent
-```
+- 새 agent runner를 추가하지 않고, 기존 `pie` CLI와 coding-agent 기능을 기준으로 정리합니다.
 
 성공 기준:
 
 ```bash
-pie agent run examples/file-summary-agent --input README.md
+pie -p "README.md를 요약해줘" @README.md
 ```
 
-명령으로 agent가 실행되고, dashboard에서 실행 기록을 볼 수 있어야 합니다.
+명령이 기존 coding-agent 경로로 실행되고, router와 usage/cost 기록을 거쳐야 합니다.
 
 ## v0.3: Router 고도화
 
@@ -120,10 +113,6 @@ pie agent run examples/file-summary-agent --input README.md
 - request detail raw event trace
 - routing policy import/export, combo reorder, model suggestion
 
-남은 고도화:
-
-- Vercel relay deploy helper
-
 성공 기준:
 
 - provider 하나가 실패해도 fallback provider로 이어집니다.
@@ -155,7 +144,8 @@ pie agent run examples/file-summary-agent --input README.md
 
 - 기존 `apps/dashboard`에는 usage, provider, quota, budget, proxy, routing policy, request detail, raw trace 같은 9router 운영 화면이 1차 구현되어 있습니다.
 - `apps/dashboard-next`는 Next.js 16, Tailwind CSS 4, shadcn/ui, Pretendard, SEO 기반 shell과 주요 메뉴 구조를 갖춘 상태입니다.
-- 아직 `apps/dashboard-next`가 기존 `apps/dashboard`의 모든 운영 기능을 대체하지는 않습니다.
+- usage detail sheet, fallback timeline, raw trace, origin/endpoint별 usage 집계, provider connection 생성/활성화/삭제, OAuth redirect login, provider별 setup guide, quota detail, model availability cooldown clear, routing combo/alias/intent form, budget form, proxy update/delete/binding, media endpoint test form이 이관되었습니다.
+- `apps/dashboard-next`는 별도 실행하는 제품형 dashboard로 유지합니다. root build 포함 여부는 별도 결정합니다.
 
 성공 기준:
 
@@ -186,55 +176,13 @@ pie agent run examples/file-summary-agent --input README.md
 남은 일:
 
 - 실제 Telegram/Discord 계정으로 장시간 end-to-end 송수신을 검증합니다.
-- chat-origin usage/cost를 dashboard에서 더 명확히 구분합니다.
-- channel/worker 상태를 dashboard-next에서 볼 수 있게 하는 것은 후속 제품화 범위로 둡니다.
+- 웹 채팅과 Telegram/Discord bridge 요청은 `clientOrigin`으로 usage/cost가 구분됩니다.
 
 성공 기준:
 
 - Discord 또는 Telegram에서 메시지를 보내면 `pie-lab` agent가 실행됩니다.
 - 해당 요청은 `pie-lab` router를 거쳐 실제 model로 라우팅됩니다.
 - dashboard에서 requested model, resolved model, provider, cost를 확인할 수 있습니다.
-
-후속 후보:
-
-- 나머지 chat provider 지원
-- file attachment
-- encrypted secret exchange
-- channel/account memory
-- tmux worker orchestration
-- Gondolin VM sandbox 통합
-- dashboard에서 chat channel과 worker 상태 표시
-
-## v0.6: Team Mode 준비
-
-목표는 개인용 로컬 도구에서 팀용 gateway로 확장할 기반을 만드는 것입니다.
-
-후보 기능:
-
-- team API key
-- per-user usage tracking
-- shared routing policy
-- shared agent template
-- basic auth 또는 local network auth
-- audit log
-
-이 단계는 MVP 이후에 판단합니다.
-
-## 이후 후보
-
-장기 후보 기능입니다.
-
-- hosted control plane
-- agent template registry
-- MCP registry integration
-- chat channel registry
-- visual workflow editor
-- cloud sync
-- enterprise SSO
-- plugin system
-- marketplace
-
-초기에는 이 기능들을 만들지 않습니다. 먼저 local-first 통합 경험을 완성하는 것이 더 중요합니다.
 
 ## 우선순위 원칙
 

@@ -13,6 +13,7 @@
 - [사용량과 비용 측정](./usage-accounting.md): routing 이후 실제 사용량과 비용을 어디서 어떻게 기록할지 정리합니다.
 - [채팅 사용법](./chat-usage.md): 웹 채팅과 Telegram/Discord bridge 설정, 연결, 문제 해결 방법을 정리합니다.
 - [pie-chat E2E 검증 체크리스트](./chat-e2e-checklist.md): 실제 Telegram/Discord 채널에서 bridge를 검증하는 기준을 정리합니다.
+- [dashboard-next 이관 범위](./dashboard-next-migration.md): 기존 dashboard 기능을 Next.js dashboard로 옮길 때의 기준과 우선순위를 정리합니다.
 - [소스 출처](./origins.md): `pi`, `9router`, `pie-chat` fork와 import 기준 commit을 기록합니다.
 - [현재 결정 사항](./current-decisions.md): 지금까지 결정한 통합 방향과 현재 구조를 요약합니다.
 - [구현 이력](./implementation-log.md): 실제 코드에 반영된 작업과 검증 결과를 기록합니다.
@@ -25,18 +26,17 @@
 
 현재 `pie-lab`은 `pi` 기반 CLI/TUI를 유지하면서 `9router`의 핵심 라우팅, fallback, provider connection, quota, cooldown, usage/cost 기록을 `pie` 내부 호출과 local `/v1` API에 연결한 상태입니다.
 
-`apps/server`는 OpenAI-compatible chat completions, streaming SSE, embeddings, web search/fetch, TTS/STT, image generation endpoint를 제공합니다. `apps/dashboard`는 usage, provider, quota, budget, proxy, routing policy, request detail, raw trace 같은 운영 화면을 1차로 제공합니다. `apps/dashboard-next`는 Next.js 16, Tailwind CSS 4, shadcn/ui 기반의 차세대 dashboard shell입니다.
+`apps/server`는 OpenAI-compatible chat completions, streaming SSE, embeddings, web search/fetch, TTS/STT, image generation endpoint를 제공합니다. `apps/dashboard`는 usage, provider, quota, budget, proxy, routing policy, request detail, raw trace 같은 운영 화면의 기준 구현입니다. `apps/dashboard-next`는 Next.js 16, Tailwind CSS 4, shadcn/ui 기반의 차세대 dashboard이며 usage detail, provider setup, OAuth redirect login, quota detail, model availability, routing policy form, budget form, proxy 관리, media endpoint test form까지 이관한 상태입니다.
 
-`apps/chat`은 `pie-chat` 영역으로, Next.js 웹 채팅과 Telegram/Discord bridge extension을 함께 담고 있습니다. `pie -e apps/chat`로 기존 bridge 흐름을 사용할 수 있으며, 남은 일은 장시간 실제 채널 검증과 dashboard 관찰성 고도화입니다.
+`apps/chat`은 `pie-chat` 영역으로, Next.js 웹 채팅과 Telegram/Discord bridge extension을 함께 담고 있습니다. 웹 채팅은 `pie-chat:web`, bridge worker는 `pie-chat:telegram` 또는 `pie-chat:discord` origin으로 usage/cost를 남깁니다. `pie -e apps/chat`로 기존 bridge 흐름을 사용할 수 있으며, 남은 일은 실제 계정 기준 장시간 송수신 검증입니다.
 
 다음 큰 작업은 다음 순서로 진행합니다.
 
 ```txt
-1. 문서와 실제 구현 상태 동기화
-2. 변경 파일 정리와 전체 검증
-3. pie-chat Telegram/Discord end-to-end 검증
-4. dashboard-next 기능 이관
-5. pie agent run 중심의 ADK 사용 경험 제품화
+1. 설치와 실행 흐름 안정화
+2. 실제 Telegram/Discord 계정 기준 end-to-end 송수신 검증
+3. dashboard-next 사용성 문구와 필터 개선
+4. root build 포함 여부 별도 결정
 ```
 
 ## 기본 방향

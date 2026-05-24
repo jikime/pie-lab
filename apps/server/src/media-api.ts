@@ -46,7 +46,7 @@ interface ParsedModel {
 }
 
 const CORS_HEADERS = {
-	"access-control-allow-headers": "content-type, authorization, x-connection-id",
+	"access-control-allow-headers": "content-type, authorization, x-connection-id, x-pie-client-origin, x-pie-origin",
 	"access-control-allow-methods": "GET, POST, OPTIONS",
 	"access-control-allow-origin": "*",
 };
@@ -214,6 +214,9 @@ async function handleMediaRequest(
 
 	const requestId = options.requestIdFactory();
 	const startedAt = options.now();
+	const clientOrigin = normalizeClientOriginHeader(
+		request.headers["x-pie-client-origin"] ?? request.headers["x-pie-origin"],
+	);
 	let requestedModel = "";
 	let provider = "";
 	let model = "";
@@ -239,6 +242,7 @@ async function handleMediaRequest(
 					provider,
 					model,
 					kind,
+					clientOrigin,
 					result: {
 						ok: false,
 						status: 402,
@@ -268,6 +272,7 @@ async function handleMediaRequest(
 				model,
 				connectionId: credentials?.id,
 				kind,
+				clientOrigin,
 				result,
 			});
 			await writeWebResponse(response, result.response);
@@ -289,6 +294,7 @@ async function handleMediaRequest(
 				provider,
 				model,
 				kind,
+				clientOrigin,
 				result: {
 					ok: false,
 					status: 402,
@@ -318,6 +324,7 @@ async function handleMediaRequest(
 			model,
 			connectionId: credentials?.id,
 			kind,
+			clientOrigin,
 			result,
 		});
 		await writeWebResponse(response, result.response);
@@ -329,6 +336,7 @@ async function handleMediaRequest(
 			provider: provider || "unknown",
 			model: model || kind,
 			kind,
+			clientOrigin,
 			result: { ok: false, status: 400, error: error instanceof Error ? error.message : String(error) },
 		});
 		writeJson(response, 400, {
@@ -1303,6 +1311,7 @@ async function recordMediaUsage(
 		model: string;
 		connectionId?: string;
 		kind: MediaKind;
+		clientOrigin?: string;
 		result: { ok: boolean; status: number; error?: string; costUsd?: number; usageStatus?: UsageRecord["status"] };
 	},
 ): Promise<void> {
@@ -1320,6 +1329,7 @@ async function recordMediaUsage(
 		attemptIndex: 0,
 		attemptCount: 1,
 		endpoint: endpointForKind(input.kind),
+		clientOrigin: input.clientOrigin,
 		costUsd: input.result.costUsd,
 		cost:
 			typeof input.result.costUsd === "number"
@@ -1437,6 +1447,12 @@ function requiredString(value: unknown, name: string): string {
 
 function readString(value: unknown): string {
 	return typeof value === "string" ? value : "";
+}
+
+function normalizeClientOriginHeader(value: string | string[] | undefined): string | undefined {
+	const raw = Array.isArray(value) ? value[0] : value;
+	const normalized = raw?.trim();
+	return normalized ? normalized.slice(0, 120) : undefined;
 }
 
 function arrayOfRecords(value: unknown): Array<Record<string, unknown>> {

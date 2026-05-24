@@ -67,6 +67,7 @@ export async function streamChatCompletion({
     method: "POST",
     headers: {
       "content-type": "application/json",
+      "x-pie-client-origin": "pie-chat:web",
     },
     body: JSON.stringify({
       model,

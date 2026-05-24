@@ -16,7 +16,7 @@ export function LogsPage() {
     <>
       <PageHeader
         title="Logs"
-        description="최근 요청 로그를 넓은 테이블로 확인합니다. 세부 trace 화면은 다음 단계에서 붙이면 좋습니다."
+        description="최근 요청 로그에서 request detail, fallback timeline, raw trace를 확인합니다."
         actions={
           <Button type="button" variant="outline" onClick={() => void refresh()}>
             Refresh

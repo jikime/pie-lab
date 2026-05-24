@@ -469,6 +469,8 @@ async function recordUsageAttempt(options: {
 			connectionId: options.connectionId ?? options.route.route.connectionId,
 			attemptIndex: options.attemptIndex,
 			attemptCount: options.attemptCount,
+			endpoint: usageEndpointFromEnvironment(),
+			clientOrigin: usageClientOriginFromEnvironment(),
 			agentRunId: options.agentRunId,
 			usage,
 			cost,
@@ -585,6 +587,19 @@ function usageAndCostFromMessage(message: AssistantMessage | undefined): { usage
 			pricingSource: "pie-metadata",
 		},
 	};
+}
+
+function usageClientOriginFromEnvironment(): string | undefined {
+	return normalizeUsageMetadata(process.env.PIE_LAB_USAGE_ORIGIN ?? process.env.PIE_ADK_USAGE_ORIGIN);
+}
+
+function usageEndpointFromEnvironment(): string | undefined {
+	return normalizeUsageMetadata(process.env.PIE_LAB_USAGE_ENDPOINT ?? process.env.PIE_ADK_USAGE_ENDPOINT);
+}
+
+function normalizeUsageMetadata(value: string | undefined): string | undefined {
+	const normalized = value?.trim();
+	return normalized ? normalized.slice(0, 120) : undefined;
 }
 
 function statusFromMessage(message: AssistantMessage): UsageRecordStatus {

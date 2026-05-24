@@ -83,6 +83,7 @@ export interface UsageRecord {
 	attemptIndex: number;
 	attemptCount: number;
 	endpoint?: string;
+	clientOrigin?: string;
 	apiKeyId?: string;
 	agentRunId?: string;
 	usage?: UsageTokens;
@@ -306,6 +307,7 @@ export interface UsageRecordQuery {
 	requestId?: string;
 	agentRunId?: string;
 	endpoint?: string;
+	clientOrigin?: string;
 	from?: string | Date;
 	to?: string | Date;
 	limit?: number;
@@ -331,6 +333,8 @@ export interface UsageSummaryGroup {
 export interface UsageSummary extends UsageSummaryGroup {
 	byProvider: UsageSummaryGroup[];
 	byModel: UsageSummaryGroup[];
+	byEndpoint: UsageSummaryGroup[];
+	byClientOrigin: UsageSummaryGroup[];
 }
 
 export function createUsageRecordId(prefix = "usage"): string {
@@ -354,6 +358,7 @@ export function queryUsageRecords(records: readonly UsageRecord[], query: UsageR
 			matchesValue(record.requestId, query.requestId) &&
 			matchesValue(record.agentRunId, query.agentRunId) &&
 			matchesValue(record.endpoint, query.endpoint) &&
+			matchesValue(record.clientOrigin, query.clientOrigin) &&
 			(fromTime === undefined || recordTime >= fromTime) &&
 			(toTime === undefined || recordTime <= toTime)
 		);
@@ -373,17 +378,23 @@ export function summarizeUsageRecords(records: readonly UsageRecord[]): UsageSum
 	const total = createUsageSummaryGroup("total");
 	const byProvider = new Map<string, UsageSummaryGroup>();
 	const byModel = new Map<string, UsageSummaryGroup>();
+	const byEndpoint = new Map<string, UsageSummaryGroup>();
+	const byClientOrigin = new Map<string, UsageSummaryGroup>();
 
 	for (const record of records) {
 		addRecordToGroup(total, record);
 		addRecordToGroup(getOrCreateGroup(byProvider, record.resolvedProvider), record);
 		addRecordToGroup(getOrCreateGroup(byModel, record.resolvedModel), record);
+		addRecordToGroup(getOrCreateGroup(byEndpoint, record.endpoint ?? "unknown"), record);
+		addRecordToGroup(getOrCreateGroup(byClientOrigin, record.clientOrigin ?? "unknown"), record);
 	}
 
 	return {
 		...total,
 		byProvider: sortSummaryGroups([...byProvider.values()]),
 		byModel: sortSummaryGroups([...byModel.values()]),
+		byEndpoint: sortSummaryGroups([...byEndpoint.values()]),
+		byClientOrigin: sortSummaryGroups([...byClientOrigin.values()]),
 	};
 }
 

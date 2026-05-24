@@ -109,6 +109,7 @@ export async function handleUsageRequest(
 					timestamp: record.timestamp,
 					status: record.status,
 					endpoint: record.endpoint,
+					clientOrigin: record.clientOrigin,
 					requestedModel: record.requestedModel,
 					resolvedProvider: record.resolvedProvider,
 					resolvedModel: record.resolvedModel,
@@ -193,6 +194,7 @@ export function parseUsageRecordQuery(
 	assignFirstString(query, "requestId", searchParams, ["requestId"]);
 	assignFirstString(query, "agentRunId", searchParams, ["agentRunId"]);
 	assignFirstString(query, "endpoint", searchParams, ["endpoint"]);
+	assignFirstString(query, "clientOrigin", searchParams, ["clientOrigin", "origin"]);
 	assignFirstString(query, "from", searchParams, ["from", "since"]);
 	assignFirstString(query, "to", searchParams, ["to", "until"]);
 

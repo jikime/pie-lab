@@ -363,7 +363,10 @@ function spawnConversationTmux(ctx: ExtensionContext, conversation: ResolvedConv
 	if (!sessionFile) throw new Error(`Could not create pie session for ${conversation.conversationName}`);
 
 	const command = [
-		"exec pie",
+		"exec env",
+		`PIE_LAB_USAGE_ORIGIN=${shellQuote(`pie-chat:${conversation.service}`)}`,
+		`PIE_LAB_USAGE_ENDPOINT=${shellQuote(`pie-chat:${conversation.service}`)}`,
+		"pie",
 		"--session",
 		shellQuote(sessionFile),
 		"--session-dir",
@@ -446,6 +449,7 @@ function createPieChatExtension(pi: ExtensionAPI) {
 	let pendingChatDispatch = false;
 	let pendingControlAction: (() => Promise<void>) | undefined;
 	let activeTriggerMessageId: string | undefined;
+	let previousUsageOrigin: { origin?: string; endpoint?: string } | undefined;
 
 	function persistChatState(conversationId?: string): void {
 		pi.appendEntry<PersistedChatState>(SESSION_STATE_CUSTOM_TYPE, { conversationId });
@@ -461,6 +465,24 @@ function createPieChatExtension(pi: ExtensionAPI) {
 			return undefined;
 		}
 		return undefined;
+	}
+
+	function applyChatUsageOrigin(conversation: ResolvedConversation): void {
+		previousUsageOrigin ??= {
+			origin: process.env.PIE_LAB_USAGE_ORIGIN,
+			endpoint: process.env.PIE_LAB_USAGE_ENDPOINT,
+		};
+		process.env.PIE_LAB_USAGE_ORIGIN = `pie-chat:${conversation.service}`;
+		process.env.PIE_LAB_USAGE_ENDPOINT = `pie-chat:${conversation.service}`;
+	}
+
+	function restoreChatUsageOrigin(): void {
+		if (!previousUsageOrigin) return;
+		if (previousUsageOrigin.origin === undefined) delete process.env.PIE_LAB_USAGE_ORIGIN;
+		else process.env.PIE_LAB_USAGE_ORIGIN = previousUsageOrigin.origin;
+		if (previousUsageOrigin.endpoint === undefined) delete process.env.PIE_LAB_USAGE_ENDPOINT;
+		else process.env.PIE_LAB_USAGE_ENDPOINT = previousUsageOrigin.endpoint;
+		previousUsageOrigin = undefined;
 	}
 
 	function stableSecretsKey(secrets: Record<string, { value: string; hosts: string[] }>): string {
@@ -644,6 +666,7 @@ function createPieChatExtension(pi: ExtensionAPI) {
 		sandbox = nextSandbox;
 		if (runtime && runtime.conversation.conversationId === conversation.conversationId) {
 			Object.assign(runtime.conversation, conversation);
+			applyChatUsageOrigin(runtime.conversation);
 		}
 		if (previousSandbox) await previousSandbox.close().catch(() => undefined);
 		await showChatContextMessage();
@@ -663,10 +686,12 @@ function createPieChatExtension(pi: ExtensionAPI) {
 			return false;
 		}
 		await disconnectRuntime(ctx, false);
+		applyChatUsageOrigin(conversation);
 		try {
 			await prepareGondolin(ctx);
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
+			restoreChatUsageOrigin();
 			updateStatus(ctx, message);
 			if (interactive) await showNotice(ctx, "Connect error", message, "error");
 			return false;
@@ -780,6 +805,7 @@ function createPieChatExtension(pi: ExtensionAPI) {
 			}
 			if (runtime) await runtime.disconnect().catch(() => undefined);
 			runtime = undefined;
+			restoreChatUsageOrigin();
 			updateStatus(ctx, result.error);
 			if (interactive) await showNotice(ctx, "Connect error", result.error, "error");
 			return false;
@@ -1108,6 +1134,7 @@ function createPieChatExtension(pi: ExtensionAPI) {
 		const currentSandbox = sandbox;
 		sandbox = undefined;
 		if (currentSandbox) await currentSandbox.close().catch(() => undefined);
+		restoreChatUsageOrigin();
 		if (!runtime) {
 			updateStatus(ctx);
 			return;

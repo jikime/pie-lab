@@ -137,7 +137,6 @@ pie
 pie -p "Summarize this codebase"
 pie start
 pie provider list
-pie agent run ./agents/code-reviewer
 ```
 
 앱 내부 이름도 `pie`로 정합니다. 그래서 `APP_NAME`, TUI 제목, debug log 이름, 기본 설정 경로, 프로젝트 설정 경로, 앱 전용 환경변수는 모두 `pie` 기준으로 동작합니다.
@@ -154,6 +153,8 @@ offline env                 PIE_OFFLINE
 ```
 
 기존 `pi`에서 쓰던 `PI_CODING_AGENT_DIR`, `PI_CODING_AGENT_SESSION_DIR`, `PI_PACKAGE_DIR`, `PI_OFFLINE` 같은 일부 환경변수는 개발 중 마이그레이션 편의를 위해 fallback으로만 허용합니다. 새 문서와 새 사용법에서는 `PIE_*`를 우선 사용합니다.
+
+현재는 기존 `pie` CLI, `-p` 실행, skill, extension, prompt-template, `@pie-lab/agent-core`의 Agent/AgentHarness 흐름을 우선 사용합니다.
 
 ## 4. pi의 역할
 
@@ -238,6 +239,10 @@ pi agent/runtime
 apps/dashboard       기존 Vite dashboard, 유지
 apps/dashboard-next  Next.js 16 + Tailwind 4 + shadcn/ui dashboard, 신규 개발
 ```
+
+`apps/dashboard-next`에는 usage detail/fallback timeline/raw trace, origin/endpoint별 usage 집계, provider connection CRUD, OAuth redirect login, provider별 setup guide, quota detail, model availability cooldown clear, routing policy form, budget form, proxy pool update/delete/binding, media endpoint test form이 들어갔습니다.
+
+root build에 포함할지는 별도 결정하며, 지금은 아래처럼 독립 실행합니다.
 
 `dashboard-next`의 기본 실행 주소는 다음입니다.
 
@@ -546,11 +551,10 @@ external HTTP  ┘
 아직 해야 할 것은 다음입니다.
 
 ```txt
-- Vercel deploy helper
 - pie-chat bridge 장시간 실사용 검증
 - chat-origin usage/cost dashboard 구분 고도화
 - dashboard-next의 기존 dashboard 기능 완전 이관
-- pie agent run 중심의 ADK 사용 경험 제품화
+- 설치와 실행 흐름 안정화
 ```
 
 `9router`에서 우선 가져올 기능은 executor 전체가 아닙니다.
@@ -639,7 +643,7 @@ OAuth connection은 quota 상세 조회 전에 9router 원본 방식처럼 token
 이후 9router 원본의 `resolveConnectionProxyConfig()` 흐름을 기준으로 `providerSpecificData.proxyPoolId`를 읽어 proxy pool을 해석합니다.
 proxy pool은 `provider-connections.json`의 `proxyPools`에 저장하며, Vercel relay pool과 표준 HTTP proxy pool을 quota 상세 조회와 OAuth refresh에 적용합니다.
 이후 proxy pool 생성/수정/삭제 API, provider connection에 proxy pool을 지정하는 API, dashboard의 proxy pool 관리/지정 UI도 1차 구현했습니다.
-다만 Vercel deploy helper는 아직 남아 있습니다. Browser redirect 기반 OAuth login flow는 Claude/Codex/Gemini CLI 기준 1차 구현했습니다.
+Browser redirect 기반 OAuth login flow는 Claude/Codex/Gemini CLI 기준 1차 구현했습니다.
 auth.json source connection의 생성/변경/삭제 동기화는 `ModelRegistry` 기본 경로에 반영했습니다.
 이후 9router 원본의 proxy pool test endpoint를 기준으로 `POST /proxy-pools/:proxyPoolId/test`와 dashboard 테스트 버튼도 추가했습니다.
 
@@ -779,11 +783,10 @@ GET /v1/quota/:connectionId
 아직 남은 구현:
 
 ```txt
-- Vercel deploy helper
 - pie-chat bridge 장시간 실사용 검증
 - chat-origin usage/cost dashboard 구분 고도화
 - dashboard-next의 기존 dashboard 기능 완전 이관
-- pie agent run 중심의 ADK 사용 경험 제품화
+- 설치와 실행 흐름 안정화
 ```
 
 `pie-chat`은 이름을 `pie-chat`으로 사용하되, 실제 소스 출처는 기존 fork인 `https://github.com/jikime/pi-chat`입니다. 구현 방향은 기존 `pi-chat`의 bridge 흐름을 최대한 유지하고, LLM 직접 호출 부분만 `pie-lab agent runtime -> router -> provider engine` 경로로 바꾸는 것입니다.
@@ -945,5 +948,5 @@ provider 호출 성공
 아직 남은 연결:
 
 ```txt
-- Vercel deploy helper
+- 설치와 실행 흐름 안정화
 ```

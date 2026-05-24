@@ -90,6 +90,7 @@ describe("usage stores", () => {
 				timestamp: "2026-05-22T00:00:00.000Z",
 				resolvedProvider: "openai",
 				resolvedModel: "gpt-5.1",
+				clientOrigin: "pie-chat:web",
 				status: "success",
 			}),
 			usageRecord({
@@ -121,6 +122,9 @@ describe("usage stores", () => {
 			"usage_1",
 			"usage_2",
 		]);
+		expect(queryUsageRecords(records, { clientOrigin: "pie-chat:web" }).map((record) => record.id)).toEqual([
+			"usage_1",
+		]);
 	});
 
 	it("summarizes tokens and cost by provider and model", () => {
@@ -129,6 +133,8 @@ describe("usage stores", () => {
 				id: "usage_1",
 				resolvedProvider: "anthropic",
 				resolvedModel: "claude-sonnet-4.5",
+				endpoint: "/v1/chat/completions",
+				clientOrigin: "pie-chat:telegram",
 				status: "success",
 				usage: { input: 100, output: 50, cacheRead: 10, cacheWrite: 5, reasoning: 7, totalTokens: 172 },
 				cost: {
@@ -146,6 +152,8 @@ describe("usage stores", () => {
 				id: "usage_2",
 				resolvedProvider: "openai",
 				resolvedModel: "gpt-5.1",
+				endpoint: "/v1/embeddings",
+				clientOrigin: "dashboard-next:media-test",
 				status: "error",
 				usage: undefined,
 				cost: undefined,
@@ -172,6 +180,14 @@ describe("usage stores", () => {
 			totalTokens: 172,
 			costUsd: 0.36,
 		});
+		expect(summary.byEndpoint.map((group) => [group.key, group.records])).toEqual([
+			["/v1/chat/completions", 1],
+			["/v1/embeddings", 1],
+		]);
+		expect(summary.byClientOrigin.map((group) => [group.key, group.records])).toEqual([
+			["pie-chat:telegram", 1],
+			["dashboard-next:media-test", 1],
+		]);
 	});
 });
 

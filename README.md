@@ -32,6 +32,8 @@
 * **[@pie-lab/storage](packages/storage)**: Provider connection, proxy pool, quota snapshot, and usage history storage
 * **[@pie-lab/server](apps/server)**: Local OpenAI-compatible API server
 * **[@pie-lab/dashboard](apps/dashboard)**: Usage, cost, quota, provider connection, and account selection dashboard
+* **[@pie-lab/dashboard-next](apps/dashboard-next)**: Next.js 16 dashboard with shadcn/ui operations pages
+* **[@pie-lab/pie-chat](apps/chat)**: Next.js Pie Chat UI and Telegram/Discord bridge extension
 
 ## pie-lab 이름의 의미
 
@@ -93,8 +95,10 @@ I regularly publish my own `pi-mono` work sessions here:
 - `/budget` 상태 조회와 chat/media 요청의 budget limit enforcement
 - RTK token saver usage 기록
 - media alias, `extra_body` passthrough, Cohere/Ollama/ElevenLabs coverage를 포함한 `/v1/embeddings`, `/v1/search`, `/v1/web/fetch`, `/v1/audio/speech`, `/v1/audio/transcriptions`, `/v1/images/generations`
+- Next.js dashboard에서 usage origin/endpoint 집계, budget form, proxy pool 수정/삭제/binding, media endpoint test form 제공
+- Pie Chat 웹 요청은 `pie-chat:web`, Telegram/Discord bridge 요청은 `pie-chat:telegram`/`pie-chat:discord` origin으로 usage/cost 기록
 
-For Slack/chat automation and workflows, `pie-chat` will be based on the existing [jikime/pi-chat](https://github.com/jikime/pi-chat) source and routed through pie-lab.
+`pie-chat` is based on the existing [jikime/pi-chat](https://github.com/jikime/pi-chat) source and routed through pie-lab.
 
 ## Installation
 
@@ -103,6 +107,15 @@ The official npm package for the CLI is `@pie-lab/coding-agent`. It installs the
 ```bash
 npm install -g --ignore-scripts @pie-lab/coding-agent
 pie
+```
+
+Local development commands:
+
+```bash
+npm --workspace @pie-lab/server run dev          # http://127.0.0.1:4873
+npm --workspace @pie-lab/dashboard-next run dev  # http://127.0.0.1:4876
+npm --workspace @pie-lab/pie-chat run dev        # http://127.0.0.1:4877
+pie -e apps/chat                                 # Telegram/Discord bridge
 ```
 
 ## Contributing
