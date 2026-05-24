@@ -1753,3 +1753,45 @@ extension loader 확인:
 - 터미널에 직접 입력한 메시지는 로컬 `pie` 대화이므로 Telegram/Discord로 자동 전송되지 않는다는 점을 명확히 적었습니다.
 - 응답이 원격 채팅에 보이지 않을 때 확인할 `/chat-status`, `/chat-workers`, `channel.jsonl` 점검 순서를 추가했습니다.
 - `docs/README.md`와 `apps/chat/README.md`에서 새 사용법 문서로 연결했습니다.
+
+## 2026-05-24: 현재 통합 상태 문서 동기화
+
+완료한 일:
+
+- `docs/README.md`에 현재 통합 상태를 추가했습니다.
+- `docs/current-decisions.md`에서 `pie-chat bridge 실제 통합`을 아직 남은 일로 표현하던 오래된 문구를 정리했습니다.
+- 현재 기준으로 `apps/chat`에는 Next.js 웹 채팅과 Telegram/Discord bridge extension이 이식되어 있음을 명확히 했습니다.
+- `docs/roadmap.md`의 dashboard와 chat bridge 항목에 현재 완료 상태와 남은 일을 분리해 적었습니다.
+- CLI 시작 헤더는 `Pie Lab` 버전, 라우터 상태, 모델, 디렉터리를 보여주고, 라이트/다크 터미널에 맞춘 파이 캐릭터 ASCII 아트를 사용하도록 정리했습니다.
+
+현재 큰 흐름:
+
+- `pi` 기반 CLI/TUI는 `pie` 명령과 `@pie-lab/*` 패키지 스코프 기준으로 정리되어 있습니다.
+- `9router`의 핵심 라우팅, fallback, provider connection, quota, cooldown, usage/cost 기록은 내부 `coding-agent` 경로와 외부 `/v1/chat/completions` 경로에 1차 연결되어 있습니다.
+- embeddings, web search/fetch, TTS/STT, image generation endpoint도 `apps/server`에 1차 연결되어 있습니다.
+- `apps/dashboard`에는 9router 운영 화면이 1차 구현되어 있고, `apps/dashboard-next`는 Next.js 16 기반 차세대 dashboard shell로 준비되어 있습니다.
+- `apps/chat`에는 웹 채팅과 Telegram/Discord bridge extension이 들어와 있습니다.
+
+현재 남은 큰 항목:
+
+- 실제 Telegram/Discord 환경에서 `pie-chat` bridge 장시간 end-to-end 검증
+- chat-origin usage/cost dashboard 구분 고도화
+- 기존 `apps/dashboard` 기능을 `apps/dashboard-next`로 단계적 이관
+- `pie agent run` 중심의 ADK 사용 경험 제품화
+- Vercel relay deploy helper
+
+## 2026-05-24: pie-chat E2E 검증 체크리스트 추가
+
+완료한 일:
+
+- `docs/chat-e2e-checklist.md`를 추가했습니다.
+- Telegram DM, Discord channel, tmux worker, 원격 명령, attachment, usage record 확인 기준을 분리해 정리했습니다.
+- `docs/README.md`에서 새 체크리스트 문서로 연결했습니다.
+
+검증 기준:
+
+- Telegram DM에서 연속 왕복 대화가 성공해야 합니다.
+- Discord channel에서 mention 기반 왕복 대화가 성공해야 합니다.
+- `status`, `new`, `compact`, `stop` 원격 명령이 동작해야 합니다.
+- 첨부파일 수신과 `chat_attach` 송신이 동작해야 합니다.
+- 각 요청이 router를 거친 usage record로 남아야 합니다.

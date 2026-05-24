@@ -12,6 +12,7 @@
 - [로드맵](./roadmap.md): MVP부터 이후 확장까지의 단계별 개발 계획입니다.
 - [사용량과 비용 측정](./usage-accounting.md): routing 이후 실제 사용량과 비용을 어디서 어떻게 기록할지 정리합니다.
 - [채팅 사용법](./chat-usage.md): 웹 채팅과 Telegram/Discord bridge 설정, 연결, 문제 해결 방법을 정리합니다.
+- [pie-chat E2E 검증 체크리스트](./chat-e2e-checklist.md): 실제 Telegram/Discord 채널에서 bridge를 검증하는 기준을 정리합니다.
 - [소스 출처](./origins.md): `pi`, `9router`, `pie-chat` fork와 import 기준 commit을 기록합니다.
 - [현재 결정 사항](./current-decisions.md): 지금까지 결정한 통합 방향과 현재 구조를 요약합니다.
 - [구현 이력](./implementation-log.md): 실제 코드에 반영된 작업과 검증 결과를 기록합니다.
@@ -19,6 +20,24 @@
 ## 한 줄 정의
 
 `pie-lab`은 `pi`의 전체 기능을 그대로 기반으로 삼고, 여러 AI provider, 모델 라우팅, agent runtime, tool calling, 비용 관리, 대시보드, chat bridge를 하나로 묶은 로컬 우선 Agentic Development Kit입니다.
+
+## 현재 통합 상태
+
+현재 `pie-lab`은 `pi` 기반 CLI/TUI를 유지하면서 `9router`의 핵심 라우팅, fallback, provider connection, quota, cooldown, usage/cost 기록을 `pie` 내부 호출과 local `/v1` API에 연결한 상태입니다.
+
+`apps/server`는 OpenAI-compatible chat completions, streaming SSE, embeddings, web search/fetch, TTS/STT, image generation endpoint를 제공합니다. `apps/dashboard`는 usage, provider, quota, budget, proxy, routing policy, request detail, raw trace 같은 운영 화면을 1차로 제공합니다. `apps/dashboard-next`는 Next.js 16, Tailwind CSS 4, shadcn/ui 기반의 차세대 dashboard shell입니다.
+
+`apps/chat`은 `pie-chat` 영역으로, Next.js 웹 채팅과 Telegram/Discord bridge extension을 함께 담고 있습니다. `pie -e apps/chat`로 기존 bridge 흐름을 사용할 수 있으며, 남은 일은 장시간 실제 채널 검증과 dashboard 관찰성 고도화입니다.
+
+다음 큰 작업은 다음 순서로 진행합니다.
+
+```txt
+1. 문서와 실제 구현 상태 동기화
+2. 변경 파일 정리와 전체 검증
+3. pie-chat Telegram/Discord end-to-end 검증
+4. dashboard-next 기능 이관
+5. pie agent run 중심의 ADK 사용 경험 제품화
+```
 
 ## 기본 방향
 

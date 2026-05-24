@@ -151,6 +151,12 @@ pie agent run examples/file-summary-agent --input README.md
 - CLI model selection
 - local config import/export
 
+현재 상태:
+
+- 기존 `apps/dashboard`에는 usage, provider, quota, budget, proxy, routing policy, request detail, raw trace 같은 9router 운영 화면이 1차 구현되어 있습니다.
+- `apps/dashboard-next`는 Next.js 16, Tailwind CSS 4, shadcn/ui, Pretendard, SEO 기반 shell과 주요 메뉴 구조를 갖춘 상태입니다.
+- 아직 `apps/dashboard-next`가 기존 `apps/dashboard`의 모든 운영 기능을 대체하지는 않습니다.
+
 성공 기준:
 
 - 신규 사용자가 문서만 보고 provider를 등록하고 local endpoint에 연결할 수 있습니다.
@@ -169,6 +175,19 @@ pie agent run examples/file-summary-agent --input README.md
 - agent response를 chat reply로 전송
 - 최소 remote command: `status`, `new`, `stop`
 - chat-origin usage/cost 기록
+
+현재 상태:
+
+- `apps/chat`은 Next.js 16 기반 웹 채팅 앱과 Telegram/Discord bridge extension을 함께 담습니다.
+- 웹 채팅은 `apps/server`의 `/v1/chat/completions` streaming endpoint를 호출하며 기본 모델은 `auto:chat`입니다.
+- 기존 `pi-chat` bridge 흐름을 `apps/chat/extension` 아래로 이식했고, `pie -e apps/chat`로 `/chat-config`, `/chat-connect`, `/chat-spawn-all`, `/chat-workers` 등을 사용할 수 있습니다.
+- Telegram/Discord 채널별 workspace, memory, skills, attachment, tmux worker 구조는 `~/.pie/agent/chat` 기준으로 정리했습니다.
+
+남은 일:
+
+- 실제 Telegram/Discord 계정으로 장시간 end-to-end 송수신을 검증합니다.
+- chat-origin usage/cost를 dashboard에서 더 명확히 구분합니다.
+- channel/worker 상태를 dashboard-next에서 볼 수 있게 하는 것은 후속 제품화 범위로 둡니다.
 
 성공 기준:
 

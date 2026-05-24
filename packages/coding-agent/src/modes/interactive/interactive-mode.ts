@@ -124,6 +124,7 @@ import { TreeSelectorComponent } from "./components/tree-selector.js";
 import { UserMessageComponent } from "./components/user-message.js";
 import { UserMessageSelectorComponent } from "./components/user-message-selector.js";
 import {
+	detectTerminalBackground,
 	getAvailableThemes,
 	getAvailableThemesWithPaths,
 	getEditorTheme,
@@ -189,6 +190,159 @@ function isAnthropicSubscriptionAuthKey(apiKey: string | undefined): boolean {
 
 function isUnknownModel(model: Model<any> | undefined): boolean {
 	return !!model && model.provider === "unknown" && model.id === "unknown" && model.api === "unknown";
+}
+
+type StartupColor = {
+	rgb: [number, number, number];
+	color256: number;
+};
+
+type StartupPalette = {
+	art: StartupColor;
+	feet: StartupColor;
+	filling: StartupColor;
+	face: StartupColor;
+	sparkle: StartupColor;
+	title: StartupColor;
+	subtitle: StartupColor;
+	label: StartupColor;
+	value: StartupColor;
+	status: StartupColor;
+	hint: StartupColor;
+	version: StartupColor;
+};
+
+const STARTUP_PALETTES: Record<"dark" | "light" | "universal", StartupPalette> = {
+	dark: {
+		art: { rgb: [251, 191, 36], color256: 220 },
+		feet: { rgb: [96, 165, 250], color256: 75 },
+		filling: { rgb: [253, 224, 71], color256: 227 },
+		face: { rgb: [255, 247, 237], color256: 230 },
+		sparkle: { rgb: [110, 231, 183], color256: 79 },
+		title: { rgb: [103, 232, 249], color256: 86 },
+		subtitle: { rgb: [110, 231, 183], color256: 79 },
+		label: { rgb: [148, 163, 184], color256: 109 },
+		value: { rgb: [226, 232, 240], color256: 254 },
+		status: { rgb: [134, 239, 172], color256: 120 },
+		hint: { rgb: [156, 163, 175], color256: 247 },
+		version: { rgb: [148, 163, 184], color256: 109 },
+	},
+	light: {
+		art: { rgb: [146, 64, 14], color256: 94 },
+		feet: { rgb: [30, 64, 175], color256: 19 },
+		filling: { rgb: [180, 83, 9], color256: 130 },
+		face: { rgb: [31, 41, 55], color256: 236 },
+		sparkle: { rgb: [4, 120, 87], color256: 29 },
+		title: { rgb: [30, 64, 175], color256: 19 },
+		subtitle: { rgb: [4, 120, 87], color256: 29 },
+		label: { rgb: [100, 116, 139], color256: 66 },
+		value: { rgb: [15, 23, 42], color256: 235 },
+		status: { rgb: [5, 150, 105], color256: 35 },
+		hint: { rgb: [71, 85, 105], color256: 60 },
+		version: { rgb: [71, 85, 105], color256: 60 },
+	},
+	universal: {
+		art: { rgb: [146, 64, 14], color256: 94 },
+		feet: { rgb: [59, 130, 246], color256: 33 },
+		filling: { rgb: [180, 83, 9], color256: 130 },
+		face: { rgb: [55, 65, 81], color256: 240 },
+		sparkle: { rgb: [37, 99, 235], color256: 26 },
+		title: { rgb: [29, 78, 216], color256: 26 },
+		subtitle: { rgb: [5, 150, 105], color256: 35 },
+		label: { rgb: [107, 114, 128], color256: 243 },
+		value: { rgb: [75, 85, 99], color256: 240 },
+		status: { rgb: [5, 150, 105], color256: 35 },
+		hint: { rgb: [107, 114, 128], color256: 243 },
+		version: { rgb: [107, 114, 128], color256: 243 },
+	},
+};
+
+const STARTUP_ASCII_WIDTH = 22;
+
+type StartupArtColor = "art" | "feet" | "filling" | "face" | "sparkle";
+
+type StartupArtSegment = {
+	text: string;
+	color: StartupArtColor;
+};
+
+function getStartupPalette(themeName: string | undefined): StartupPalette {
+	const detection = detectTerminalBackground();
+	if (detection.confidence === "high") {
+		return STARTUP_PALETTES[detection.theme];
+	}
+	if (themeName === "light" || themeName === "dark") {
+		return STARTUP_PALETTES[themeName];
+	}
+	return STARTUP_PALETTES.universal;
+}
+
+function startupFg(text: string, color: StartupColor): string {
+	if (getCapabilities().trueColor) {
+		const [r, g, b] = color.rgb;
+		return `\x1b[38;2;${r};${g};${b}m${text}\x1b[39m`;
+	}
+	return `\x1b[38;5;${color.color256}m${text}\x1b[39m`;
+}
+
+function startupBold(text: string): string {
+	return `\x1b[1m${text}\x1b[22m`;
+}
+
+function startupArtLine(palette: StartupPalette, segments: StartupArtSegment[]): string {
+	const width = segments.reduce((total, segment) => total + segment.text.length, 0);
+	const line = segments.map((segment) => startupFg(segment.text, palette[segment.color])).join("");
+	return `${line}${" ".repeat(Math.max(0, STARTUP_ASCII_WIDTH - width))}`;
+}
+
+function renderStartupAsciiArt(palette: StartupPalette): string[] {
+	return [
+		startupArtLine(palette, [
+			{ text: "   *", color: "sparkle" },
+			{ text: "    .-.    ", color: "art" },
+			{ text: "*", color: "sparkle" },
+		]),
+		startupArtLine(palette, [{ text: "      .'   '.", color: "art" }]),
+		startupArtLine(palette, [
+			{ text: "  --", color: "feet" },
+			{ text: " / ", color: "art" },
+			{ text: "o   o", color: "face" },
+			{ text: " \\ ", color: "art" },
+			{ text: "--", color: "feet" },
+		]),
+		startupArtLine(palette, [
+			{ text: "    /    ", color: "art" },
+			{ text: "v", color: "face" },
+			{ text: "    \\", color: "art" },
+		]),
+		startupArtLine(palette, [
+			{ text: "   /  ", color: "art" },
+			{ text: ".-pie-.", color: "filling" },
+			{ text: "  \\", color: "art" },
+		]),
+		startupArtLine(palette, [{ text: "  /__/_______\\__\\", color: "art" }]),
+		startupArtLine(palette, [
+			{ text: "     /_/", color: "feet" },
+			{ text: "   ", color: "art" },
+			{ text: "\\_\\", color: "feet" },
+		]),
+	];
+}
+
+function formatStartupDirectory(cwd: string): string {
+	const home = os.homedir();
+	const relativeToHome = path.relative(home, cwd);
+	if (relativeToHome === "") return "~";
+	if (!relativeToHome.startsWith("..") && !path.isAbsolute(relativeToHome)) {
+		return `~/${relativeToHome.split(path.sep).join("/")}`;
+	}
+	return cwd.split(path.sep).join("/");
+}
+
+function formatStartupModel(model: Model<any> | undefined, thinkingLevel: string | undefined): string {
+	if (!model || isUnknownModel(model)) return "unknown";
+	const modelId = model.provider === "pie-lab-router" ? model.id : `${model.provider}/${model.id}`;
+	return thinkingLevel && thinkingLevel !== "off" ? `${modelId} ${thinkingLevel}` : modelId;
 }
 
 function hasDefaultModelProvider(providerId: string): providerId is keyof typeof defaultModelPerProvider {
@@ -595,7 +749,28 @@ export class InteractiveMode {
 
 		// Add header with keybindings from config (unless silenced)
 		if (this.options.verbose || !this.settingsManager.getQuietStartup()) {
-			const logo = theme.bold(theme.fg("accent", APP_NAME)) + theme.fg("dim", ` v${this.version}`);
+			const startupPalette = getStartupPalette(this.settingsManager.getTheme());
+			const infoLabel = (label: string, value: string): string =>
+				`${startupFg(label.padEnd(10), startupPalette.label)}${value}`;
+			const startupInfo = [
+				`${startupBold(startupFg("Pie Lab", startupPalette.title))} ${startupFg(`v${this.version}`, startupPalette.version)}`,
+				startupFg("Agentic Development Kit", startupPalette.subtitle),
+				infoLabel(
+					"model:",
+					startupBold(
+						startupFg(formatStartupModel(this.session.model, this.session.thinkingLevel), startupPalette.value),
+					),
+				),
+				infoLabel(
+					"directory:",
+					startupBold(startupFg(formatStartupDirectory(process.cwd()), startupPalette.value)),
+				),
+				infoLabel("router:", startupFg("pie-lab-router ready", startupPalette.status)),
+				startupFg("Tip: Ask questions, edit files, run commands, or type /help.", startupPalette.hint),
+			];
+			const startupHeader = renderStartupAsciiArt(startupPalette)
+				.map((line, index) => `${line}  ${startupInfo[index] ?? ""}`)
+				.join("\n");
 
 			// Build startup instructions using keybinding hint helpers
 			const hint = (keybinding: AppKeybinding, description: string) => keyHint(keybinding, description);
@@ -634,11 +809,11 @@ export class InteractiveMode {
 			);
 			const onboarding = theme.fg(
 				"dim",
-				`pie can explain its own features and look up its docs. Ask it how to use or extend pie.`,
+				`${APP_NAME} can explain its own features and look up its docs. Ask it how to use or extend ${APP_NAME}.`,
 			);
 			this.builtInHeader = new ExpandableText(
-				() => `${logo}\n${compactInstructions}\n${compactOnboarding}\n\n${onboarding}`,
-				() => `${logo}\n${expandedInstructions}\n\n${onboarding}`,
+				() => `${startupHeader}\n${compactInstructions}\n${compactOnboarding}\n\n${onboarding}`,
+				() => `${startupHeader}\n${expandedInstructions}\n\n${onboarding}`,
 				this.getStartupExpansionState(),
 				1,
 				0,
