@@ -156,6 +156,22 @@ offline env                 PIE_OFFLINE
 
 현재는 기존 `pie` CLI, `-p` 실행, skill, extension, prompt-template, `@pie-lab/agent-core`의 Agent/AgentHarness 흐름을 우선 사용합니다.
 
+## 3-3. 대표 색상
+
+Pie Lab의 대표 색상은 `Pie Lab Blue + Cyan`으로 고정합니다.
+
+```txt
+Primary Blue  #2563EB
+Deep Blue     #1D4ED8
+Cyan Accent   #06B6D4
+Mint Status   #10B981
+Slate Text    #111827 / #E2E8F0
+```
+
+이 색상은 Pio 캐릭터의 파랑/시안 계열과 맞추고, 라이트/다크 터미널에서도 읽히는 것을 우선합니다.
+
+CLI 시작 헤더는 이 팔레트를 기준으로 라이트/다크 터미널을 감지해 다른 색상 값을 사용합니다. 또한 80컬럼 터미널에서도 줄바꿈으로 깨지지 않도록 박스 폭을 자동 조정합니다. Dashboard, Pie Chat, 문서 이미지도 앞으로 이 색상 체계에 맞춥니다.
+
 ## 4. pi의 역할
 
 `pi`는 일부 provider 코드만 가져오는 대상이 아닙니다.

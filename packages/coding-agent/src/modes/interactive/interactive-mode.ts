@@ -203,6 +203,8 @@ type StartupPalette = {
 	filling: StartupColor;
 	face: StartupColor;
 	sparkle: StartupColor;
+	border: StartupColor;
+	divider: StartupColor;
 	title: StartupColor;
 	subtitle: StartupColor;
 	label: StartupColor;
@@ -215,55 +217,69 @@ type StartupPalette = {
 const STARTUP_PALETTES: Record<"dark" | "light" | "universal", StartupPalette> = {
 	dark: {
 		art: { rgb: [251, 191, 36], color256: 220 },
-		feet: { rgb: [96, 165, 250], color256: 75 },
+		feet: { rgb: [56, 189, 248], color256: 81 },
 		filling: { rgb: [253, 224, 71], color256: 227 },
 		face: { rgb: [255, 247, 237], color256: 230 },
-		sparkle: { rgb: [110, 231, 183], color256: 79 },
-		title: { rgb: [103, 232, 249], color256: 86 },
-		subtitle: { rgb: [110, 231, 183], color256: 79 },
+		sparkle: { rgb: [34, 211, 238], color256: 80 },
+		border: { rgb: [14, 165, 233], color256: 39 },
+		divider: { rgb: [29, 78, 216], color256: 26 },
+		title: { rgb: [56, 189, 248], color256: 81 },
+		subtitle: { rgb: [125, 211, 252], color256: 117 },
 		label: { rgb: [148, 163, 184], color256: 109 },
 		value: { rgb: [226, 232, 240], color256: 254 },
-		status: { rgb: [134, 239, 172], color256: 120 },
-		hint: { rgb: [156, 163, 175], color256: 247 },
+		status: { rgb: [52, 211, 153], color256: 79 },
+		hint: { rgb: [203, 213, 225], color256: 252 },
 		version: { rgb: [148, 163, 184], color256: 109 },
 	},
 	light: {
 		art: { rgb: [146, 64, 14], color256: 94 },
-		feet: { rgb: [30, 64, 175], color256: 19 },
+		feet: { rgb: [29, 78, 216], color256: 26 },
 		filling: { rgb: [180, 83, 9], color256: 130 },
 		face: { rgb: [31, 41, 55], color256: 236 },
-		sparkle: { rgb: [4, 120, 87], color256: 29 },
-		title: { rgb: [30, 64, 175], color256: 19 },
-		subtitle: { rgb: [4, 120, 87], color256: 29 },
-		label: { rgb: [100, 116, 139], color256: 66 },
-		value: { rgb: [15, 23, 42], color256: 235 },
-		status: { rgb: [5, 150, 105], color256: 35 },
-		hint: { rgb: [71, 85, 105], color256: 60 },
+		sparkle: { rgb: [8, 145, 178], color256: 31 },
+		border: { rgb: [37, 99, 235], color256: 27 },
+		divider: { rgb: [14, 116, 144], color256: 30 },
+		title: { rgb: [29, 78, 216], color256: 26 },
+		subtitle: { rgb: [14, 116, 144], color256: 30 },
+		label: { rgb: [71, 85, 105], color256: 60 },
+		value: { rgb: [17, 24, 39], color256: 235 },
+		status: { rgb: [4, 120, 87], color256: 29 },
+		hint: { rgb: [55, 65, 81], color256: 240 },
 		version: { rgb: [71, 85, 105], color256: 60 },
 	},
 	universal: {
 		art: { rgb: [146, 64, 14], color256: 94 },
-		feet: { rgb: [59, 130, 246], color256: 33 },
+		feet: { rgb: [37, 99, 235], color256: 27 },
 		filling: { rgb: [180, 83, 9], color256: 130 },
 		face: { rgb: [55, 65, 81], color256: 240 },
-		sparkle: { rgb: [37, 99, 235], color256: 26 },
+		sparkle: { rgb: [8, 145, 178], color256: 31 },
+		border: { rgb: [37, 99, 235], color256: 27 },
+		divider: { rgb: [14, 116, 144], color256: 30 },
 		title: { rgb: [29, 78, 216], color256: 26 },
-		subtitle: { rgb: [5, 150, 105], color256: 35 },
-		label: { rgb: [107, 114, 128], color256: 243 },
-		value: { rgb: [75, 85, 99], color256: 240 },
-		status: { rgb: [5, 150, 105], color256: 35 },
-		hint: { rgb: [107, 114, 128], color256: 243 },
+		subtitle: { rgb: [14, 116, 144], color256: 30 },
+		label: { rgb: [71, 85, 105], color256: 60 },
+		value: { rgb: [55, 65, 81], color256: 240 },
+		status: { rgb: [4, 120, 87], color256: 29 },
+		hint: { rgb: [75, 85, 99], color256: 240 },
 		version: { rgb: [107, 114, 128], color256: 243 },
 	},
 };
 
 const STARTUP_ASCII_WIDTH = 22;
+const STARTUP_BOX_MAX_WIDTH = 112;
+const STARTUP_BOX_MIN_WIDTH = 72;
 
 type StartupArtColor = "art" | "feet" | "filling" | "face" | "sparkle";
 
 type StartupArtSegment = {
 	text: string;
 	color: StartupArtColor;
+};
+
+type StartupLayout = {
+	boxWidth: number;
+	leftWidth: number;
+	rightWidth: number;
 };
 
 function getStartupPalette(themeName: string | undefined): StartupPalette {
@@ -287,6 +303,29 @@ function startupFg(text: string, color: StartupColor): string {
 
 function startupBold(text: string): string {
 	return `\x1b[1m${text}\x1b[22m`;
+}
+
+function padStartupText(text: string, width: number): string {
+	return `${text}${" ".repeat(Math.max(0, width - visibleWidth(text)))}`;
+}
+
+function truncateStartupText(text: string, width: number): string {
+	if (visibleWidth(text) <= width) return text;
+	if (width <= 3) return text.slice(0, Math.max(0, width));
+	return `${text.slice(0, Math.max(0, width - 3))}...`;
+}
+
+function getStartupLayout(): StartupLayout {
+	const terminalColumns = process.stdout.columns;
+	const availableWidth = terminalColumns && terminalColumns > 0 ? terminalColumns - 2 : STARTUP_BOX_MAX_WIDTH;
+	const boxWidth = Math.min(STARTUP_BOX_MAX_WIDTH, Math.max(STARTUP_BOX_MIN_WIDTH, availableWidth));
+	const contentWidth = boxWidth - 7;
+	const leftWidth = Math.max(28, Math.min(48, Math.floor(contentWidth * 0.42)));
+	return {
+		boxWidth,
+		leftWidth,
+		rightWidth: contentWidth - leftWidth,
+	};
 }
 
 function startupArtLine(palette: StartupPalette, segments: StartupArtSegment[]): string {
@@ -329,6 +368,12 @@ function renderStartupAsciiArt(palette: StartupPalette): string[] {
 	];
 }
 
+function formatStartupUserName(): string {
+	const userName = process.env.USER ?? process.env.LOGNAME ?? os.userInfo().username;
+	const firstPart = userName.trim().split("@")[0]?.trim();
+	return firstPart || "there";
+}
+
 function formatStartupDirectory(cwd: string): string {
 	const home = os.homedir();
 	const relativeToHome = path.relative(home, cwd);
@@ -343,6 +388,107 @@ function formatStartupModel(model: Model<any> | undefined, thinkingLevel: string
 	if (!model || isUnknownModel(model)) return "unknown";
 	const modelId = model.provider === "pie-lab-router" ? model.id : `${model.provider}/${model.id}`;
 	return thinkingLevel && thinkingLevel !== "off" ? `${modelId} ${thinkingLevel}` : modelId;
+}
+
+type StartupBoxOptions = {
+	version: string;
+	model: string;
+	directory: string;
+	routerStatus: string;
+	userName: string;
+};
+
+function startupBoxBorder(palette: StartupPalette, left: string, fill: string, right: string): string {
+	return `${startupFg(left, palette.border)}${startupFg(fill, palette.border)}${startupFg(right, palette.border)}`;
+}
+
+function renderStartupTopBorder(palette: StartupPalette, version: string, layout: StartupLayout): string {
+	const title = ` ${startupBold(startupFg("Pie Lab", palette.title))} ${startupFg(`v${version}`, palette.version)} `;
+	const remaining = Math.max(0, layout.boxWidth - visibleWidth(title) - 3);
+	return `${startupFg("╭", palette.border)}${startupFg("─", palette.border)}${title}${startupFg("─".repeat(remaining), palette.border)}${startupFg("╮", palette.border)}`;
+}
+
+function renderStartupBoxLine(palette: StartupPalette, layout: StartupLayout, left: string, right: string): string {
+	return [
+		startupFg("│", palette.border),
+		" ",
+		padStartupText(left, layout.leftWidth),
+		" ",
+		startupFg("│", palette.divider),
+		" ",
+		padStartupText(right, layout.rightWidth),
+		" ",
+		startupFg("│", palette.border),
+	].join("");
+}
+
+function centerStartupLine(text: string, width: number): string {
+	const padding = Math.max(0, width - visibleWidth(text));
+	const left = Math.floor(padding / 2);
+	const right = padding - left;
+	return `${" ".repeat(left)}${text}${" ".repeat(right)}`;
+}
+
+function renderStartupInfoLine(
+	palette: StartupPalette,
+	label: string,
+	value: string,
+	width: number,
+	valueColor: StartupColor = palette.value,
+): string {
+	const labelText = startupFg(label.padEnd(10), palette.label);
+	const valueText = startupBold(startupFg(truncateStartupText(value, Math.max(8, width - 10)), valueColor));
+	return `${labelText}${valueText}`;
+}
+
+function renderStartupTipLine(palette: StartupPalette, command: string, description: string): string {
+	const commandText = startupBold(startupFg(command, palette.value));
+	return `${commandText} ${startupFg(description, palette.hint)}`;
+}
+
+function renderStartupBox(palette: StartupPalette, options: StartupBoxOptions): string {
+	const layout = getStartupLayout();
+	const artLines = renderStartupAsciiArt(palette).map((line) => centerStartupLine(line, layout.leftWidth));
+	const startupHintLine = (text: string): string =>
+		startupFg(truncateStartupText(text, layout.rightWidth), palette.hint);
+	const startupTipLine = (command: string, description: string): string => {
+		const descriptionWidth = Math.max(8, layout.rightWidth - visibleWidth(command) - 1);
+		return renderStartupTipLine(palette, command, truncateStartupText(description, descriptionWidth));
+	};
+	const leftLines = [
+		centerStartupLine(startupFg("Agentic Development Kit", palette.subtitle), layout.leftWidth),
+		centerStartupLine(
+			startupBold(startupFg(`Welcome back ${truncateStartupText(options.userName, 18)}!`, palette.value)),
+			layout.leftWidth,
+		),
+		"",
+		...artLines,
+		"",
+		renderStartupInfoLine(palette, "model:", options.model, layout.leftWidth),
+		renderStartupInfoLine(palette, "router:", options.routerStatus, layout.leftWidth, palette.status),
+		renderStartupInfoLine(palette, "directory:", options.directory, layout.leftWidth),
+	];
+	const rightLines = [
+		startupBold(startupFg("Tips for getting started", palette.title)),
+		startupTipLine("/help", "see commands and shortcuts"),
+		startupTipLine("/model", "change model or router alias"),
+		startupTipLine("/usage", "review local usage and cost"),
+		"",
+		startupFg("─".repeat(layout.rightWidth), palette.divider),
+		startupBold(startupFg("What's new", palette.title)),
+		startupHintLine("Brand colors now use Pie Lab blue and cyan."),
+		startupHintLine("Router status, model, and cwd are visible at start."),
+		startupHintLine("Dashboard and chat usage origins are tracked."),
+	];
+	const lines = Math.max(leftLines.length, rightLines.length);
+	const body = Array.from({ length: lines }, (_, index) =>
+		renderStartupBoxLine(palette, layout, leftLines[index] ?? "", rightLines[index] ?? ""),
+	);
+	return [
+		renderStartupTopBorder(palette, options.version, layout),
+		...body,
+		startupBoxBorder(palette, "╰", "─".repeat(layout.boxWidth - 2), "╯"),
+	].join("\n");
 }
 
 function hasDefaultModelProvider(providerId: string): providerId is keyof typeof defaultModelPerProvider {
@@ -750,27 +896,13 @@ export class InteractiveMode {
 		// Add header with keybindings from config (unless silenced)
 		if (this.options.verbose || !this.settingsManager.getQuietStartup()) {
 			const startupPalette = getStartupPalette(this.settingsManager.getTheme());
-			const infoLabel = (label: string, value: string): string =>
-				`${startupFg(label.padEnd(10), startupPalette.label)}${value}`;
-			const startupInfo = [
-				`${startupBold(startupFg("Pie Lab", startupPalette.title))} ${startupFg(`v${this.version}`, startupPalette.version)}`,
-				startupFg("Agentic Development Kit", startupPalette.subtitle),
-				infoLabel(
-					"model:",
-					startupBold(
-						startupFg(formatStartupModel(this.session.model, this.session.thinkingLevel), startupPalette.value),
-					),
-				),
-				infoLabel(
-					"directory:",
-					startupBold(startupFg(formatStartupDirectory(process.cwd()), startupPalette.value)),
-				),
-				infoLabel("router:", startupFg("pie-lab-router ready", startupPalette.status)),
-				startupFg("Tip: Ask questions, edit files, run commands, or type /help.", startupPalette.hint),
-			];
-			const startupHeader = renderStartupAsciiArt(startupPalette)
-				.map((line, index) => `${line}  ${startupInfo[index] ?? ""}`)
-				.join("\n");
+			const startupHeader = renderStartupBox(startupPalette, {
+				version: this.version,
+				model: formatStartupModel(this.session.model, this.session.thinkingLevel),
+				directory: formatStartupDirectory(process.cwd()),
+				routerStatus: "pie-lab-router ready",
+				userName: formatStartupUserName(),
+			});
 
 			// Build startup instructions using keybinding hint helpers
 			const hint = (keybinding: AppKeybinding, description: string) => keyHint(keybinding, description);

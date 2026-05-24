@@ -1923,3 +1923,21 @@ npm --workspace @pie-lab/dashboard-next run build
 npm --workspace @pie-lab/dashboard-next run lint
 npm --workspace @pie-lab/dashboard-next run build
 ```
+
+## 2026-05-24: CLI 시작 헤더 박스형 레이아웃과 대표 색상
+
+완료한 일:
+
+- Pie Lab 대표 색상을 `Pie Lab Blue + Cyan`으로 정리했습니다.
+- `README.md`와 `docs/current-decisions.md`에 Primary Blue, Deep Blue, Cyan Accent, Mint Status, Slate Text 기준을 기록했습니다.
+- `pie` CLI 시작 헤더를 Claude Code 스타일의 박스형 레이아웃으로 변경했습니다.
+- 시작 헤더 왼쪽에는 ADK 이름, 사용자 인사, Pie 캐릭터, model/router/directory 정보를 표시합니다.
+- 시작 헤더 오른쪽에는 `/help`, `/model`, `/usage` 안내와 최근 변경 요약을 표시합니다.
+- 라이트/다크 터미널 감지 결과에 따라 같은 브랜드 색상 안에서 더 잘 읽히는 색상 값을 사용하도록 조정했습니다.
+- 80컬럼 터미널에서도 헤더가 줄바꿈으로 깨지지 않도록 터미널 폭에 맞춰 박스 폭을 자동 조정합니다.
+
+검증:
+
+```bash
+npm --workspace @pie-lab/coding-agent run build
+```

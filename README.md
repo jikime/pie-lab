@@ -47,6 +47,18 @@
 
 CLI 실행 명령어와 앱 내부 이름은 모두 `pie`로 사용합니다. 기존 `pi` fork와 충돌하지 않도록 기본 설정 경로는 `~/.pie/agent`, 프로젝트 설정 경로는 `.pie/`, 환경변수는 `PIE_CODING_AGENT_DIR` 체계를 사용합니다.
 
+## Pie Lab 대표 색상
+
+Pie Lab의 대표 색상은 Pio 캐릭터와 터미널 가독성을 기준으로 **Pie Lab Blue + Cyan** 조합으로 정합니다.
+
+- Primary Blue: `#2563EB`
+- Deep Blue: `#1D4ED8`
+- Cyan Accent: `#06B6D4`
+- Mint Status: `#10B981`
+- Slate Text: `#111827` / `#E2E8F0`
+
+CLI 시작 헤더는 이 팔레트를 기준으로 라이트/다크 터미널을 감지해 더 읽기 쉬운 색을 사용하고, 터미널 폭에 맞춰 박스 크기를 자동 조정합니다. Dashboard, Pie Chat, 문서 이미지도 앞으로 이 색상 체계를 기준으로 맞춥니다.
+
 To learn more about pi:
 
 * [Visit pielab.ai](https://pielab.ai), the project website with demos
