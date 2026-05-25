@@ -162,6 +162,8 @@ You can start the main development stack with:
 npm run dev
 ```
 
+Before starting, this command clears pie-lab's fixed development ports `4873`, `4876`, and `4877` so stale server, dashboard, or chat processes do not cause `EADDRINUSE` errors. To skip that cleanup, run `npm run dev:start` instead or set `PIE_DEV_SKIP_PORT_CLEANUP=1`.
+
 That starts package watchers plus:
 
 | Service | URL |
@@ -408,7 +410,9 @@ If Honcho is not configured, local memory and skills still work.
 |---------|--------------|
 | `npm install` | Install workspace dependencies |
 | `npm run build` | Build packages, server, dashboard, and chat |
-| `npm run dev` | Run core watchers plus server, dashboard, and chat |
+| `npm run dev` | Clear fixed dev ports, then run core watchers plus server, dashboard, and chat |
+| `npm run dev:start` | Run the dev stack without clearing existing ports |
+| `npm run dev:clean-ports` | Stop listeners on `4873`, `4876`, and `4877` |
 | `npm run check` | Format/lint/type-check plus browser smoke check |
 | `npm test` | Run workspace tests |
 | `./test.sh` | Run tests with API credentials hidden |
@@ -416,6 +420,24 @@ If Honcho is not configured, local memory and skills still work.
 | `npm --workspace @pie-lab/pie-chat run check:bridge` | Type-check Telegram/Discord bridge code |
 
 ## Troubleshooting
+
+### `EADDRINUSE` or address already in use
+
+`npm run dev` clears the fixed pie-lab ports before starting:
+
+```txt
+4873 API server
+4876 dashboard
+4877 Pie Chat
+```
+
+If you started apps separately and only want to clear those ports, run:
+
+```bash
+npm run dev:clean-ports
+```
+
+If another non-pie process intentionally uses one of those ports, stop it yourself or run the individual app with a different port instead of using the root `npm run dev`.
 
 ### `/chat-config` or `/chat-connect` does not appear
 
