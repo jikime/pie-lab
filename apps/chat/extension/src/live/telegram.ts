@@ -1,7 +1,7 @@
 import type { ResolvedConversation, TelegramAccountConfig } from "../core/config-types.js";
 import type { InboundMessageInput } from "../core/runtime-types.js";
 import { chunkText } from "../render/chunking.js";
-import { formatMarkdownForService, maxMessageLength } from "../render/format.js";
+import { formatMarkdownForService, maxMessageLength, telegramHtmlToPlainText } from "../render/format.js";
 import { StreamingPreview } from "../render/streaming.js";
 import {
 	fetchBinary,
@@ -83,6 +83,28 @@ async function callTelegram<T>(
 	if (!response.ok || !data.ok || data.result === undefined)
 		throw new Error(data.description || `Telegram API ${method} failed`);
 	return data.result;
+}
+
+function isTelegramFormattingError(error: unknown): boolean {
+	const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+	return message.includes("can't parse entities") || message.includes("parse entities");
+}
+
+async function callTelegramText<T>(
+	botToken: string,
+	method: string,
+	body: Record<string, unknown>,
+	fallbackText?: string,
+	options?: { signal?: AbortSignal },
+): Promise<T> {
+	try {
+		return await callTelegram<T>(botToken, method, body, options);
+	} catch (error) {
+		if (!body.parse_mode || !fallbackText || !isTelegramFormattingError(error)) throw error;
+		const fallbackBody: Record<string, unknown> = { ...body, text: fallbackText };
+		delete fallbackBody.parse_mode;
+		return callTelegram<T>(botToken, method, fallbackBody, options);
+	}
 }
 
 async function downloadTelegramFile(
@@ -184,22 +206,32 @@ export async function connectTelegramLive(
 		create: async (text, parseMode, replyToMessageId) =>
 			String(
 				(
-					await callTelegram<{ message_id: number }>(account.botToken, "sendMessage", {
-						chat_id: Number(conversation.channel.id),
-						text,
-						parse_mode: parseMode,
-						reply_to_message_id: replyToMessageId ? Number(replyToMessageId) : undefined,
-					})
+					await callTelegramText<{ message_id: number }>(
+						account.botToken,
+						"sendMessage",
+						{
+							chat_id: Number(conversation.channel.id),
+							text,
+							parse_mode: parseMode,
+							reply_to_message_id: replyToMessageId ? Number(replyToMessageId) : undefined,
+						},
+						telegramHtmlToPlainText(text),
+					)
 				).message_id,
 			),
 		edit: async (id, text, parseMode) => {
 			try {
-				await callTelegram(account.botToken, "editMessageText", {
-					chat_id: Number(conversation.channel.id),
-					message_id: Number(id),
-					text,
-					parse_mode: parseMode,
-				});
+				await callTelegramText(
+					account.botToken,
+					"editMessageText",
+					{
+						chat_id: Number(conversation.channel.id),
+						message_id: Number(id),
+						text,
+						parse_mode: parseMode,
+					},
+					telegramHtmlToPlainText(text),
+				);
 			} catch (error) {
 				const message = error instanceof Error ? error.message : String(error);
 				if (!message.toLowerCase().includes("message is not modified")) throw error;
@@ -316,16 +348,30 @@ export async function connectTelegramLive(
 			for (const state of mediaGroups.values()) if (state.timer) clearTimeout(state.timer);
 			await loop.catch(() => undefined);
 		},
-		sendImmediate: async (text, replyToMessageId) =>
-			String(
-				(
-					await callTelegram<{ message_id: number }>(account.botToken, "sendMessage", {
-						chat_id: Number(conversation.channel.id),
-						text,
-						reply_to_message_id: replyToMessageId ? Number(replyToMessageId) : undefined,
-					})
-				).message_id,
-			),
+		sendImmediate: async (text, replyToMessageId) => {
+			const rendered = formatMarkdownForService("telegram", text);
+			const chunks = chunkText(rendered.text, maxMessageLength("telegram"));
+			let firstId: string | undefined;
+			for (let i = 0; i < chunks.length; i++) {
+				const id = String(
+					(
+						await callTelegramText<{ message_id: number }>(
+							account.botToken,
+							"sendMessage",
+							{
+								chat_id: Number(conversation.channel.id),
+								text: chunks[i],
+								parse_mode: rendered.parseMode,
+								reply_to_message_id: i === 0 && replyToMessageId ? Number(replyToMessageId) : undefined,
+							},
+							telegramHtmlToPlainText(chunks[i] ?? ""),
+						)
+					).message_id,
+				);
+				firstId ??= id;
+			}
+			return firstId || "";
+		},
 		send: async (text, attachmentPaths = [], signal, replyToMessageId) => {
 			const rendered = formatMarkdownForService("telegram", text);
 			const replyParam = replyToMessageId ? { reply_to_message_id: Number(replyToMessageId) } : {};
@@ -335,7 +381,7 @@ export async function connectTelegramLive(
 				for (let i = 0; i < chunks.length; i++) {
 					const id = String(
 						(
-							await callTelegram<{ message_id: number }>(
+							await callTelegramText<{ message_id: number }>(
 								account.botToken,
 								"sendMessage",
 								{
@@ -344,6 +390,7 @@ export async function connectTelegramLive(
 									parse_mode: rendered.parseMode,
 									...(i === 0 ? replyParam : {}),
 								},
+								telegramHtmlToPlainText(chunks[i] ?? ""),
 								{ signal },
 							)
 						).message_id,
@@ -357,18 +404,33 @@ export async function connectTelegramLive(
 			const firstKind = guessAttachmentKind(first.name, first.mimeType);
 			const firstMethod = firstKind === "image" ? "sendPhoto" : "sendDocument";
 			const firstField = firstKind === "image" ? "photo" : "document";
-			const firstForm = new FormData();
-			firstForm.set("chat_id", String(Number(conversation.channel.id)));
-			if (replyToMessageId) firstForm.set("reply_to_message_id", String(Number(replyToMessageId)));
-			if (text) firstForm.set("caption", text);
-			if (text && firstKind === "image") firstForm.set("parse_mode", "Markdown");
-			firstForm.set(firstField, new Blob([Buffer.from(first.data)], { type: first.mimeType }), first.name);
-			const firstResponse = await fetch(`https://api.telegram.org/bot${account.botToken}/${firstMethod}`, {
+			const buildFirstForm = (caption: string, parseMode?: string) => {
+				const form = new FormData();
+				form.set("chat_id", String(Number(conversation.channel.id)));
+				if (replyToMessageId) form.set("reply_to_message_id", String(Number(replyToMessageId)));
+				if (caption) form.set("caption", caption);
+				if (caption && parseMode) form.set("parse_mode", parseMode);
+				form.set(firstField, new Blob([Buffer.from(first.data)], { type: first.mimeType }), first.name);
+				return form;
+			};
+			let firstResponse = await fetch(`https://api.telegram.org/bot${account.botToken}/${firstMethod}`, {
 				method: "POST",
-				body: firstForm,
+				body: buildFirstForm(rendered.text, rendered.parseMode),
 				signal,
 			});
-			const firstData = (await firstResponse.json()) as TelegramResponse<{ message_id: number }>;
+			let firstData = (await firstResponse.json()) as TelegramResponse<{ message_id: number }>;
+			if (
+				(!firstResponse.ok || !firstData.ok || firstData.result === undefined) &&
+				rendered.parseMode &&
+				isTelegramFormattingError(firstData.description)
+			) {
+				firstResponse = await fetch(`https://api.telegram.org/bot${account.botToken}/${firstMethod}`, {
+					method: "POST",
+					body: buildFirstForm(rendered.fallbackText),
+					signal,
+				});
+				firstData = (await firstResponse.json()) as TelegramResponse<{ message_id: number }>;
+			}
 			if (!firstResponse.ok || !firstData.ok || firstData.result === undefined)
 				throw new Error(firstData.description || `${firstMethod} failed`);
 			for (const path of rest) {

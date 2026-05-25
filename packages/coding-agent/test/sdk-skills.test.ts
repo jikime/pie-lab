@@ -106,4 +106,36 @@ This is a test skill.
 		expect(session.resourceLoader.getSkills().skills).toEqual([customSkill]);
 		expect(session.resourceLoader.getSkills().diagnostics).toEqual([]);
 	});
+
+	it("should refresh session skills when skill_manage creates a skill", async () => {
+		const { session } = await createAgentSession({
+			cwd: tempDir,
+			agentDir: tempDir,
+			sessionManager: SessionManager.inMemory(),
+		});
+		const tool = session.getToolDefinition("skill_manage");
+
+		expect(tool).toBeDefined();
+		expect(session.resourceLoader.getSkills().skills.some((skill) => skill.name === "session-live-reload")).toBe(
+			false,
+		);
+
+		await tool!.execute(
+			"call-session-live-reload",
+			{
+				action: "create",
+				name: "session-live-reload",
+				description: "Use this when verifying that created skills are available without restarting.",
+				content:
+					"---\nname: session-live-reload\ndescription: Use this when verifying that created skills are available without restarting.\n---\n\n# Session Live Reload\n\nCreated skills should be visible to the current session on the next turn.",
+			},
+			undefined,
+			undefined,
+			undefined as any,
+		);
+
+		expect(session.resourceLoader.getSkills().skills.some((skill) => skill.name === "session-live-reload")).toBe(
+			true,
+		);
+	});
 });

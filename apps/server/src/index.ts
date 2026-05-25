@@ -32,6 +32,7 @@ import {
 } from "./model-availability-api.js";
 import { createMediaRequestHandler, type MediaApiOptions } from "./media-api.js";
 import { createLearningRequestHandler, type LearningApiOptions } from "./learning-api.js";
+import { createPieAgentChatRequestHandler, type PieAgentChatApiOptions } from "./pie-agent-chat-api.js";
 import { createProviderStatusRequestHandler } from "./provider-status-api.js";
 import { createProxyPoolRequestHandler, type ProxyPoolApiOptions } from "./proxy-pools-api.js";
 import {
@@ -48,6 +49,7 @@ export * from "./budget-policy.js";
 export * from "./oauth-api.js";
 export * from "./media-api.js";
 export * from "./learning-api.js";
+export * from "./pie-agent-chat-api.js";
 export * from "./model-availability-api.js";
 export * from "./provider-connections-api.js";
 export * from "./provider-settings-api.js";
@@ -70,6 +72,7 @@ export interface PieLabServerOptions
 		ModelAvailabilityApiOptions,
 		MediaApiOptions,
 		LearningApiOptions,
+		PieAgentChatApiOptions,
 		ProxyPoolApiOptions,
 		RoutingPolicyApiOptions,
 		SiteApiOptions {
@@ -106,6 +109,11 @@ export function createPieLabRequestHandler(options: PieLabServerOptions = {}) {
 	const modelAvailabilityHandler = createModelAvailabilityRequestHandler({ ...options, providerConnectionStore });
 	const mediaHandler = createMediaRequestHandler({ ...options, providerConnectionStore, usageStore });
 	const learningHandler = createLearningRequestHandler(options);
+	const pieAgentChatHandler = createPieAgentChatRequestHandler({
+		...options,
+		modelRegistry,
+		usageStore,
+	});
 	const proxyPoolHandler = createProxyPoolRequestHandler({ ...options, providerConnectionStore });
 	const siteHandler = createSiteRequestHandler(options);
 	const routingPolicyHandler = createRoutingPolicyRequestHandler({
@@ -119,6 +127,10 @@ export function createPieLabRequestHandler(options: PieLabServerOptions = {}) {
 		const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
 		if (isChatOrModelPath(url.pathname)) {
 			await chatHandler(request, response);
+			return;
+		}
+		if (isPieAgentChatPath(url.pathname)) {
+			await pieAgentChatHandler(request, response);
 			return;
 		}
 		if (isProviderPath(url.pathname)) {
@@ -218,6 +230,10 @@ function isCliEntrypoint(): boolean {
 
 function isChatOrModelPath(pathname: string): boolean {
 	return pathname === "/v1/chat/completions" || pathname === "/v1/models" || pathname === "/models";
+}
+
+function isPieAgentChatPath(pathname: string): boolean {
+	return pathname === "/v1/pie/chat/completions";
 }
 
 function isProviderPath(pathname: string): boolean {

@@ -287,8 +287,11 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 			: undefined;
 	let reloadSessionResources: (() => Promise<void>) | undefined;
 	const onLearningSkillsChanged = async (): Promise<void> => {
+		if (reloadSessionResources) {
+			await reloadSessionResources();
+			return;
+		}
 		await resourceLoader.reload();
-		await reloadSessionResources?.();
 	};
 	const learningTools =
 		!options.noTools &&

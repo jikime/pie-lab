@@ -91,7 +91,12 @@ type PersistedChatState = {
 	conversationId?: string;
 };
 
+type PersistedChatContextDisplayState = {
+	conversationId?: string;
+};
+
 const SESSION_STATE_CUSTOM_TYPE = "pie-chat-state";
+const CHAT_CONTEXT_DISPLAY_STATE_CUSTOM_TYPE = "pie-chat-context-display-state";
 const CHAT_CONVERSATION_FLAG = "chat-conversation";
 const WORKER_TMUX_PREFIX = "pie-chat-worker-";
 const DASHBOARD_TMUX_SESSION = "pie-chat-dashboard";
@@ -450,9 +455,14 @@ function createPieChatExtension(pi: ExtensionAPI) {
 	let pendingControlAction: (() => Promise<void>) | undefined;
 	let activeTriggerMessageId: string | undefined;
 	let previousUsageOrigin: { origin?: string; endpoint?: string } | undefined;
+	let displayedChatContextConversationId: string | undefined;
 
 	function persistChatState(conversationId?: string): void {
 		pi.appendEntry<PersistedChatState>(SESSION_STATE_CUSTOM_TYPE, { conversationId });
+	}
+
+	function persistChatContextDisplayState(conversationId?: string): void {
+		pi.appendEntry<PersistedChatContextDisplayState>(CHAT_CONTEXT_DISPLAY_STATE_CUSTOM_TYPE, { conversationId });
 	}
 
 	function getPersistedConversationId(ctx: ExtensionContext): string | undefined {
@@ -465,6 +475,30 @@ function createPieChatExtension(pi: ExtensionAPI) {
 			return undefined;
 		}
 		return undefined;
+	}
+
+	function getPersistedChatContextDisplayConversationId(ctx: ExtensionContext): string | undefined {
+		const entries = ctx.sessionManager.getEntries();
+		for (let index = entries.length - 1; index >= 0; index--) {
+			const entry = entries[index] as unknown as Record<string, unknown>;
+			if (entry.type !== "custom" || entry.customType !== CHAT_CONTEXT_DISPLAY_STATE_CUSTOM_TYPE) continue;
+			const data = entry.data as PersistedChatContextDisplayState | undefined;
+			if (typeof data?.conversationId === "string" && data.conversationId.trim()) return data.conversationId;
+			return undefined;
+		}
+		return undefined;
+	}
+
+	function hasLegacyChatContextMessage(ctx: ExtensionContext, expectedHeader: string): boolean {
+		return ctx.sessionManager.getEntries().some((entry) => {
+			const value = entry as unknown as Record<string, unknown>;
+			return (
+				value.type === "custom_message" &&
+				value.customType === "chat-context" &&
+				typeof value.content === "string" &&
+				value.content.startsWith(expectedHeader)
+			);
+		});
 	}
 
 	function applyChatUsageOrigin(conversation: ResolvedConversation): void {
@@ -669,7 +703,7 @@ function createPieChatExtension(pi: ExtensionAPI) {
 			applyChatUsageOrigin(runtime.conversation);
 		}
 		if (previousSandbox) await previousSandbox.close().catch(() => undefined);
-		await showChatContextMessage();
+		await showChatContextMessage(ctx);
 		updateStatus(ctx);
 		return true;
 	}
@@ -813,7 +847,7 @@ function createPieChatExtension(pi: ExtensionAPI) {
 		persistChatState(conversation.conversationId);
 		startWorkerStatusLoop(ctx);
 		if (interactive) ctx.ui.notify(`Connected ${conversation.conversationName}`, "info");
-		await showChatContextMessage();
+		await showChatContextMessage(ctx);
 		updateStatus(ctx);
 		await tryDispatch(ctx);
 		return true;
@@ -825,11 +859,25 @@ function createPieChatExtension(pi: ExtensionAPI) {
 		return box;
 	});
 
-	async function showChatContextMessage(): Promise<void> {
+	async function showChatContextMessage(ctx: ExtensionContext): Promise<void> {
 		if (!runtime) return;
+		const conversationId = runtime.conversation.conversationId;
 		const channelName = runtime.conversation.channel.name ?? runtime.conversation.channelKey;
 		const mode = runtime.conversation.channel.dm ? "dm" : "mention";
 		const service = runtime.conversation.service;
+		const header = `Connected to ${service} ${mode} ${channelName}.`;
+		const persistedDisplayConversationId = getPersistedChatContextDisplayConversationId(ctx);
+		if (displayedChatContextConversationId === conversationId || persistedDisplayConversationId === conversationId) {
+			displayedChatContextConversationId = conversationId;
+			return;
+		}
+		if (!persistedDisplayConversationId && hasLegacyChatContextMessage(ctx, header)) {
+			displayedChatContextConversationId = conversationId;
+			persistChatContextDisplayState(conversationId);
+			return;
+		}
+		displayedChatContextConversationId = conversationId;
+		persistChatContextDisplayState(conversationId);
 		const systemPromptAdditions = buildChatSystemPromptSuffix(service, mode, channelName).trim();
 		const accountMemory = await safeReadMountedText(
 			runtime.conversation.sharedDir,
@@ -840,7 +888,7 @@ function createPieChatExtension(pi: ExtensionAPI) {
 			runtime.conversation.channelMemoryPath,
 		);
 		const skillsSuffix = await buildSkillsPromptSuffix();
-		const sections = [`Connected to ${service} ${mode} ${channelName}.`, "", "System prompt:", systemPromptAdditions];
+		const sections = [header, "", "System prompt:", systemPromptAdditions];
 		if (accountMemory.trim()) sections.push("", "Account memory (/shared/memory.md):", accountMemory.trim());
 		if (channelMemory.trim()) sections.push("", "Channel memory (/workspace/memory.md):", channelMemory.trim());
 		if (skillsSuffix) sections.push("", skillsSuffix.trim());
@@ -1143,7 +1191,11 @@ function createPieChatExtension(pi: ExtensionAPI) {
 		runtime = undefined;
 		chatTurnInFlight = false;
 		await current.disconnect();
-		if (clearPersistedState) persistChatState(undefined);
+		if (clearPersistedState) {
+			persistChatState(undefined);
+			persistChatContextDisplayState(undefined);
+			displayedChatContextConversationId = undefined;
+		}
 		updateStatus(ctx);
 	}
 

@@ -252,6 +252,54 @@ describe("background learning review", () => {
 		expect(reviewStore.list()[0].status).toBe("applied");
 	});
 
+	it("notifies the active runtime when a background review changes skills", async () => {
+		const agentDir = tempDir("review-skill-reload");
+		const cwd = tempDir("review-skill-reload-cwd");
+		const memoryStore = new MemoryStore({ agentDir });
+		const skillManager = new SkillManager({ agentDir, cwd });
+		const reviewStore = new LearningReviewStore({ agentDir });
+		let reloads = 0;
+		const reviewer = new BackgroundLearningReview({
+			settings: normalizeLearningSettings({}),
+			memoryStore,
+			skillManager,
+			reviewStore,
+			onSkillsChanged: () => {
+				reloads += 1;
+			},
+			streamFn: async function* () {
+				yield {
+					type: "done",
+					message: {
+						content: [
+							{
+								type: "text",
+								text: JSON.stringify({
+									actions: [
+										{
+											type: "skill_create",
+											name: "live-session-skill-refresh",
+											description: "Use this when verifying live session skill refresh behavior.",
+											content:
+												"---\nname: live-session-skill-refresh\ndescription: Use this when verifying live session skill refresh behavior.\n---\n\n# Live Session Skill Refresh\n\nWhen a skill is created during a running session, reload the active runtime so the next turn can use it.",
+										},
+									],
+								}),
+							},
+						],
+					},
+				};
+			},
+		});
+
+		reviewer.trigger([{ role: "assistant", content: [{ type: "text", text: "done" }] } as any]);
+		await new Promise((resolve) => setTimeout(resolve, 20));
+
+		expect(existsSync(join(agentDir, "skills/live-session-skill-refresh/SKILL.md"))).toBe(true);
+		expect(reloads).toBe(1);
+		expect(reviewStore.list()[0].status).toBe("applied");
+	});
+
 	it("runs a Hermes-style learning tool loop with only memory and skill tools", async () => {
 		const agentDir = tempDir("review-tool-loop");
 		const cwd = tempDir("review-tool-loop-cwd");

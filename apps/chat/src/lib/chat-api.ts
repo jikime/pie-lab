@@ -13,11 +13,14 @@ export interface RouteInfo {
   routing_mode?: string;
   resolved_provider?: string;
   resolved_model?: string;
+  agent_session_id?: string;
+  conversation_id?: string;
 }
 
 export interface StreamChatCompletionOptions {
   model: string;
   messages: OpenAiChatMessage[];
+  conversationId: string;
   signal?: AbortSignal;
   onDelta: (delta: string) => void;
   onRoute?: (route: RouteInfo) => void;
@@ -59,11 +62,12 @@ export async function listModels(signal?: AbortSignal): Promise<string[]> {
 export async function streamChatCompletion({
   model,
   messages,
+  conversationId,
   signal,
   onDelta,
   onRoute,
 }: StreamChatCompletionOptions): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/v1/chat/completions`, {
+  const response = await fetch(`${API_BASE_URL}/v1/pie/chat/completions`, {
     method: "POST",
     headers: {
       "content-type": "application/json",
@@ -72,6 +76,7 @@ export async function streamChatCompletion({
     body: JSON.stringify({
       model,
       messages,
+      conversation_id: conversationId,
       stream: true,
     }),
     signal,

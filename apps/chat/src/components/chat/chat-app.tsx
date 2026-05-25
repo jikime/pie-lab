@@ -2,6 +2,9 @@
 
 import { Bot, CircleStop, MessageSquarePlus, RefreshCw, Send, UserRound, Wifi, WifiOff } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import ReactMarkdown, { type Components } from "react-markdown";
+import remarkBreaks from "remark-breaks";
+import remarkGfm from "remark-gfm";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,11 +31,13 @@ interface ChatEntry {
 }
 
 const QUICK_MODELS = ["auto:chat", "auto:coding", "auto:reasoning"];
+const MARKDOWN_REMARK_PLUGINS = [remarkGfm, remarkBreaks];
 
 export function ChatApp() {
   const [messages, setMessages] = useState<ChatEntry[]>([]);
   const [input, setInput] = useState("");
   const [model, setModel] = useState("auto:chat");
+  const [conversationId, setConversationId] = useState(() => createId("web"));
   const [serverStatus, setServerStatus] = useState<ServerStatus>("checking");
   const [models, setModels] = useState<string[]>(QUICK_MODELS);
   const [isSending, setIsSending] = useState(false);
@@ -96,6 +101,7 @@ export function ChatApp() {
       await streamChatCompletion({
         model,
         messages: requestMessages,
+        conversationId,
         signal: controller.signal,
         onDelta: (delta) => {
           setMessages((current) =>
@@ -139,6 +145,7 @@ export function ChatApp() {
     abortRef.current?.abort();
     setMessages([]);
     setInput("");
+    setConversationId(createId("web"));
   }
 
   return (
@@ -188,7 +195,7 @@ export function ChatApp() {
         <div className="mt-auto border-t px-4 py-4">
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <RefreshCw className="size-3.5" />
-            <span>router via server</span>
+            <span>pie AgentSession</span>
           </div>
         </div>
       </aside>
@@ -221,7 +228,7 @@ export function ChatApp() {
                     </div>
                     <div className="min-w-0">
                       <p className="text-lg font-semibold">무엇을 도와드릴까요?</p>
-                      <p className="mt-1 text-sm text-muted-foreground">model: {model}</p>
+                      <p className="mt-1 text-sm text-muted-foreground">pie session · {model}</p>
                     </div>
                   </div>
                 </div>
@@ -291,6 +298,7 @@ export function ChatApp() {
 function MessageBubble({ message, isStreaming }: { message: ChatEntry; isStreaming: boolean }) {
   const isUser = message.role === "user";
   const Icon = isUser ? UserRound : Bot;
+  const content = message.content || (isStreaming && !isUser ? "응답 생성 중..." : "");
 
   return (
     <article className={cn("flex gap-3", isUser && "justify-end")}>
@@ -302,12 +310,12 @@ function MessageBubble({ message, isStreaming }: { message: ChatEntry; isStreami
       <div className={cn("max-w-[min(760px,100%)] space-y-2", isUser && "flex flex-col items-end")}>
         <div
           className={cn(
-            "whitespace-pre-wrap break-words rounded-lg border px-3 py-2 text-sm leading-6 shadow-sm",
+            "break-words rounded-lg border px-3 py-2 text-sm leading-6 shadow-sm",
             isUser ? "bg-primary text-primary-foreground" : "bg-card text-card-foreground",
             message.error && "border-destructive/30 bg-destructive/10 text-destructive",
           )}
         >
-          {message.content || (isStreaming && !isUser ? "응답 생성 중..." : "")}
+          <MarkdownContent content={content} isUser={isUser} />
         </div>
         {message.route && (
           <div className="flex flex-wrap gap-1.5">
@@ -324,6 +332,76 @@ function MessageBubble({ message, isStreaming }: { message: ChatEntry; isStreami
       )}
     </article>
   );
+}
+
+function MarkdownContent({ content, isUser }: { content: string; isUser: boolean }) {
+  const components = useMemo(() => createMarkdownComponents(isUser), [isUser]);
+
+  return (
+    <div className="min-w-0 overflow-hidden">
+      <ReactMarkdown remarkPlugins={MARKDOWN_REMARK_PLUGINS} components={components}>
+        {content}
+      </ReactMarkdown>
+    </div>
+  );
+}
+
+function createMarkdownComponents(isUser: boolean): Components {
+  const linkClass = isUser
+    ? "font-medium text-primary-foreground underline underline-offset-2"
+    : "font-medium text-primary underline underline-offset-2";
+  const inlineCodeClass = isUser
+    ? "rounded bg-primary-foreground/15 px-1 py-0.5 font-mono text-[0.85em] text-primary-foreground"
+    : "rounded bg-muted px-1 py-0.5 font-mono text-[0.85em] text-foreground";
+  const blockCodeClass = isUser ? "font-mono text-xs text-primary-foreground" : "font-mono text-xs text-foreground";
+  const quoteClass = isUser
+    ? "my-2 border-l-2 border-primary-foreground/40 pl-3 text-primary-foreground/90"
+    : "my-2 border-l-2 border-border pl-3 text-muted-foreground";
+
+  return {
+    p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+    a: ({ children, href }) => (
+      <a className={linkClass} href={href} target="_blank" rel="noreferrer">
+        {children}
+      </a>
+    ),
+    strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+    em: ({ children }) => <em className="italic">{children}</em>,
+    h1: ({ children }) => <h1 className="mb-2 mt-1 text-base font-semibold first:mt-0">{children}</h1>,
+    h2: ({ children }) => <h2 className="mb-2 mt-3 text-sm font-semibold first:mt-0">{children}</h2>,
+    h3: ({ children }) => <h3 className="mb-1.5 mt-3 text-sm font-semibold first:mt-0">{children}</h3>,
+    ul: ({ children }) => <ul className="my-2 ml-5 list-disc space-y-1">{children}</ul>,
+    ol: ({ children }) => <ol className="my-2 ml-5 list-decimal space-y-1">{children}</ol>,
+    li: ({ children }) => <li className="pl-1">{children}</li>,
+    blockquote: ({ children }) => <blockquote className={quoteClass}>{children}</blockquote>,
+    hr: () => <hr className={cn("my-3 border-t", isUser ? "border-primary-foreground/25" : "border-border")} />,
+    pre: ({ children }) => (
+      <pre
+        className={cn(
+          "my-3 max-w-full overflow-x-auto rounded-md border p-3 leading-relaxed",
+          isUser ? "border-primary-foreground/20 bg-primary-foreground/10" : "border-border bg-muted/60",
+        )}
+      >
+        {children}
+      </pre>
+    ),
+    code: ({ children, className }) => (
+      <code className={cn(className ? blockCodeClass : inlineCodeClass, className)}>{children}</code>
+    ),
+    table: ({ children }) => (
+      <table className="my-3 block max-w-full overflow-x-auto border-collapse text-xs">{children}</table>
+    ),
+    th: ({ children }) => (
+      <th className={cn("border px-2 py-1 text-left font-semibold", isUser ? "border-primary-foreground/25" : "border-border")}>
+        {children}
+      </th>
+    ),
+    td: ({ children }) => (
+      <td className={cn("border px-2 py-1 align-top", isUser ? "border-primary-foreground/25" : "border-border")}>
+        {children}
+      </td>
+    ),
+  };
 }
 
 function ServerBadge({ status }: { status: ServerStatus }) {
