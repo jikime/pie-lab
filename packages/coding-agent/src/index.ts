@@ -175,6 +175,16 @@ export {
 	type SchedulerSettings,
 	tickCronScheduler,
 } from "./core/scheduler/index.ts";
+export {
+	getGatewayDir,
+	getGatewayPidPath,
+	readGatewayPid,
+	readGatewayStatus,
+	runGateway,
+	type GatewayLogger,
+	type GatewayStatus,
+	type RunGatewayOptions,
+} from "./core/gateway/runner.ts";
 export type {
 	PackageManager,
 	PathMetadata,

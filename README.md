@@ -59,6 +59,7 @@ Imported baseline details are tracked in [docs/origins.md](./docs/origins.md).
 - Next.js dashboard at `apps/dashboard` for usage, cost, providers, quota, routing policy, proxy, media tests, logs, and Learning Loop operations.
 - Pie Chat web UI at `apps/chat`.
 - Telegram/Discord bridge extension with `/chat-config`, `/chat-connect`, `/chat-spawn-all`, and `/chat-workers`.
+- `pie gateway` for long-running Telegram/Discord messaging plus scheduled cron delivery without keeping a TUI session open.
 - 9router-style model routing with aliases such as `auto:coding`, `auto:chat`, `auto:learning`, and `auto:memory`.
 - Provider connection storage, account selection, fallback attempts, quota-aware routing, cooldown/model lock handling, and usage/cost records.
 - Claude Code local provider path through `claude-code-adk`.
@@ -89,7 +90,7 @@ Imported baseline details are tracked in [docs/origins.md](./docs/origins.md).
 - Node.js `>=22.19.0` is required. Older Node 22 builds such as `22.12.0` can fail during `npm run build`.
 - npm
 - Git
-- `tmux` if you want long-running Telegram/Discord bridge workers
+- `tmux` only if you use the older `/chat-spawn-all` worker mode. `pie gateway` does not require tmux.
 - At least one model provider credential or local provider path
 
 The repository includes `.node-version`, so with `nvm`:
@@ -323,7 +324,12 @@ Pie Chat requests are recorded with `clientOrigin=pie-chat:web`, so the dashboar
 
 ## Telegram And Discord Bridge
 
-The bridge is not the Next.js web server. It is a `pie` extension from `apps/chat/extension`.
+There are two ways to connect Telegram or Discord.
+
+- `pie gateway` is the recommended long-running process. It runs without an open TUI session and also ticks scheduled cron jobs.
+- The bridge extension from `apps/chat/extension` is still available when you want a live local `pie` session connected to a channel.
+
+The extension bridge is not the Next.js web server.
 
 Because `.pie/settings.json` registers `../apps/chat`, a normal `pie` session from the repository root loads the bridge commands:
 
@@ -379,6 +385,43 @@ Chat bridge state is stored in:
 ```
 
 More details are in [docs/chat-usage.md](./docs/chat-usage.md).
+
+## Use Pie Gateway
+
+`pie gateway` is the Hermes-style always-on process for external chat and scheduled automations. It uses the same config file as `/chat-config`:
+
+```txt
+~/.pie/agent/chat/config.json
+```
+
+Configure channels either from the TUI with `/chat-config` or from the CLI:
+
+```bash
+pie gateway setup
+```
+
+Run it in the foreground:
+
+```bash
+pie gateway run
+```
+
+Check or stop it:
+
+```bash
+pie gateway status
+pie gateway stop
+```
+
+Install it as a user service:
+
+```bash
+pie gateway install
+pie gateway restart
+pie gateway uninstall
+```
+
+On macOS this creates a LaunchAgent. On Linux this creates a systemd user service. While the gateway is running, Telegram/Discord messages can start full Pie agent turns with router usage tracking, Learning Loop tools, global/project skills, chat history, file attachments, and `cronjob` scheduling. Cron jobs that use `deliver: "origin"` reply back to the chat where they were created.
 
 ## Learning Loop
 

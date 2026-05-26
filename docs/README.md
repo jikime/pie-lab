@@ -14,6 +14,7 @@
 - [Learning Loop](./learning-loop.md): persistent memory, 자동 skill 생성, Honcho user modeling, curator 운영 방식을 정리합니다.
 - [Claude Agent SDK provider](./claude-agent-sdk-provider.md): Claude Code 로컬 구독/로그인 흐름을 router 후보로 쓰는 방법을 정리합니다.
 - [채팅 사용법](./chat-usage.md): 웹 채팅과 Telegram/Discord bridge 설정, 연결, 문제 해결 방법을 정리합니다.
+- [Pie Gateway](./gateway.md): TUI 없이 장시간 Telegram/Discord 메시지와 cron scheduled automation을 처리하는 gateway 운영 방식을 정리합니다.
 - [pie-chat E2E 검증 체크리스트](./chat-e2e-checklist.md): 실제 Telegram/Discord 채널에서 bridge를 검증하는 기준을 정리합니다.
 - [배포](./deployment.md): GitHub Pages `install.sh`와 npm package 배포 흐름을 정리합니다.
 - [npm 릴리스 플레이북](./npm-release-playbook.md): 실제 npm 배포 명령, 검증 순서, 2FA/token 주의사항, `web-ui` 제외 기준을 정리합니다.
@@ -30,9 +31,11 @@
 
 현재 `pie-lab`은 `pi` 기반 CLI/TUI를 유지하면서 `9router`의 핵심 라우팅, fallback, provider connection, quota, cooldown, usage/cost 기록을 `pie` 내부 호출과 local `/v1` API에 연결한 상태입니다. 또한 최신 `Claude Agent SDK`를 `claude-code-adk` 로컬 provider로 추가해, `auto:coding` 같은 router 요청이 Claude Code 로컬 로그인/구독 흐름을 후보로 사용할 수 있게 했습니다.
 
-`apps/server`는 OpenAI-compatible chat completions, streaming SSE, embeddings, web search/fetch, TTS/STT, image generation endpoint를 제공합니다. `apps/dashboard`는 Next.js 16, Tailwind CSS 4, shadcn/ui 기반의 기본 dashboard이며 usage detail, provider setup, OAuth redirect login, quota detail, model availability, routing policy form, budget form, proxy 관리, media endpoint test form, Learning Loop 운영 화면까지 포함합니다. 이전 Vite dashboard는 `apps/dashboard_old`에 보관합니다.
+`apps/server`는 OpenAI-compatible chat completions, streaming SSE, embeddings, web search/fetch, TTS/STT, image generation endpoint를 제공합니다. `apps/dashboard`는 Next.js 16, Tailwind CSS 4, shadcn/ui 기반의 기본 dashboard이며 usage detail, provider setup, OAuth redirect login, quota detail, model availability, routing policy form, budget form, proxy 관리, media endpoint test form, Learning Loop 운영 화면까지 포함합니다.
 
-`apps/chat`은 `pie-chat` 영역으로, Next.js 웹 채팅과 Telegram/Discord bridge extension을 함께 담고 있습니다. 웹 채팅은 `pie-chat:web`, bridge worker는 `pie-chat:telegram` 또는 `pie-chat:discord` origin으로 usage/cost를 남깁니다. 프로젝트 설정에서 `apps/chat`을 local package로 등록해 두었기 때문에 저장소 루트에서 `pie`를 실행하면 `/chat-config`, `/chat-connect` 같은 bridge 명령이 로드됩니다. 남은 일은 실제 계정 기준 장시간 송수신 검증입니다.
+`apps/chat`은 `pie-chat` 영역으로, Next.js 웹 채팅과 Telegram/Discord bridge extension을 함께 담고 있습니다. 웹 채팅은 `pie-chat:web`, bridge worker는 `pie-chat:telegram` 또는 `pie-chat:discord` origin으로 usage/cost를 남깁니다. 프로젝트 설정에서 `apps/chat`을 local package로 등록해 두었기 때문에 저장소 루트에서 `pie`를 실행하면 `/chat-config`, `/chat-connect` 같은 bridge 명령이 로드됩니다.
+
+장시간 운영 경로는 `pie gateway`로 분리했습니다. Gateway는 TUI 세션 없이 Telegram/Discord 메시지를 받고, 같은 프로세스에서 scheduler tick을 실행해 cron 결과를 원래 채팅방으로 전달할 수 있습니다.
 
 다음 큰 작업은 다음 순서로 진행합니다.
 

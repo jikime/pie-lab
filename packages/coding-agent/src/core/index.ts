@@ -86,3 +86,13 @@ export {
 	type SchedulerSettings,
 	tickCronScheduler,
 } from "./scheduler/index.ts";
+export {
+	getGatewayDir,
+	getGatewayPidPath,
+	readGatewayPid,
+	readGatewayStatus,
+	runGateway,
+	type GatewayLogger,
+	type GatewayStatus,
+	type RunGatewayOptions,
+} from "./gateway/runner.ts";

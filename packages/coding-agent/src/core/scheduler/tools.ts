@@ -44,7 +44,10 @@ function currentChatOrigin(): string | undefined {
 	return process.env.PIE_CHAT_CONVERSATION_ID?.trim() || process.env.PIE_LAB_CHAT_CONVERSATION_ID?.trim() || undefined;
 }
 
-export function createSchedulerToolDefinitions(options: { store: CronJobStore }): ToolDefinition[] {
+export function createSchedulerToolDefinitions(options: {
+	store: CronJobStore;
+	getOrigin?: () => string | undefined;
+}): ToolDefinition[] {
 	return [
 		{
 			name: "cronjob",
@@ -76,7 +79,7 @@ export function createSchedulerToolDefinitions(options: { store: CronJobStore })
 						schedule: params.schedule,
 						repeat: params.repeat,
 						deliver: params.deliver,
-						origin: currentChatOrigin(),
+						origin: options.getOrigin?.() ?? currentChatOrigin(),
 						script: params.script,
 						noAgent: params.noAgent,
 						contextFrom: params.contextFrom,

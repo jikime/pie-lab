@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
 	CronJobStore,
 	DEFAULT_SCHEDULER_SETTINGS,
+	createSchedulerToolDefinitions,
 	deliverCronResult,
 	parseSchedule,
 	tickCronScheduler,
@@ -103,6 +104,27 @@ describe("scheduler delivery", () => {
 });
 
 describe("scheduler jobs", () => {
+	it("records explicit chat origin when cronjob tool creates a job", async () => {
+		const store = new CronJobStore({ agentDir: tempDir("cron-tool-origin"), cwd: tempDir("cron-tool-origin-cwd") });
+		const [tool] = createSchedulerToolDefinitions({ store, getOrigin: () => "tg/dm" });
+
+		const result = await tool.execute(
+			"tool-call-id",
+			{
+				action: "create",
+				name: "origin-test",
+				prompt: "say hello",
+				schedule: "1h",
+				deliver: "origin",
+			},
+			undefined,
+			undefined,
+			undefined as never,
+		);
+
+		expect((result.details as { origin?: string }).origin).toBe("tg/dm");
+	});
+
 	it("runs a noAgent script job and saves output", async () => {
 		const agentDir = tempDir("cron");
 		const cwd = tempDir("cron-cwd");

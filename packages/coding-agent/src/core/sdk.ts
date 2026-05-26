@@ -99,6 +99,8 @@ export interface CreateAgentSessionOptions {
 	usageStore?: UsageStore;
 	/** Session start event metadata for extension runtime startup. */
 	sessionStartEvent?: SessionStartEvent;
+	/** Conversation id used by remote chat runtimes when creating cron jobs with deliver=origin. */
+	chatOrigin?: string;
 }
 
 /** Result from createAgentSession */
@@ -318,6 +320,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		!options.noTools && schedulerSettings.enabled
 			? createSchedulerToolDefinitions({
 					store: cronJobStore,
+					getOrigin: () => options.chatOrigin,
 				})
 			: [];
 	const customTools = [...(options.customTools ?? []), ...learningTools, ...schedulerTools];

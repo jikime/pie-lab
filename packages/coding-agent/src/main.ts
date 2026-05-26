@@ -50,6 +50,7 @@ import { SessionManager } from "./core/session-manager.ts";
 import { SettingsManager } from "./core/settings-manager.ts";
 import { printTimings, resetTimings, time } from "./core/timings.ts";
 import { handleCuratorCommand } from "./curator-cli.ts";
+import { handleGatewayCommand } from "./gateway-cli.ts";
 import { handleLearningCommand } from "./learning-cli.ts";
 import { runMigrations, showDeprecationWarnings } from "./migrations.ts";
 import { InteractiveMode, runPrintMode, runRpcMode } from "./modes/index.ts";
@@ -460,6 +461,10 @@ export async function main(args: string[], options?: MainOptions) {
 	}
 
 	if (await handleLearningCommand(args)) {
+		return;
+	}
+
+	if (await handleGatewayCommand(args)) {
 		return;
 	}
 

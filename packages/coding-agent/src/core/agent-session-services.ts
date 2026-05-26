@@ -61,6 +61,7 @@ export interface CreateAgentSessionFromServicesOptions {
 	tools?: string[];
 	noTools?: CreateAgentSessionOptions["noTools"];
 	customTools?: ToolDefinition[];
+	chatOrigin?: CreateAgentSessionOptions["chatOrigin"];
 }
 
 /**
@@ -217,6 +218,7 @@ export async function createAgentSessionFromServices(
 		noTools: options.noTools,
 		customTools: options.customTools,
 		sessionStartEvent: options.sessionStartEvent,
+		chatOrigin: options.chatOrigin,
 		usageStore: options.services.usageStore,
 	});
 }
