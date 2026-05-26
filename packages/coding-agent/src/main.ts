@@ -56,6 +56,7 @@ import { InteractiveMode, runPrintMode, runRpcMode } from "./modes/index.ts";
 import { ExtensionSelectorComponent } from "./modes/interactive/components/extension-selector.ts";
 import { initTheme, stopThemeWatcher } from "./modes/interactive/theme/theme.ts";
 import { handleConfigCommand, handlePackageCommand } from "./package-manager-cli.ts";
+import { handleCronCommand } from "./scheduler-cli.ts";
 import { isLocalPath, normalizePath, resolvePath } from "./utils/paths.ts";
 import { cleanupWindowsSelfUpdateQuarantine } from "./utils/windows-self-update.ts";
 
@@ -459,6 +460,10 @@ export async function main(args: string[], options?: MainOptions) {
 	}
 
 	if (await handleLearningCommand(args)) {
+		return;
+	}
+
+	if (await handleCronCommand(args)) {
 		return;
 	}
 

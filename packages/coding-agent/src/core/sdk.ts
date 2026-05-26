@@ -31,6 +31,7 @@ import { ModelRegistry } from "./model-registry.ts";
 import { findInitialModel } from "./model-resolver.ts";
 import type { ResourceLoader } from "./resource-loader.ts";
 import { DefaultResourceLoader } from "./resource-loader.ts";
+import { createSchedulerToolDefinitions, CronJobStore } from "./scheduler/index.ts";
 import { getDefaultSessionDir, SessionManager } from "./session-manager.ts";
 import { SettingsManager } from "./settings-manager.ts";
 import { isInstallTelemetryEnabled } from "./telemetry.ts";
@@ -221,6 +222,14 @@ function getMessageErrorText(message: AssistantMessage): string | undefined {
 	return firstText?.text;
 }
 
+function getUsageClientOrigin(): string | undefined {
+	return process.env.PIE_LAB_USAGE_ORIGIN?.trim() || process.env.PIE_USAGE_ORIGIN?.trim() || undefined;
+}
+
+function getUsageEndpoint(): string | undefined {
+	return process.env.PIE_LAB_USAGE_ENDPOINT?.trim() || process.env.PIE_USAGE_ENDPOINT?.trim() || undefined;
+}
+
 /**
  * Create an AgentSession with the specified options.
  *
@@ -278,9 +287,11 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	}
 
 	const learningSettings = settingsManager.getLearningSettings();
+	const schedulerSettings = settingsManager.getSchedulerSettings();
 	const memoryStore = new MemoryStore({ agentDir });
 	const reviewStore = new LearningReviewStore({ agentDir });
 	const skillManager = new SkillManager({ agentDir, cwd });
+	const cronJobStore = new CronJobStore({ agentDir, cwd });
 	const learningMemorySnapshot =
 		learningSettings.enabled && learningSettings.memory.enabled
 			? memoryStore.formatForSystemPrompt(memoryStore.readSnapshot())
@@ -303,7 +314,13 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 					onSkillsChanged: onLearningSkillsChanged,
 				})
 			: [];
-	const customTools = [...(options.customTools ?? []), ...learningTools];
+	const schedulerTools =
+		!options.noTools && schedulerSettings.enabled
+			? createSchedulerToolDefinitions({
+					store: cronJobStore,
+				})
+			: [];
+	const customTools = [...(options.customTools ?? []), ...learningTools, ...schedulerTools];
 
 	// Check if session has existing data to restore
 	const existingSession = sessionManager.buildSessionContext();
@@ -465,6 +482,8 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 								connectionId,
 								attemptIndex,
 								attemptCount,
+								endpoint: getUsageEndpoint(),
+								clientOrigin: getUsageClientOrigin(),
 								usage: usage
 									? {
 											input: usage.input,

@@ -164,6 +164,17 @@ export {
 } from "./core/learning/index.ts";
 export { convertToLlm } from "./core/messages.ts";
 export { ModelRegistry } from "./core/model-registry.ts";
+export {
+	CronJobStore,
+	type CronJob,
+	type CronJobStatus,
+	type CronRunResult,
+	DEFAULT_SCHEDULER_SETTINGS,
+	normalizeSchedulerSettings,
+	runCronJob,
+	type SchedulerSettings,
+	tickCronScheduler,
+} from "./core/scheduler/index.ts";
 export type {
 	PackageManager,
 	PathMetadata,

@@ -6,6 +6,7 @@ import { CONFIG_DIR_NAME, getAgentDir } from "../config.ts";
 import { normalizePath, resolvePath } from "../utils/paths.ts";
 import { DEFAULT_HTTP_IDLE_TIMEOUT_MS, parseHttpIdleTimeoutMs } from "./http-dispatcher.ts";
 import { type LearningSettings, normalizeLearningSettings } from "./learning/learning-settings.ts";
+import { type SchedulerSettings, normalizeSchedulerSettings } from "./scheduler/scheduler-settings.ts";
 
 export interface CompactionSettings {
 	enabled?: boolean; // default: true
@@ -68,6 +69,17 @@ export type LearningSettingsInput = Partial<{
 	honcho: Partial<LearningSettings["honcho"]>;
 }>;
 
+export type SchedulerSettingsInput = Partial<{
+	enabled: boolean;
+	tickIntervalSeconds: number;
+	timeoutSeconds: number;
+	maxParallelJobs: number;
+	scriptsEnabled: boolean;
+	noAgentEnabled: boolean;
+	defaultDeliver: "local";
+	learning: Partial<SchedulerSettings["learning"]>;
+}>;
+
 export type TransportSetting = Transport;
 
 /**
@@ -122,6 +134,7 @@ export interface Settings {
 	markdown?: MarkdownSettings;
 	warnings?: WarningSettings;
 	learning?: LearningSettingsInput;
+	scheduler?: SchedulerSettingsInput;
 	sessionDir?: string; // Custom session storage directory (same format as --session-dir CLI flag)
 	httpIdleTimeoutMs?: number; // HTTP header/body idle timeout in milliseconds; 0 disables it
 }
@@ -828,6 +841,10 @@ export class SettingsManager {
 
 	getLearningSettings(): LearningSettings {
 		return normalizeLearningSettings(this.settings.learning);
+	}
+
+	getSchedulerSettings(): SchedulerSettings {
+		return normalizeSchedulerSettings(this.settings.scheduler);
 	}
 
 	setLearningReviewMode(mode: LearningSettings["review"]["mode"]): void {

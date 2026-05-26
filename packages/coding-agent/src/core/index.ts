@@ -75,3 +75,14 @@ export {
 	type WorkingIndicatorOptions,
 } from "./extensions/index.ts";
 export { createSyntheticSourceInfo } from "./source-info.ts";
+export {
+	CronJobStore,
+	type CronJob,
+	type CronJobStatus,
+	type CronRunResult,
+	DEFAULT_SCHEDULER_SETTINGS,
+	normalizeSchedulerSettings,
+	runCronJob,
+	type SchedulerSettings,
+	tickCronScheduler,
+} from "./scheduler/index.ts";

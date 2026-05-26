@@ -454,7 +454,16 @@ function createPieChatExtension(pi: ExtensionAPI) {
 	let pendingChatDispatch = false;
 	let pendingControlAction: (() => Promise<void>) | undefined;
 	let activeTriggerMessageId: string | undefined;
-	let previousUsageOrigin: { origin?: string; endpoint?: string } | undefined;
+	let previousUsageOrigin:
+		| {
+				origin?: string;
+				endpoint?: string;
+				chatConversationId?: string;
+				chatService?: string;
+				chatAccountId?: string;
+				chatChannelKey?: string;
+		  }
+		| undefined;
 	let displayedChatContextConversationId: string | undefined;
 
 	function persistChatState(conversationId?: string): void {
@@ -505,9 +514,17 @@ function createPieChatExtension(pi: ExtensionAPI) {
 		previousUsageOrigin ??= {
 			origin: process.env.PIE_LAB_USAGE_ORIGIN,
 			endpoint: process.env.PIE_LAB_USAGE_ENDPOINT,
+			chatConversationId: process.env.PIE_CHAT_CONVERSATION_ID,
+			chatService: process.env.PIE_CHAT_SERVICE,
+			chatAccountId: process.env.PIE_CHAT_ACCOUNT_ID,
+			chatChannelKey: process.env.PIE_CHAT_CHANNEL_KEY,
 		};
 		process.env.PIE_LAB_USAGE_ORIGIN = `pie-chat:${conversation.service}`;
 		process.env.PIE_LAB_USAGE_ENDPOINT = `pie-chat:${conversation.service}`;
+		process.env.PIE_CHAT_CONVERSATION_ID = conversation.conversationId;
+		process.env.PIE_CHAT_SERVICE = conversation.service;
+		process.env.PIE_CHAT_ACCOUNT_ID = conversation.accountId;
+		process.env.PIE_CHAT_CHANNEL_KEY = conversation.channelKey;
 	}
 
 	function restoreChatUsageOrigin(): void {
@@ -516,6 +533,14 @@ function createPieChatExtension(pi: ExtensionAPI) {
 		else process.env.PIE_LAB_USAGE_ORIGIN = previousUsageOrigin.origin;
 		if (previousUsageOrigin.endpoint === undefined) delete process.env.PIE_LAB_USAGE_ENDPOINT;
 		else process.env.PIE_LAB_USAGE_ENDPOINT = previousUsageOrigin.endpoint;
+		if (previousUsageOrigin.chatConversationId === undefined) delete process.env.PIE_CHAT_CONVERSATION_ID;
+		else process.env.PIE_CHAT_CONVERSATION_ID = previousUsageOrigin.chatConversationId;
+		if (previousUsageOrigin.chatService === undefined) delete process.env.PIE_CHAT_SERVICE;
+		else process.env.PIE_CHAT_SERVICE = previousUsageOrigin.chatService;
+		if (previousUsageOrigin.chatAccountId === undefined) delete process.env.PIE_CHAT_ACCOUNT_ID;
+		else process.env.PIE_CHAT_ACCOUNT_ID = previousUsageOrigin.chatAccountId;
+		if (previousUsageOrigin.chatChannelKey === undefined) delete process.env.PIE_CHAT_CHANNEL_KEY;
+		else process.env.PIE_CHAT_CHANNEL_KEY = previousUsageOrigin.chatChannelKey;
 		previousUsageOrigin = undefined;
 	}
 
@@ -1202,12 +1227,14 @@ function createPieChatExtension(pi: ExtensionAPI) {
 	pi.on("tool_call", async (event) => {
 		if (!chatTurnInFlight) return;
 		if (
-			["read", "write", "edit", "bash", "chat_attach", "chat_history", "chat_request_secret"].includes(event.toolName)
+			["read", "write", "edit", "bash", "cronjob", "chat_attach", "chat_history", "chat_request_secret"].includes(
+				event.toolName,
+			)
 		)
 			return;
 		return {
 			block: true,
-			reason: "pie-chat remote turns only allow read, write, edit, bash, chat_history, and chat_attach",
+			reason: "pie-chat remote turns only allow read, write, edit, bash, cronjob, chat_history, and chat_attach",
 		};
 	});
 
@@ -1416,6 +1443,7 @@ function createPieChatExtension(pi: ExtensionAPI) {
 			"write",
 			"edit",
 			"bash",
+			"cronjob",
 			"chat_history",
 			"chat_attach",
 			"chat_request_secret",
