@@ -1,13 +1,16 @@
+import { ENV_OFFLINE, ENV_SKIP_VERSION_CHECK, isTruthyEnv, PACKAGE_NAME } from "../config.ts";
 import { getPiUserAgent } from "./pi-user-agent.ts";
 
-const LATEST_VERSION_URL = "https://pi.dev/api/latest-version";
+const LATEST_VERSION_URL = `https://registry.npmjs.org/${PACKAGE_NAME.replace("/", "%2F")}/latest`;
 const DEFAULT_VERSION_CHECK_TIMEOUT_MS = 10000;
 
-export interface LatestPiRelease {
+export interface LatestPieRelease {
 	version: string;
 	packageName?: string;
 	note?: string;
 }
+
+export type LatestPiRelease = LatestPieRelease;
 
 interface ParsedVersion {
 	major: number;
@@ -53,22 +56,25 @@ export function isNewerPackageVersion(candidateVersion: string, currentVersion: 
 	return candidateVersion.trim() !== currentVersion.trim();
 }
 
-export async function getLatestPiRelease(
+export async function getLatestPieRelease(
 	currentVersion: string,
 	options: { timeoutMs?: number } = {},
-): Promise<LatestPiRelease | undefined> {
-	if (process.env.PI_SKIP_VERSION_CHECK || process.env.PI_OFFLINE) return undefined;
+): Promise<LatestPieRelease | undefined> {
+	if (isTruthyEnv(ENV_SKIP_VERSION_CHECK, "PI_SKIP_VERSION_CHECK") || isTruthyEnv(ENV_OFFLINE, "PI_OFFLINE")) {
+		return undefined;
+	}
 
 	const response = await fetch(LATEST_VERSION_URL, {
 		headers: {
 			"User-Agent": getPiUserAgent(currentVersion),
-			accept: "application/json",
+			accept: "application/vnd.npm.install-v1+json, application/json",
 		},
 		signal: AbortSignal.timeout(options.timeoutMs ?? DEFAULT_VERSION_CHECK_TIMEOUT_MS),
 	});
 	if (!response.ok) return undefined;
 
 	const data = (await response.json()) as {
+		name?: unknown;
 		packageName?: unknown;
 		version?: unknown;
 		note?: unknown;
@@ -77,7 +83,11 @@ export async function getLatestPiRelease(
 		return undefined;
 	}
 	const packageName =
-		typeof data.packageName === "string" && data.packageName.trim() ? data.packageName.trim() : undefined;
+		typeof data.name === "string" && data.name.trim()
+			? data.name.trim()
+			: typeof data.packageName === "string" && data.packageName.trim()
+				? data.packageName.trim()
+				: undefined;
 	const note = typeof data.note === "string" && data.note.trim() ? data.note.trim() : undefined;
 	return {
 		version: data.version.trim(),
@@ -86,16 +96,16 @@ export async function getLatestPiRelease(
 	};
 }
 
-export async function getLatestPiVersion(
+export async function getLatestPieVersion(
 	currentVersion: string,
 	options: { timeoutMs?: number } = {},
 ): Promise<string | undefined> {
-	return (await getLatestPiRelease(currentVersion, options))?.version;
+	return (await getLatestPieRelease(currentVersion, options))?.version;
 }
 
-export async function checkForNewPiVersion(currentVersion: string): Promise<LatestPiRelease | undefined> {
+export async function checkForNewPieVersion(currentVersion: string): Promise<LatestPieRelease | undefined> {
 	try {
-		const latestRelease = await getLatestPiRelease(currentVersion);
+		const latestRelease = await getLatestPieRelease(currentVersion);
 		if (latestRelease && isNewerPackageVersion(latestRelease.version, currentVersion)) {
 			return latestRelease;
 		}
@@ -103,4 +113,22 @@ export async function checkForNewPiVersion(currentVersion: string): Promise<Late
 	} catch {
 		return undefined;
 	}
+}
+
+export async function getLatestPiRelease(
+	currentVersion: string,
+	options: { timeoutMs?: number } = {},
+): Promise<LatestPieRelease | undefined> {
+	return getLatestPieRelease(currentVersion, options);
+}
+
+export async function getLatestPiVersion(
+	currentVersion: string,
+	options: { timeoutMs?: number } = {},
+): Promise<string | undefined> {
+	return getLatestPieVersion(currentVersion, options);
+}
+
+export async function checkForNewPiVersion(currentVersion: string): Promise<LatestPieRelease | undefined> {
+	return checkForNewPieVersion(currentVersion);
 }

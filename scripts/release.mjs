@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Release script for pi-mono
+ * Release script for pie-lab
  *
  * Usage:
  *   node scripts/release.mjs <major|minor|patch>
@@ -91,7 +91,7 @@ function bumpOrSetVersion(target) {
 	}
 
 	console.log(`Setting explicit version (${target})...`);
-	run(`npm version ${target} -ws --no-git-tag-version && node scripts/sync-versions.js && npm install --package-lock-only`);
+		run(`npm version ${target} --workspaces --no-git-tag-version && node scripts/sync-versions.js && npm install --package-lock-only`);
 	return getVersion();
 }
 

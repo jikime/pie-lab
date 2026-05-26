@@ -15,6 +15,8 @@
 - [Claude Agent SDK provider](./claude-agent-sdk-provider.md): Claude Code 로컬 구독/로그인 흐름을 router 후보로 쓰는 방법을 정리합니다.
 - [채팅 사용법](./chat-usage.md): 웹 채팅과 Telegram/Discord bridge 설정, 연결, 문제 해결 방법을 정리합니다.
 - [pie-chat E2E 검증 체크리스트](./chat-e2e-checklist.md): 실제 Telegram/Discord 채널에서 bridge를 검증하는 기준을 정리합니다.
+- [배포](./deployment.md): GitHub Pages `install.sh`와 npm package 배포 흐름을 정리합니다.
+- [npm 릴리스 플레이북](./npm-release-playbook.md): 실제 npm 배포 명령, 검증 순서, 2FA/token 주의사항, `web-ui` 제외 기준을 정리합니다.
 - [dashboard 이관 범위](./dashboard-migration.md): 기존 Vite dashboard 기능을 Next.js dashboard로 옮길 때의 기준과 우선순위를 정리합니다.
 - [소스 출처](./origins.md): `pi`, `9router`, `pie-chat` fork와 import 기준 commit을 기록합니다.
 - [현재 결정 사항](./current-decisions.md): 지금까지 결정한 통합 방향과 현재 구조를 요약합니다.

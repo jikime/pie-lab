@@ -2,7 +2,7 @@ import { join } from "node:path";
 import type { ThinkingLevel } from "@pie-lab/agent-core";
 import type { Model } from "@pie-lab/ai";
 import { createQuotaAwareProviderConnectionPreparer } from "@pie-lab/shared";
-import { createJsonProviderConnectionStore } from "@pie-lab/storage";
+import { createJsonlUsageStore, createJsonProviderConnectionStore, type UsageStore } from "@pie-lab/storage";
 import { getAgentDir } from "../config.js";
 import { AuthStorage } from "./auth-storage.js";
 import type { SessionStartEvent, ToolDefinition } from "./extensions/index.js";
@@ -37,6 +37,10 @@ export interface CreateAgentSessionServicesOptions {
 	authStorage?: AuthStorage;
 	settingsManager?: SettingsManager;
 	modelRegistry?: ModelRegistry;
+	/** Usage recorder for routed CLI calls. Default: JSONL store at agentDir/usage.jsonl. */
+	usageStore?: UsageStore;
+	/** Override the default JSONL usage file path when usageStore is not provided. */
+	usageFilePath?: string;
 	extensionFlagValues?: Map<string, boolean | string>;
 	resourceLoaderOptions?: Omit<DefaultResourceLoaderOptions, "cwd" | "agentDir" | "settingsManager">;
 }
@@ -72,7 +76,13 @@ export interface AgentSessionServices {
 	settingsManager: SettingsManager;
 	modelRegistry: ModelRegistry;
 	resourceLoader: ResourceLoader;
+	usageStore: UsageStore;
 	diagnostics: AgentSessionRuntimeDiagnostic[];
+}
+
+export function getDefaultAgentUsageFilePath(agentDir: string, env: NodeJS.ProcessEnv = process.env): string {
+	const usagePath = env.PIE_LAB_USAGE_PATH?.trim() || env.PIE_ADK_USAGE_PATH?.trim() || env.PI_ADK_USAGE_PATH?.trim();
+	return usagePath || join(agentDir, "usage.jsonl");
 }
 
 function applyExtensionFlagValues(
@@ -136,6 +146,8 @@ export async function createAgentSessionServices(
 	const authStorage = options.authStorage ?? AuthStorage.create(join(agentDir, "auth.json"));
 	const settingsManager = options.settingsManager ?? SettingsManager.create(cwd, agentDir);
 	const providerConnectionStore = createJsonProviderConnectionStore(join(agentDir, "provider-connections.json"));
+	const usageStore =
+		options.usageStore ?? createJsonlUsageStore(options.usageFilePath ?? getDefaultAgentUsageFilePath(agentDir));
 	const modelRegistry =
 		options.modelRegistry ??
 		ModelRegistry.create(authStorage, join(agentDir, "models.json"), {
@@ -175,6 +187,7 @@ export async function createAgentSessionServices(
 		settingsManager,
 		modelRegistry,
 		resourceLoader,
+		usageStore,
 		diagnostics,
 	};
 }
@@ -204,5 +217,6 @@ export async function createAgentSessionFromServices(
 		noTools: options.noTools,
 		customTools: options.customTools,
 		sessionStartEvent: options.sessionStartEvent,
+		usageStore: options.services.usageStore,
 	});
 }

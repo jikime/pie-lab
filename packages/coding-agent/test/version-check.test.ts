@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ENV_OFFLINE, ENV_SKIP_VERSION_CHECK } from "../src/config.js";
 import {
-	checkForNewPiVersion,
+	checkForNewPieVersion,
 	comparePackageVersions,
-	getLatestPiRelease,
-	getLatestPiVersion,
+	getLatestPieRelease,
+	getLatestPieVersion,
 	isNewerPackageVersion,
 } from "../src/utils/version-check.ts";
 
@@ -35,24 +35,27 @@ describe("version checks", () => {
 	});
 
 	it("returns only newer versions", async () => {
-		const fetchMock = vi.fn(async () => Response.json({ version: "1.2.3" }));
+		const fetchMock = vi.fn(async () => Response.json({ name: "@pie-lab/coding-agent", version: "1.2.3" }));
 		vi.stubGlobal("fetch", fetchMock);
 
-		await expect(checkForNewPiVersion("1.2.3")).resolves.toBeUndefined();
-		await expect(checkForNewPiVersion("1.2.2")).resolves.toEqual({ version: "1.2.3" });
+		await expect(checkForNewPieVersion("1.2.3")).resolves.toBeUndefined();
+		await expect(checkForNewPieVersion("1.2.2")).resolves.toEqual({
+			packageName: "@pie-lab/coding-agent",
+			version: "1.2.3",
+		});
 	});
 
-	it("uses the pielab.ai version check api with a pie user agent", async () => {
-		const fetchMock = vi.fn(async () => Response.json({ version: "1.2.4" }));
+	it("uses the pie-lab npm package metadata with a pie user agent", async () => {
+		const fetchMock = vi.fn(async () => Response.json({ name: "@pie-lab/coding-agent", version: "1.2.4" }));
 		vi.stubGlobal("fetch", fetchMock);
 
-		await expect(getLatestPiVersion("1.2.3")).resolves.toBe("1.2.4");
+		await expect(getLatestPieVersion("1.2.3")).resolves.toBe("1.2.4");
 		expect(fetchMock).toHaveBeenCalledWith(
-			"https://pielab.ai/api/latest-version",
+			"https://registry.npmjs.org/@pie-lab%2Fcoding-agent/latest",
 			expect.objectContaining({
 				headers: expect.objectContaining({
 					"User-Agent": expect.stringMatching(/^pie\/1\.2\.3 /),
-					accept: "application/json",
+					accept: "application/vnd.npm.install-v1+json, application/json",
 				}),
 			}),
 		);
@@ -61,14 +64,14 @@ describe("version checks", () => {
 	it("returns the active package metadata from the version check api", async () => {
 		const fetchMock = vi.fn(async () =>
 			Response.json({
-				packageName: "@new-scope/pi",
+				name: "@pie-lab/coding-agent",
 				version: "1.2.4",
 			}),
 		);
 		vi.stubGlobal("fetch", fetchMock);
 
-		await expect(getLatestPiRelease("1.2.3")).resolves.toEqual({
-			packageName: "@new-scope/pi",
+		await expect(getLatestPieRelease("1.2.3")).resolves.toEqual({
+			packageName: "@pie-lab/coding-agent",
 			version: "1.2.4",
 		});
 	});
@@ -77,7 +80,7 @@ describe("version checks", () => {
 		const fetchMock = vi.fn(async () => Response.json({ note: " **Read this** ", version: "1.2.4" }));
 		vi.stubGlobal("fetch", fetchMock);
 
-		await expect(getLatestPiRelease("1.2.3")).resolves.toEqual({ note: "**Read this**", version: "1.2.4" });
+		await expect(getLatestPieRelease("1.2.3")).resolves.toEqual({ note: "**Read this**", version: "1.2.4" });
 	});
 
 	it("skips api calls when version checks are disabled", async () => {
@@ -85,7 +88,7 @@ describe("version checks", () => {
 		const fetchMock = vi.fn();
 		vi.stubGlobal("fetch", fetchMock);
 
-		await expect(getLatestPiVersion("1.2.3")).resolves.toBeUndefined();
+		await expect(getLatestPieVersion("1.2.3")).resolves.toBeUndefined();
 		expect(fetchMock).not.toHaveBeenCalled();
 	});
 });

@@ -1,6 +1,6 @@
 {
 	"name": "@pie-lab/router",
-	"version": "0.0.0",
+	"version": "0.1.3",
 	"type": "module",
 	"description": "Model routing and fallback policy for pie-lab",
 	"main": "./dist/index.js",
@@ -19,8 +19,18 @@
 		"access": "public"
 	},
 	"scripts": {
+		"clean": "shx rm -rf dist",
 		"test": "vitest --run",
 		"build": "tsgo -p tsconfig.build.json",
 		"dev": "tsgo -p tsconfig.build.json --watch --preserveWatchOutput"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/jikime/pie-lab.git",
+		"directory": "packages/router"
+	},
+	"homepage": "https://github.com/jikime/pie-lab#readme",
+	"bugs": {
+		"url": "https://github.com/jikime/pie-lab/issues"
 	}
 }

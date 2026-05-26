@@ -13,6 +13,8 @@
 <p align="center">
   <a href="https://pielab.ai">pielab.ai</a>
   ·
+  <a href="https://jikime.github.io/pie-lab/install.sh">install.sh</a>
+  ·
   <a href="./docs/README.md">docs</a>
   ·
   <a href="./docs/chat-usage.md">chat guide</a>
@@ -100,6 +102,28 @@ node -v
 
 Make sure `node -v` prints `v22.19.0` or newer before running `npm install` or `npm run build`.
 
+## Install The CLI
+
+The default user install is the npm package, bootstrapped by the GitHub Pages installer:
+
+```bash
+curl -fsSL https://jikime.github.io/pie-lab/install.sh | sh
+pie
+```
+
+The installer checks for Node.js `>=22.19.0`, checks for npm, then installs:
+
+```bash
+npm install -g --ignore-scripts @pie-lab/coding-agent
+```
+
+For inspection-first installs, download the script before running it:
+
+```bash
+curl -fsSLO https://jikime.github.io/pie-lab/install.sh
+sh install.sh
+```
+
 ## Install From Source
 
 ```bash
@@ -128,7 +152,7 @@ npm link --workspace @pie-lab/coding-agent
 pie
 ```
 
-If you only want the published CLI package, install:
+You can also install the published CLI package directly:
 
 ```bash
 npm install -g --ignore-scripts @pie-lab/coding-agent
@@ -153,6 +177,8 @@ Provider connection and usage state is stored under:
 ```txt
 ~/.pie/agent/
 ```
+
+CLI and server usage records share `~/.pie/agent/usage.jsonl` by default. Set `PIE_LAB_USAGE_PATH` when you want the dashboard/server to read a different usage file.
 
 ## Run The Main Services
 
@@ -504,6 +530,7 @@ Add at least one provider credential using `/login`, dashboard `Providers`, or e
 - [docs/chat-usage.md](./docs/chat-usage.md): Pie Chat and bridge guide
 - [docs/chat-e2e-checklist.md](./docs/chat-e2e-checklist.md): Telegram/Discord verification checklist
 - [docs/usage-accounting.md](./docs/usage-accounting.md): usage and cost records
+- [docs/deployment.md](./docs/deployment.md): npm and GitHub Pages deployment
 - [docs/origins.md](./docs/origins.md): source origins and imported baselines
 
 ## Name

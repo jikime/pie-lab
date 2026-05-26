@@ -1,6 +1,6 @@
 {
 	"name": "@pie-lab/server",
-	"version": "0.0.0",
+	"version": "0.1.3",
 	"private": true,
 	"type": "module",
 	"description": "pie-lab local API server",
@@ -23,11 +23,11 @@
 		"check": "tsgo -p tsconfig.build.json --noEmit"
 	},
 	"dependencies": {
-		"@pie-lab/ai": "^0.75.5",
-		"@pie-lab/coding-agent": "^0.75.5",
-		"@pie-lab/router": "0.0.0",
-		"@pie-lab/shared": "0.0.0",
-		"@pie-lab/storage": "0.0.0",
+		"@pie-lab/ai": "^0.1.2",
+		"@pie-lab/coding-agent": "^0.1.2",
+		"@pie-lab/router": "^0.1.2",
+		"@pie-lab/shared": "^0.1.2",
+		"@pie-lab/storage": "^0.1.2",
 		"undici": "^8.3.0"
 	}
 }

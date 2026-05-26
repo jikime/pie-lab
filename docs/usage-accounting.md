@@ -167,6 +167,14 @@ POST /v1/images/generations
 즉 `/usage`는 우리가 실행한 요청 기록이고, `/quota`는 provider 계정 또는 API key 자체의 잔여량 확인입니다.
 두 값은 서로 보완 관계이지만 같은 데이터는 아닙니다.
 
+`pie` CLI와 server는 기본적으로 같은 usage 파일을 사용합니다.
+
+```txt
+~/.pie/agent/usage.jsonl
+```
+
+다른 위치를 사용해야 한다면 `PIE_LAB_USAGE_PATH`로 override할 수 있습니다. 이 경로를 공유하면 CLI 단독 실행, background learning review의 `auto:learning`/`auto:memory`, server API 요청을 같은 dashboard usage 화면에서 함께 볼 수 있습니다.
+
 중요한 점은 provider가 비용 기록의 최종 책임자가 아니라는 것입니다.
 
 provider는 응답에서 usage를 추출하고 normalize합니다.

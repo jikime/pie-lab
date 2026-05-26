@@ -57,7 +57,6 @@ pie-lab/packages/ai
 pie-lab/packages/agent
 pie-lab/packages/coding-agent
 pie-lab/packages/tui
-pie-lab/packages/web-ui
 pie-lab/scripts
 pie-lab/.pie
 ```
@@ -94,8 +93,9 @@ docs/
 @earendil-works/pi-agent-core   -> @pie-lab/agent-core
 @earendil-works/pi-coding-agent -> @pie-lab/coding-agent
 @earendil-works/pi-tui          -> @pie-lab/tui
-@earendil-works/pi-web-ui       -> @pie-lab/web-ui
 ```
+
+`@earendil-works/pi-web-ui`에서 온 `packages/web-ui`는 pie-lab의 Next.js 기반 `apps/chat`과 역할이 겹치고 현재 runtime에서 사용하지 않으므로 제거 대상입니다. npm 배포 대상에서도 제외합니다.
 
 따라서 앞으로 workspace 명령은 다음처럼 사용합니다.
 
@@ -108,13 +108,29 @@ npm --workspace @pie-lab/ai run build
 사용자에게 안내할 공식 설치 명령은 다음으로 고정합니다.
 
 ```bash
-npm install -g --ignore-scripts @pie-lab/coding-agent
+curl -fsSL https://jikime.github.io/pie-lab/install.sh | sh
 pie
+```
+
+`install.sh`의 공식 배포 주소는 `pielab.ai`가 아니라 GitHub Pages를 사용합니다.
+
+```txt
+https://jikime.github.io/pie-lab/install.sh
+```
+
+이 스크립트는 얇은 bootstrap 역할만 하고, 실제 CLI 설치는 npm public package를 사용합니다.
+
+```bash
+npm install -g --ignore-scripts @pie-lab/coding-agent
 ```
 
 `npm install -g --ignore-scripts pie-lab/pie-coding-agent` 같은 형태는 npm registry package가 아니라 GitHub shorthand로 해석되므로 공식 설치 경로로 사용하지 않습니다. 공개 배포와 업데이트 안내, 문서, self-update를 모두 npm scoped package인 `@pie-lab/coding-agent` 기준으로 맞춥니다.
 
 이 설치가 동작하려면 `@pie-lab/coding-agent`뿐 아니라 런타임 의존 패키지인 `@pie-lab/ai`, `@pie-lab/agent-core`, `@pie-lab/tui`, `@pie-lab/router`, `@pie-lab/storage`, `@pie-lab/shared`도 npm에 public package로 배포되어야 합니다.
+
+첫 npm 공개 배포 버전은 `0.1.0`으로 고정합니다. public runtime package와 private workspace package의 내부 pie-lab 의존성은 모두 `^0.1.0` 기준으로 맞춥니다.
+
+단, 초기 npm 복구 과정에서 `@pie-lab/agent-core@0.1.0`이 unpublish 처리되었고 npm은 같은 package/version 조합의 재게시를 허용하지 않습니다. 그래서 실제 첫 사용 가능한 CLI 배포는 `@pie-lab/coding-agent@0.1.0` + `@pie-lab/agent-core@0.1.1` 조합으로 운영합니다.
 
 `pie` 내부의 self-update 안내도 npm 방식에서는 같은 명령 형태를 사용합니다. 즉 사용자가 나중에 업데이트 안내를 보더라도 `npm install -g --ignore-scripts @pie-lab/coding-agent` 기준으로 표시됩니다.
 
@@ -184,7 +200,6 @@ CLI 시작 헤더는 이 팔레트를 기준으로 라이트/다크 터미널을
 - `packages/agent`
 - `packages/coding-agent`
 - `packages/tui`
-- `packages/web-ui`
 - 기존 scripts
 - 기존 `.pie` 구조에서 이전된 `.pie` 설정 구조
 - 기존 CLI/TUI workflow
