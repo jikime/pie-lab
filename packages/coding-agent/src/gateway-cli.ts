@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
-import { access, mkdir, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, rm, watch, writeFile } from "node:fs/promises";
+import { statSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
@@ -18,31 +19,36 @@ import {
 	CHAT_CONFIG_PATH,
 	listConfiguredConversations,
 	loadChatConfig,
+	resolveConversation,
 	saveChatConfig,
 } from "./core/gateway/chat/config.js";
+import { readConversationLog } from "./core/gateway/chat/log.js";
 import type {
 	ChatConfig,
 	ConfiguredChannel,
 	DiscordAccountConfig,
 	TelegramAccountConfig,
 } from "./core/gateway/chat/core/config-types.js";
+import type { ChatLogRecord } from "./core/gateway/chat/core/runtime-types.js";
 
 const SERVICE_LABEL = "ai.pielab.gateway";
 
 function usage(): string {
 	return [
-		"Usage: pie gateway [run|setup|status|doctor|audio|stop|install|uninstall|restart]",
+		"Usage: pie gateway [run|setup|status|doctor|audio|stop|install|uninstall|restart|history|attach]",
 		"",
 		"Commands:",
-		"  run        Run the gateway in the foreground",
-		"  setup      Configure Telegram/Discord accounts and optional audio credentials",
-		"  status     Show gateway process and configured channels",
-		"  doctor     Check gateway config, process, platform credentials, and STT readiness",
-		"  audio      Configure OpenAI audio credentials for gateway STT/TTS",
-		"  stop       Stop a foreground/background gateway by pid",
-		"  install    Install and start an OS user service",
-		"  uninstall  Stop and remove the OS user service",
-		"  restart    Restart the OS user service when installed",
+		"  run              Run the gateway in the foreground",
+		"  setup            Configure Telegram/Discord accounts and optional audio credentials",
+		"  status           Show gateway process and configured channels",
+		"  doctor           Check gateway config, process, platform credentials, and STT readiness",
+		"  audio            Configure OpenAI audio credentials for gateway STT/TTS",
+		"  stop             Stop a foreground/background gateway by pid",
+		"  install          Install and start an OS user service",
+		"  uninstall        Stop and remove the OS user service",
+		"  restart          Restart the OS user service when installed",
+		"  history [채널]   Show recent conversation history for a channel",
+		"  attach  [채널]   Stream live conversation events from a running gateway",
 	].join("\n");
 }
 
@@ -596,6 +602,14 @@ export async function handleGatewayCommand(args: string[]): Promise<boolean> {
 			await restartService();
 			return true;
 		}
+		if (command === "history") {
+			await printHistory(args.slice(2));
+			return true;
+		}
+		if (command === "attach") {
+			await attachGateway(args.slice(2));
+			return true;
+		}
 		if (command === "help" || command === "--help" || command === "-h") {
 			console.log(usage());
 			return true;
@@ -609,4 +623,221 @@ export async function handleGatewayCommand(args: string[]): Promise<boolean> {
 		process.exitCode = 1;
 		return true;
 	}
+}
+
+// ─── pie gateway history ────────────────────────────────────────────────────
+
+function fmtRecordTime(iso: string): string {
+	const d = new Date(iso);
+	return d.toLocaleString("ko-KR", { hour12: false, timeZone: "Asia/Seoul" }).slice(0, 16);
+}
+
+function renderRecord(record: ChatLogRecord): string | undefined {
+	switch (record.type) {
+		case "inbound": {
+			const who = record.userName ? chalk.cyan(record.userName) : chalk.cyan(`uid:${record.userId}`);
+			const text = record.text.slice(0, 300);
+			const attachInfo = record.attachments?.length ? chalk.dim(` [+${record.attachments.length}첨부]`) : "";
+			return `${chalk.dim(fmtRecordTime(record.timestamp))}  ${who}: ${text}${attachInfo}`;
+		}
+		case "outbound": {
+			const text = record.text.slice(0, 300);
+			return `${chalk.dim(fmtRecordTime(record.timestamp))}  ${chalk.green("AI")}: ${text}`;
+		}
+		case "job_queued":
+			return chalk.dim(`${fmtRecordTime(record.timestamp)}  [작업 시작]`);
+		case "job_completed":
+			return chalk.dim(`${fmtRecordTime(record.timestamp)}  [작업 완료]`);
+		case "job_failed":
+			return chalk.red(`${fmtRecordTime(record.timestamp)}  [오류] ${record.error.slice(0, 120)}`);
+		case "error":
+			return chalk.red(`${fmtRecordTime(record.timestamp)}  [오류] ${record.message.slice(0, 120)}`);
+		default:
+			return undefined;
+	}
+}
+
+async function printHistory(args: string[]): Promise<void> {
+	const config = await loadChatConfig();
+	const conversations = listConfiguredConversations(config);
+
+	// Parse args: [channelSpec] [--limit N] [--all]
+	const limitIdx = args.findIndex((a) => a === "--limit" || a === "-n");
+	const limit = limitIdx !== -1 ? (parseInt(args[limitIdx + 1] ?? "50", 10) || 50) : 50;
+	const showAll = args.includes("--all");
+	const channelSpec = args.find((a) => !a.startsWith("-") && isNaN(Number(a)));
+
+	// No channel specified → list available channels
+	if (!channelSpec) {
+		if (conversations.length === 0) {
+			console.log(chalk.dim("설정된 채널이 없습니다. pie gateway setup을 실행하세요."));
+			return;
+		}
+		console.log(chalk.bold("\n사용 가능한 채널:\n"));
+		for (const conv of conversations) {
+			const badge = conv.service === "discord" ? chalk.blue(`[discord]`) : chalk.cyan(`[telegram]`);
+			console.log(`  ${badge} ${chalk.white(conv.conversationName)}  ${chalk.dim(conv.channelKey)}`);
+		}
+		console.log(chalk.dim(`\nUsage: pie gateway history <accountId/channelKey> [--limit N]`));
+		console.log(chalk.dim(`Example: pie gateway history ${conversations[0]?.channelKey ?? "telegram-pio/dm-john"}`));
+		return;
+	}
+
+	// Resolve conversation
+	const conv = resolveConversation(config, channelSpec)
+		?? conversations.find((c) => c.conversationName.toLowerCase().includes(channelSpec.toLowerCase()))
+		?? conversations.find((c) => c.channelKey.includes(channelSpec));
+
+	if (!conv) {
+		console.error(chalk.red(`채널을 찾을 수 없습니다: ${channelSpec}`));
+		console.error(chalk.dim("pie gateway history 를 인수 없이 실행하면 채널 목록을 볼 수 있습니다."));
+		process.exitCode = 1;
+		return;
+	}
+
+	const records = await readConversationLog(conv);
+	if (records.length === 0) {
+		console.log(chalk.dim(`${conv.conversationName}: 대화 내역이 없습니다.`));
+		return;
+	}
+
+	// Filter to only message-level records (skip checkpoints) unless --all
+	const displayable = showAll
+		? records
+		: records.filter((r) => r.type === "inbound" || r.type === "outbound" || r.type === "job_failed" || r.type === "error");
+
+	const slice = displayable.slice(-limit);
+
+	const badge = conv.service === "discord" ? chalk.blue(`[discord]`) : chalk.cyan(`[telegram]`);
+	console.log(chalk.bold(`\n${badge} ${conv.conversationName}`) + chalk.dim(`  (최근 ${slice.length}/${displayable.length}개)`));
+	console.log(chalk.dim("─".repeat(70)));
+
+	for (const record of slice) {
+		const line = renderRecord(record);
+		if (line) console.log(line);
+	}
+
+	if (displayable.length > limit) {
+		console.log(chalk.dim(`\n(${displayable.length - limit}개 더 있음. --limit ${displayable.length} 로 전체 조회)`));
+	}
+}
+
+// ─── pie gateway attach ─────────────────────────────────────────────────────
+
+async function attachGateway(args: string[]): Promise<void> {
+	const config = await loadChatConfig();
+	const conversations = listConfiguredConversations(config);
+	const channelSpec = args.find((a) => !a.startsWith("-"));
+
+	// Determine which conversations to watch
+	let targets = conversations;
+	if (channelSpec) {
+		const conv = resolveConversation(config, channelSpec)
+			?? conversations.find((c) => c.conversationName.toLowerCase().includes(channelSpec.toLowerCase()))
+			?? conversations.find((c) => c.channelKey.includes(channelSpec));
+		if (!conv) {
+			console.error(chalk.red(`채널을 찾을 수 없습니다: ${channelSpec}`));
+			process.exitCode = 1;
+			return;
+		}
+		targets = [conv];
+	}
+
+	if (targets.length === 0) {
+		console.log(chalk.dim("설정된 채널이 없습니다. pie gateway setup을 실행하세요."));
+		return;
+	}
+
+	// Check gateway status
+	const status = await readGatewayStatus();
+
+	const badge = (service: string) => service === "discord" ? chalk.blue(`[discord]`) : chalk.cyan(`[telegram]`);
+
+	console.log(chalk.bold("\n🔗 Gateway Attach"));
+	if (status.running) {
+		console.log(chalk.green(`● gateway 실행 중 (pid ${status.pid})`));
+	} else {
+		console.log(chalk.yellow("○ gateway가 실행되고 있지 않습니다. 로그 파일만 tailing합니다."));
+	}
+	console.log(chalk.dim(`모니터링 채널: ${targets.map((c) => c.conversationName).join(", ")}`));
+	console.log(chalk.dim("중지하려면 Ctrl+C\n"));
+	console.log(chalk.dim("─".repeat(70)));
+
+	// Track file sizes for tail-mode reading
+	const fileSizes = new Map<string, number>();
+	for (const conv of targets) {
+		try {
+			fileSizes.set(conv.logPath, statSync(conv.logPath).size);
+		} catch {
+			fileSizes.set(conv.logPath, 0);
+		}
+	}
+
+	// Watch each channel.jsonl for new appended lines
+	const watchers: Array<{ close(): void }> = [];
+	const abortController = new AbortController();
+
+	const processNewLines = async (conv: (typeof targets)[0], lastSize: number): Promise<number> => {
+		const { readFile } = await import("node:fs/promises");
+		let content: string;
+		try {
+			content = await readFile(conv.logPath, "utf8");
+		} catch {
+			return lastSize;
+		}
+		const currentSize = Buffer.byteLength(content, "utf8");
+		if (currentSize <= lastSize) return lastSize;
+
+		// Parse only the newly appended portion
+		const newContent = content.slice(lastSize);
+		const lines = newContent.split("\n").map((l) => l.trim()).filter(Boolean);
+		for (const line of lines) {
+			try {
+				const record = JSON.parse(line) as ChatLogRecord;
+				const rendered = renderRecord(record);
+				if (rendered) {
+					const channelBadge = badge(conv.service);
+					const name = chalk.dim(conv.conversationName);
+					console.log(`${channelBadge} ${name}  ${rendered}`);
+				}
+			} catch {
+				// malformed JSON line — skip
+			}
+		}
+		return currentSize;
+	};
+
+	for (const conv of targets) {
+		try {
+			const watcher = watch(conv.logPath, { signal: abortController.signal });
+			watchers.push({ close: () => abortController.abort() });
+			// Run watcher loop in background
+			(async () => {
+				try {
+					for await (const _event of watcher) {
+						const prevSize = fileSizes.get(conv.logPath) ?? 0;
+						const newSize = await processNewLines(conv, prevSize);
+						fileSizes.set(conv.logPath, newSize);
+					}
+				} catch (e) {
+					if (e instanceof Error && e.name === "AbortError") return;
+				}
+			})();
+		} catch {
+			// File doesn't exist yet — will be created when gateway writes to it
+		}
+	}
+
+	// Graceful Ctrl+C
+	await new Promise<void>((resolve) => {
+		const onSignal = () => {
+			abortController.abort();
+			console.log(chalk.dim("\nattach 종료"));
+			resolve();
+		};
+		process.once("SIGINT", onSignal);
+		process.once("SIGTERM", onSignal);
+		// Also resolve if abort fires from watcher
+		abortController.signal.addEventListener("abort", () => resolve(), { once: true });
+	});
 }
