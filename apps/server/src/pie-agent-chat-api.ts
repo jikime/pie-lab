@@ -354,7 +354,23 @@ function createGatewayIPCSession(
 			} as unknown as AgentSessionEvent);
 		}
 		if (event.type === "done") {
-			const msg = makeAssistantMsg(event.text ?? assistantBuffer);
+			const fullText = event.text ?? assistantBuffer;
+			// Gateway sends the full response as a single "done" (no prior streaming deltas).
+			// Emit a synthetic text_delta so streaming SSE consumers (handleStreamingAgentChat)
+			// receive content via the message_update path and write it to the SSE stream.
+			if (fullText && !assistantBuffer) {
+				const partial = makeAssistantMsg(fullText);
+				emit({
+					type: "message_update",
+					message: partial,
+					assistantMessageEvent: {
+						type: "text_delta",
+						delta: fullText,
+						partial,
+					},
+				} as unknown as AgentSessionEvent);
+			}
+			const msg = makeAssistantMsg(fullText);
 			emit({ type: "message_end", message: msg } as unknown as AgentSessionEvent);
 		}
 	};

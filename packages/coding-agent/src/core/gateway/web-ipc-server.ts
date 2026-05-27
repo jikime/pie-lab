@@ -101,12 +101,12 @@ class WebIPCTransport implements GatewayTransport {
 		this.write({ type: "typing", active: false });
 	}
 
-	async sendImmediate(text: string): Promise<string> {
+	async sendImmediate(text: string, _replyToMessageId?: string): Promise<string> {
 		this.write({ type: "delta", text });
 		return "";
 	}
 
-	async send(text: string, _attachmentPaths?: string[], _signal?: AbortSignal): Promise<string> {
+	async send(text: string, _attachmentPaths?: string[], _signal?: AbortSignal, _replyToMessageId?: string): Promise<string> {
 		this.write({ type: "done", text });
 		return "";
 	}

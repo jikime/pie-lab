@@ -717,6 +717,10 @@ export async function runGateway(options: RunGatewayOptions = {}): Promise<void>
 			const conversation = buildWebConversation(agentDir, conversationId);
 			const worker = new GatewayConversationWorker({ conversation, cwd, agentDir, logger, usageStore });
 			await worker.start();
+			// Arm the runtime so incoming web messages are dispatched.
+			// For Telegram/Discord this happens via the adapter's catch-up phase;
+			// web IPC workers have no catch-up phase so we arm immediately.
+			await worker.onCaughtUp();
 			workers.push(worker);
 			workerByConversationId.set(`web/${conversationId}`, worker);
 			return worker;
