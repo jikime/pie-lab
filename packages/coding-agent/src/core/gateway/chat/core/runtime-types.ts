@@ -109,11 +109,13 @@ export type ChatLogRecord =
 
 export interface PendingJob {
 	jobId: string;
-	trigger: "mention" | "dm";
+	trigger: "mention" | "dm" | "nudge";
 	triggerRecordId: number;
 	queuedRecordId: number;
 	sessionKey?: string;
 	sessionSource?: GatewaySessionSource;
+	/** Overrides the prompt built from inbound records (used for proactive nudge jobs). */
+	overridePrompt?: string;
 }
 
 export interface DispatchableJob {

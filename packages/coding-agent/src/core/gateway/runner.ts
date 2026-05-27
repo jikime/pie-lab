@@ -216,6 +216,9 @@ function waitForAbort(signal?: AbortSignal): Promise<never> {
 	});
 }
 
+const DEFAULT_NUDGE_PROMPT =
+	"Periodic check-in: review recent conversation context and proactively share any relevant updates, reminders, or assistance. If there is nothing useful to say, respond with [SILENT].";
+
 class GatewayConversationWorker implements GatewayConversationEndpoint {
 	readonly conversation: ResolvedConversation;
 	private readonly cwd: string;
@@ -232,6 +235,8 @@ class GatewayConversationWorker implements GatewayConversationEndpoint {
 	private queuedAttachments: string[] = [];
 	private activeAbort?: AbortController;
 	private activeSessionKey?: string;
+	private nudgeTimer?: ReturnType<typeof setTimeout>;
+	private lastUserActivityAt = Date.now();
 
 	constructor(options: {
 		conversation: ResolvedConversation;
@@ -270,6 +275,8 @@ class GatewayConversationWorker implements GatewayConversationEndpoint {
 	async onCaughtUp(): Promise<void> {
 		this.runtimeValue?.armAfterCurrentTail();
 		await this.tryDispatch();
+		// Start the nudge timer once caught up and armed
+		this.resetNudgeTimer();
 	}
 
 	async onError(error: Error): Promise<void> {
@@ -299,6 +306,11 @@ class GatewayConversationWorker implements GatewayConversationEndpoint {
 	async onMessage(input: InboundMessageInput, checkpoint?: GatewayCheckpoint): Promise<void> {
 		const runtime = this.runtimeValue;
 		if (!runtime) return;
+		// Track user activity for nudge timer
+		if (!(input.isBot ?? false)) {
+			this.lastUserActivityAt = Date.now();
+			this.resetNudgeTimer();
+		}
 		if (runtime.isArmed()) {
 			const control = runtime.parseControlCommand(input);
 			if (control) {
@@ -309,6 +321,36 @@ class GatewayConversationWorker implements GatewayConversationEndpoint {
 		}
 		await runtime.ingestInbound(input, checkpoint);
 		await this.tryDispatch();
+	}
+
+	private nudgeIntervalMs(): number | undefined {
+		const minutes = this.conversation.channel.nudgeIntervalMinutes;
+		if (!minutes || minutes <= 0) return undefined;
+		return minutes * 60_000;
+	}
+
+	private resetNudgeTimer(): void {
+		if (this.nudgeTimer) clearTimeout(this.nudgeTimer);
+		this.nudgeTimer = undefined;
+		const intervalMs = this.nudgeIntervalMs();
+		if (!intervalMs) return;
+		this.nudgeTimer = setTimeout(() => {
+			this.nudgeTimer = undefined;
+			void this.triggerNudge().catch((error) => {
+				this.logger.warn(`[${this.conversation.conversationId}] nudge error: ${error instanceof Error ? error.message : String(error)}`);
+			});
+		}, intervalMs);
+	}
+
+	private async triggerNudge(): Promise<void> {
+		const runtime = this.runtimeValue;
+		if (!runtime?.isArmed()) return;
+		const prompt = this.conversation.channel.nudgePrompt || DEFAULT_NUDGE_PROMPT;
+		const queued = runtime.queueProactiveJob(prompt);
+		if (queued) {
+			this.logger.info(`[${this.conversation.conversationId}] nudge triggered after ${this.conversation.channel.nudgeIntervalMinutes}m inactivity`);
+			await this.tryDispatch();
+		}
 	}
 
 	private sessionKeyForInput(input?: InboundMessageInput): string {
@@ -519,6 +561,8 @@ class GatewayConversationWorker implements GatewayConversationEndpoint {
 			this.activeSessionKey = undefined;
 			this.inFlight = false;
 			this.queuedAttachments = [];
+			// Restart the nudge timer after each completed job
+			this.resetNudgeTimer();
 			await this.tryDispatch();
 		}
 	}
@@ -526,6 +570,10 @@ class GatewayConversationWorker implements GatewayConversationEndpoint {
 	async disconnect(): Promise<void> {
 		this.activeAbort?.abort();
 		this.stopTypingLoop();
+		if (this.nudgeTimer) {
+			clearTimeout(this.nudgeTimer);
+			this.nudgeTimer = undefined;
+		}
 		for (const state of this.sessions.values()) {
 			state.session?.agent.abort();
 			state.session?.dispose();

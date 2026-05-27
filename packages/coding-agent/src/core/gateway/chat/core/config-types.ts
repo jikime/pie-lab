@@ -25,6 +25,10 @@ export interface ConfiguredChannel {
 	autoDiscovered?: boolean;
 	access?: AccessPolicy;
 	gondolin?: GondolinConfig;
+	/** Minutes of user inactivity before a proactive nudge is sent to the agent. */
+	nudgeIntervalMinutes?: number;
+	/** Custom prompt for periodic nudges. Defaults to a generic check-in message. */
+	nudgePrompt?: string;
 }
 
 export interface BaseAccountConfig {

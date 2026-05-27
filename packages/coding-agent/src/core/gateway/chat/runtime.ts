@@ -251,6 +251,7 @@ export class ConversationRuntime {
 	}
 
 	private buildPrompt(job: PendingJob): string {
+		if (job.overridePrompt !== undefined) return job.overridePrompt;
 		const completedBoundary = this.getLastCompletedTriggerRecordId();
 		const slice = this.records.filter(
 			(record) =>
@@ -259,6 +260,29 @@ export class ConversationRuntime {
 		const lines: string[] = [];
 		for (const record of slice) lines.push(...formatTranscriptRecord(this.conversation, record));
 		return lines.join("\n").trim();
+	}
+
+	/**
+	 * Directly queue a proactive (nudge) job without an inbound user message.
+	 * Returns false if there is already an active job or pending jobs in the queue.
+	 */
+	queueProactiveJob(prompt: string): boolean {
+		if (this.activeJob || this.pendingJobs.length > 0) return false;
+		const sessionSource = buildGatewaySessionSource(this.conversation);
+		const sessionKey = buildGatewaySessionKey(sessionSource);
+		const queuedRecordId = this.nextRecordId;
+		this.nextRecordId++;
+		const job: PendingJob = {
+			jobId: `nudge-${Date.now()}`,
+			trigger: "nudge",
+			triggerRecordId: this.records.at(-1)?.recordId ?? 0,
+			queuedRecordId,
+			sessionKey,
+			sessionSource,
+			overridePrompt: prompt,
+		};
+		this.pendingJobs.push(job);
+		return true;
 	}
 
 	async completeActiveJob(text: string, remoteMessageId?: string, attachmentPaths?: string[]): Promise<void> {

@@ -260,7 +260,17 @@ export class DiscordVoiceController {
 			}
 		});
 
-		// Guard against a connection stuck indefinitely in Signaling/Connecting.
+		// Guard against a connection stuck indefinitely in Signalling.
+		connection.on(VoiceConnectionStatus.Signalling, () => {
+			entersState(connection, VoiceConnectionStatus.Connecting, 10_000).catch(() => {
+				if (connection.state.status !== VoiceConnectionStatus.Destroyed) {
+					connection.destroy();
+					this.sessions.delete(textChannelId);
+				}
+			});
+		});
+
+		// Guard against a connection stuck indefinitely in Connecting.
 		connection.on(VoiceConnectionStatus.Connecting, () => {
 			entersState(connection, VoiceConnectionStatus.Ready, envInt("PIE_GATEWAY_VOICE_JOIN_TIMEOUT_MS", 20_000)).catch(() => {
 				if (connection.state.status !== VoiceConnectionStatus.Destroyed) {
