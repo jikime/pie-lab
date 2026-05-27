@@ -449,6 +449,31 @@ TTS 경고도 같은 방식으로 해결할 수 있습니다. OpenAI direct spee
 - Discord thread의 완전한 channel/thread routing은 더 보강할 여지가 있음
 - `pie gateway logs --follow` 같은 로그 명령은 아직 없음
 
+## 2026-05-27 추가 구현
+
+### Web Chat Gateway 채널
+
+웹 채팅(`apps/chat`)을 Telegram/Discord와 동등한 gateway 채널로 연결했습니다. 자세한 내용은 [Web Chat Gateway](./web-chat-gateway.md)를 참고합니다.
+
+핵심 변경:
+
+- `web-ipc-server.ts` — gateway daemon 안에 Unix socket 서버 내장
+- `web-ipc-client.ts` — API 서버에서 gateway로 연결하는 클라이언트
+- gateway 실행 중이면 IPC 라우팅, 없으면 독립 세션 폴백
+- `conversationId` localStorage 영속 + JSONL 이력 복원 API
+
+### `pie session` CLI 및 `session_search` 에이전트 도구
+
+대화 이력 전체 텍스트 검색 기능을 추가했습니다. 자세한 내용은 [Session Search](./session-search.md)를 참고합니다.
+
+```bash
+pie session list                         # 전체 세션 목록
+pie session search “배포 이슈”           # FTS5 검색
+pie session search “안녕” --source tui  # 소스 필터
+```
+
+TUI 세션 AI도 `session_search` 도구로 과거 대화를 검색할 수 있습니다.
+
 ## 다음 추천 작업
 
 우선순위는 다음이 좋습니다.
@@ -459,8 +484,10 @@ TTS 경고도 같은 방식으로 해결할 수 있습니다. OpenAI direct spee
 3. Telegram topic routing 보강
 4. 실제 Telegram/Discord E2E 체크리스트 갱신
 5. Discord voice channel 실제 서버 E2E 검증과 polish
+6. pie gateway history [채널] — 특정 채널 대화 내역 출력
+7. pie gateway attach — 실시간 전 플랫폼 대화 스트리밍
 ```
 
-지금 상태는 “Telegram/Discord 중심의 Hermes-style gateway v1.5” 정도로 볼 수 있습니다. 단일 gateway process, platform registry, session key, scheduler delivery, native control UX, doctor까지 들어갔으므로 운영 기반은 갖춰졌고, 다음은 안정화와 platform coverage 확장 단계입니다.
+지금 상태는 “Telegram/Discord/Web 중심의 Hermes-style gateway v2.0” 정도로 볼 수 있습니다. 단일 gateway process, platform registry, session key, scheduler delivery, native control UX, doctor, web IPC, 세션 검색까지 들어갔으므로 운영 기반은 갖춰졌고, 다음은 안정화와 platform coverage 확장 단계입니다.
 
 오디오 쪽 다음 작업은 별도 확장이 아니라 [Pie Gateway Audio](./gateway-audio.md)의 Hermes parity 목록만 기준으로 진행합니다.

@@ -18,6 +18,8 @@
 - [Pie Gateway Audio](./gateway-audio.md): Hermes 기준 gateway STT/TTS, OpenAI audio key 저장, Discord voice, 남은 오디오 parity 작업을 정리합니다.
 - [Discord Gateway 설정](./discord-gateway-setup.md): Discord bot 생성, 권한, token 저장, gateway 실행, 연결 검증 순서를 정리합니다.
 - [Pie Gateway 구현 요약](./gateway-implementation-summary.md): Hermes-style gateway 구현 범위, 검증 상태, 현재 한계와 다음 작업을 정리합니다.
+- [Web Chat Gateway 채널](./web-chat-gateway.md): 웹 채팅을 Telegram/Discord와 동일한 gateway 채널로 연결하는 Unix socket IPC 구조, 대화 영속성, 선택적 연결 방식을 정리합니다.
+- [Session Search](./session-search.md): TUI/Discord/Telegram 대화 이력을 FTS5로 검색하는 `pie session` CLI 명령과 `session_search` 에이전트 도구를 정리합니다.
 - [pie-chat E2E 검증 체크리스트](./chat-e2e-checklist.md): 실제 Telegram/Discord 채널에서 bridge를 검증하는 기준을 정리합니다.
 - [배포](./deployment.md): GitHub Pages `install.sh`와 npm package 배포 흐름을 정리합니다.
 - [npm 릴리스 플레이북](./npm-release-playbook.md): 실제 npm 배포 명령, 검증 순서, 2FA/token 주의사항, `web-ui` 제외 기준을 정리합니다.
