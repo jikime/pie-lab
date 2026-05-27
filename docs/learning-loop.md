@@ -10,21 +10,20 @@ Learning Loop는 한 번 해결한 문제, 반복되는 사용자 선호, 자주
 
 ```txt
 사용자 요청
-→ Local Memory + Honcho Context + Skill Index 주입
+→ Local Memory + Skill Index 주입
 → pie agent 작업 수행
 → 응답 완료
 → background learning review 실행
-→ memory 저장 / skill 생성·수정 / Honcho 동기화
+→ memory 저장 / skill 생성·수정
 → 다음 요청에서 재사용
 ```
 
-v1 범위는 다음 세 가지입니다.
+v1 범위는 다음 두 가지입니다.
 
 - Persistent Memory
-- Skill Creation
-- Honcho User Modeling
+- Skill Creation + LLM-driven Curator Consolidation
 
-스킬은 자동 저장을 기본값으로 둡니다. Honcho가 없거나 실패해도 local memory와 local skill은 계속 동작해야 합니다.
+스킬은 자동 저장을 기본값으로 둡니다. 모든 데이터는 로컬 파일로만 저장됩니다.
 
 ## 저장 위치
 
@@ -41,7 +40,7 @@ v1 범위는 다음 세 가지입니다.
       .usage.json
     .archive/
     .backups/
-  honcho.json
+    .curator_state
 ```
 
 프로젝트 전용 스킬은 기존 방식대로 `.pie/skills`를 사용합니다.
@@ -181,41 +180,33 @@ pie learning mode auto|suggest|off
 
 memory append 전에는 기존 문단과 유사도를 비교해 중복 저장을 건너뜁니다. skill create 전에도 이름과 description이 비슷한 기존 skill이 있으면 새 skill 생성을 skip하고 review 기록에 이유를 남깁니다.
 
-## Honcho User Modeling
+## Curator Consolidation (LLM-driven)
 
 구현 파일:
 
-- `packages/coding-agent/src/core/learning/honcho-provider.ts`
+- `packages/coding-agent/src/core/learning/skill-curator.ts`
+- `packages/coding-agent/src/curator-cli.ts`
 
-Honcho는 `@honcho-ai/sdk` v2.1.1을 사용합니다.
+agent 세션 종료 시 `maybeConsolidate()`가 호출됩니다. 마지막 실행으로부터 `consolidateIntervalDays`(기본 7일)가 경과하고 스킬이 5개 이상 있을 때만 LLM consolidation pass를 실행합니다.
 
-설정 위치와 환경변수:
+LLM은 스킬 목록을 보고 `PREFIX-*` 클러스터를 식별한 뒤, 좁은 스킬들을 하나의 umbrella 스킬로 병합하고 원본을 archive합니다. 결과는 YAML 블록으로 반환됩니다:
 
-```txt
-~/.pie/agent/honcho.json
-HONCHO_API_KEY
-HONCHO_BASE_URL
-HONCHO_WORKSPACE_ID
+```yaml
+consolidations:
+  - from: [gateway-auth-discord, gateway-auth-telegram]
+    into: gateway-auth
+    reason: "both handle bot token auth for different services"
+prunings:
+  - name: temp-test-skill
+    reason: "no usage, created during testing"
 ```
 
-기본값:
+수동 실행:
 
-```txt
-workspace: pie-lab
-AI peer: pie
-session strategy: per-repo
+```bash
+pie curator consolidate [--dry-run]
+pie curator status   # consolidation 상태 포함
 ```
-
-Honcho context는 system prompt에 넣지 않습니다. provider 요청 직전 `transformContext` 경로에서 user message 앞에 `<memory-context>` 블록으로 주입합니다.
-
-주입 대상은 다음으로 제한합니다.
-
-- user representation
-- user card
-- session summary
-- dialectic summary
-
-token budget은 기본 1200 tokens입니다. API key가 없거나 Honcho 호출이 실패하면 조용히 비활성화되고, local memory와 skill만 계속 동작합니다.
 
 ## Router Policy
 
@@ -225,8 +216,8 @@ token budget은 기본 1200 tokens입니다. API key가 없거나 Honcho 호출�
 
 Learning Loop용 router alias를 추가했습니다.
 
-- `auto:learning`: memory/skill review용
-- `auto:memory`: Honcho dialectic/user modeling summary 보조 호출용
+- `auto:learning`: memory/skill review + curator consolidation용
+- `auto:memory`: user modeling 보조 호출용
 
 두 alias는 일반 coding 작업보다 저렴한 모델을 우선하도록 scorer에서 작은 모델/저비용 모델에 가중치를 줍니다. `auto:learning`과 `auto:memory` 모두 `AgentSession`의 router stream 경로를 통과하므로 usage/cost record에는 요청 alias, 실제 provider/model, token usage, cost가 남습니다.
 
@@ -315,15 +306,9 @@ archive는 실제 삭제가 아니라 `~/.pie/agent/skills/.archive`로 이동�
         "archiveAfterDays": 90,
         "autoArchive": true,
         "backupBeforeRun": true,
-        "pruneAfterDays": 180
+        "pruneAfterDays": 180,
+        "consolidateIntervalDays": 7
       }
-    },
-    "honcho": {
-      "enabled": true,
-      "recallMode": "hybrid",
-      "sessionStrategy": "per-repo",
-      "contextTokenBudget": 1200,
-      "dialecticCadence": 3
     }
   }
 }

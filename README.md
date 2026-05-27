@@ -68,8 +68,15 @@ Imported baseline details are tracked in [docs/origins.md](./docs/origins.md).
   - global agent skills in `~/.pie/agent/skills`
   - project skills in `.pie/skills`
   - background review and proposal records
-  - skill curator archive/restore support
-  - optional Honcho user modeling
+  - skill curator archive/restore + LLM-driven consolidation (umbrella skill merging)
+- Scheduler (pie cron):
+  - IANA timezone-aware cron expressions (`0 9 * * *` in `Asia/Seoul`)
+  - Grace window + missed-run fast-forward (skips stale jobs, not re-runs them)
+  - Wake-gate: script last line `{"wakeAgent":false}` skips LLM call
+  - Separate script/agent timeouts (`scriptTimeoutSeconds` + `timeoutSeconds`)
+  - `[SILENT]` response prefix → skip delivery
+  - Stale running job cleanup on startup
+- Gateway periodic nudge: per-channel `nudgeIntervalMinutes` triggers proactive agent turns on inactivity
 
 ## Repository Layout
 
@@ -431,6 +438,23 @@ pie gateway uninstall
 
 On macOS this creates a LaunchAgent. On Linux this creates a systemd user service. While the gateway is running, Telegram/Discord messages can start full Pie agent turns with router usage tracking, Learning Loop tools, global/project skills, chat history, file attachments, and `cronjob` scheduling. Cron jobs that use `deliver: "origin"` reply back to the chat where they were created.
 
+**Periodic nudge**: Set `nudgeIntervalMinutes` on a channel in `~/.pie/agent/chat/config.json` to have the gateway automatically trigger a proactive agent turn after that many minutes of user inactivity. The agent can use `[SILENT]` to suppress delivery if there is nothing useful to say.
+
+**Scheduled jobs (pie cron)**:
+
+```bash
+pie cron status          # shows gateway running state + job summary
+pie cron create          # --schedule "0 9 * * *" --timezone "Asia/Seoul" ...
+pie cron list
+```
+
+Key scheduler features:
+- IANA timezone support for cron expressions (`--timezone "Asia/Seoul"`)
+- Grace window: missed runs are fast-forwarded instead of executed late
+- Wake-gate: script can output `{"wakeAgent":false}` to skip LLM and deliver stdout directly
+- Separate timeouts: `scriptTimeoutSeconds` (default 120s) and `timeoutSeconds` (agent, default 600s)
+- `[SILENT]` prefix in agent response skips delivery silently
+
 ## Learning Loop
 
 pie-lab includes a Hermes-style Learning Loop adapted to the `pie` runtime.
@@ -439,11 +463,11 @@ The request flow is:
 
 ```txt
 user request
-  -> local memory + Honcho context + skill index
+  -> local memory + skill index
   -> pie agent turn
   -> assistant response
   -> background learning review
-  -> memory update / skill proposal or write / Honcho sync
+  -> memory update / skill proposal or write
   -> next turn can reuse it
 ```
 
@@ -458,15 +482,7 @@ Important paths:
 
 The dashboard `Learning` page can inspect memory, review records, proposal approve/reject actions, and skill curator runs.
 
-Honcho is optional. If you want user modeling, set:
-
-```bash
-export HONCHO_API_KEY=...
-export HONCHO_WORKSPACE_ID=pie-lab
-export HONCHO_BASE_URL=...
-```
-
-If Honcho is not configured, local memory and skills still work.
+**Skill Curator Consolidation**: After a configurable interval (default 7 days), the curator runs an LLM pass to identify clusters of narrow skills (e.g. `gateway-auth-*`), merge them into an umbrella skill, and archive the siblings. Run manually with `pie curator consolidate`.
 
 ## Important Local Files
 

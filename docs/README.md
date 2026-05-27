@@ -11,7 +11,7 @@
 - [마이그레이션 계획](./migration-plan.md): 기존 프로젝트에서 어떤 코드를 가져오고 어떻게 재배치할지 정리합니다.
 - [로드맵](./roadmap.md): MVP부터 이후 확장까지의 단계별 개발 계획입니다.
 - [사용량과 비용 측정](./usage-accounting.md): routing 이후 실제 사용량과 비용을 어디서 어떻게 기록할지 정리합니다.
-- [Learning Loop](./learning-loop.md): persistent memory, 자동 skill 생성, Honcho user modeling, curator 운영 방식을 정리합니다.
+- [Learning Loop](./learning-loop.md): persistent memory, 자동 skill 생성, LLM-driven curator consolidation 운영 방식을 정리합니다.
 - [Claude Agent SDK provider](./claude-agent-sdk-provider.md): Claude Code 로컬 구독/로그인 흐름을 router 후보로 쓰는 방법을 정리합니다.
 - [채팅 사용법](./chat-usage.md): 웹 채팅과 Telegram/Discord bridge 설정, 연결, 문제 해결 방법을 정리합니다.
 - [Pie Gateway](./gateway.md): TUI 없이 장시간 Telegram/Discord 메시지와 cron scheduled automation을 처리하는 gateway 운영 방식을 정리합니다.
