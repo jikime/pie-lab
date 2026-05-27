@@ -8,7 +8,6 @@ export interface SchedulerSettings {
 	defaultDeliver: "local";
 	learning: {
 		enabled: boolean;
-		honchoEnabled: boolean;
 		reviewEnabled: boolean;
 	};
 }
@@ -23,7 +22,6 @@ export const DEFAULT_SCHEDULER_SETTINGS: SchedulerSettings = {
 	defaultDeliver: "local",
 	learning: {
 		enabled: true,
-		honchoEnabled: false,
 		reviewEnabled: false,
 	},
 };
@@ -57,7 +55,6 @@ export function normalizeSchedulerSettings(input: unknown): SchedulerSettings {
 		defaultDeliver: "local",
 		learning: {
 			enabled: asBoolean(learning.enabled, DEFAULT_SCHEDULER_SETTINGS.learning.enabled),
-			honchoEnabled: asBoolean(learning.honchoEnabled, DEFAULT_SCHEDULER_SETTINGS.learning.honchoEnabled),
 			reviewEnabled: asBoolean(learning.reviewEnabled, DEFAULT_SCHEDULER_SETTINGS.learning.reviewEnabled),
 		},
 	};

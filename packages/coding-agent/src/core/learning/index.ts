@@ -1,5 +1,4 @@
 export { BackgroundLearningReview } from "./background-review.ts";
-export { HonchoProvider } from "./honcho-provider.ts";
 export {
 	DEFAULT_LEARNING_SETTINGS,
 	type LearningSettings,

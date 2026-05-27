@@ -159,8 +159,7 @@ describe("learning settings", () => {
 		expect(settings.skills.autoSave).toBe(true);
 		expect(settings.skills.curator.autoArchive).toBe(true);
 		expect(settings.skills.curator.pruneAfterDays).toBe(180);
-		expect(settings.honcho.sessionStrategy).toBe("per-repo");
-		expect(settings.honcho.contextTokenBudget).toBe(1200);
+		expect(settings.skills.curator.consolidateIntervalDays).toBe(7);
 	});
 });
 

@@ -61,10 +61,6 @@ function applySchedulerLearningPolicy(settingsManager: SettingsManager, settings
 				...learning.review,
 				mode: settings.learning.reviewEnabled ? learning.review.mode : "off",
 			},
-			honcho: {
-				...learning.honcho,
-				enabled: settings.learning.honchoEnabled && learning.honcho.enabled,
-			},
 		},
 	});
 }

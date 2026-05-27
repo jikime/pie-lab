@@ -11019,8 +11019,8 @@ export const MODELS = {
 				cacheRead: 0,
 				cacheWrite: 0,
 			},
-			contextWindow: 131072,
-			maxTokens: 8192,
+			contextWindow: 262144,
+			maxTokens: 32768,
 		} satisfies Model<"openai-completions">,
 		"prime-intellect/intellect-3": {
 			id: "prime-intellect/intellect-3",

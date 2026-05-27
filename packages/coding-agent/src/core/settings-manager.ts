@@ -66,7 +66,6 @@ export type LearningSettingsInput = Partial<{
 	skills: Omit<Partial<LearningSettings["skills"]>, "curator"> & {
 		curator?: Partial<LearningSettings["skills"]["curator"]>;
 	};
-	honcho: Partial<LearningSettings["honcho"]>;
 }>;
 
 export type SchedulerSettingsInput = Partial<{

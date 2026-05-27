@@ -23,13 +23,6 @@ export interface LearningSettings {
 			consolidateIntervalDays: number;
 		};
 	};
-	honcho: {
-		enabled: boolean;
-		recallMode: "hybrid" | "summary" | "semantic";
-		sessionStrategy: "per-repo" | "global";
-		contextTokenBudget: number;
-		dialecticCadence: number;
-	};
 }
 
 export const DEFAULT_LEARNING_SETTINGS: LearningSettings = {
@@ -56,13 +49,6 @@ export const DEFAULT_LEARNING_SETTINGS: LearningSettings = {
 			consolidateIntervalDays: 7,
 		},
 	},
-	honcho: {
-		enabled: true,
-		recallMode: "hybrid",
-		sessionStrategy: "per-repo",
-		contextTokenBudget: 1200,
-		dialecticCadence: 3,
-	},
 };
 
 function asObject(value: unknown): Record<string, unknown> {
@@ -81,20 +67,11 @@ function asPositiveInteger(value: unknown, fallback: number): number {
 	return normalized > 0 ? normalized : fallback;
 }
 
-function asRecallMode(value: unknown, fallback: LearningSettings["honcho"]["recallMode"]) {
-	return value === "summary" || value === "semantic" || value === "hybrid" ? value : fallback;
-}
-
-function asSessionStrategy(value: unknown, fallback: LearningSettings["honcho"]["sessionStrategy"]) {
-	return value === "global" || value === "per-repo" ? value : fallback;
-}
-
 export function normalizeLearningSettings(input: unknown): LearningSettings {
 	const root = asObject(input);
 	const memory = asObject(root.memory);
 	const review = asObject(root.review);
 	const skills = asObject(root.skills);
-	const honcho = asObject(root.honcho);
 
 	return {
 		enabled: asBoolean(root.enabled, DEFAULT_LEARNING_SETTINGS.enabled),
@@ -121,19 +98,6 @@ export function normalizeLearningSettings(input: unknown): LearningSettings {
 			),
 			curatorEnabled: asBoolean(skills.curatorEnabled, DEFAULT_LEARNING_SETTINGS.skills.curatorEnabled),
 			curator: normalizeCuratorSettings(skills.curator),
-		},
-		honcho: {
-			enabled: asBoolean(honcho.enabled, DEFAULT_LEARNING_SETTINGS.honcho.enabled),
-			recallMode: asRecallMode(honcho.recallMode, DEFAULT_LEARNING_SETTINGS.honcho.recallMode),
-			sessionStrategy: asSessionStrategy(honcho.sessionStrategy, DEFAULT_LEARNING_SETTINGS.honcho.sessionStrategy),
-			contextTokenBudget: asPositiveInteger(
-				honcho.contextTokenBudget,
-				DEFAULT_LEARNING_SETTINGS.honcho.contextTokenBudget,
-			),
-			dialecticCadence: asPositiveInteger(
-				honcho.dialecticCadence,
-				DEFAULT_LEARNING_SETTINGS.honcho.dialecticCadence,
-			),
 		},
 	};
 }

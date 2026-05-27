@@ -21,7 +21,6 @@ import type { ExtensionRunner, LoadExtensionsResult, SessionStartEvent, ToolDefi
 import {
 	BackgroundLearningReview,
 	createLearningToolDefinitions,
-	HonchoProvider,
 	LearningReviewStore,
 	MemoryStore,
 	SkillCurator,
@@ -440,13 +439,6 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	};
 
 	const extensionRunnerRef: { current?: ExtensionRunner } = {};
-	const honchoProvider = new HonchoProvider({
-		agentDir,
-		cwd,
-		sessionId: sessionManager.getSessionId(),
-		settings: learningSettings,
-		streamFn: (model, context, options) => agent.streamFn?.(model, context, options),
-	});
 
 	agent = new Agent({
 		initialState: {
@@ -639,8 +631,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		sessionId: sessionManager.getSessionId(),
 		transformContext: async (messages) => {
 			const runner = extensionRunnerRef.current;
-			const transformed = runner ? await runner.emitContext(messages) : messages;
-			return honchoProvider.injectContext(transformed);
+			return runner ? runner.emitContext(messages) : messages;
 		},
 		steeringMode: settingsManager.getSteeringMode(),
 		followUpMode: settingsManager.getFollowUpMode(),
@@ -692,7 +683,6 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		sessionStartEvent: options.sessionStartEvent,
 		learningMemorySnapshot,
 		backgroundLearningReview,
-		honchoProvider,
 		learningSkillManager: skillManager,
 		skillCurator,
 	});

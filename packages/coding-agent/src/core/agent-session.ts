@@ -71,7 +71,7 @@ import {
 	wrapRegisteredTools,
 } from "./extensions/index.js";
 import { emitSessionShutdownEvent } from "./extensions/runner.js";
-import type { BackgroundLearningReview, HonchoProvider, SkillCurator, SkillManager } from "./learning/index.js";
+import type { BackgroundLearningReview, SkillCurator, SkillManager } from "./learning/index.js";
 import type { BashExecutionMessage, CustomMessage } from "./messages.js";
 import type { ModelRegistry } from "./model-registry.js";
 import { expandPromptTemplate, type PromptTemplate } from "./prompt-templates.js";
@@ -179,8 +179,6 @@ export interface AgentSessionConfig {
 	learningMemorySnapshot?: string;
 	/** Non-blocking background memory/skill reviewer. */
 	backgroundLearningReview?: BackgroundLearningReview;
-	/** Honcho context/sync provider. */
-	honchoProvider?: HonchoProvider;
 	/** Learning skill manager used for agent-created skill usage accounting. */
 	learningSkillManager?: SkillManager;
 	/** Skill curator for periodic LLM-driven consolidation. */
@@ -302,7 +300,6 @@ export class AgentSession {
 	private _sessionStartEvent: SessionStartEvent;
 	private _learningMemorySnapshot?: string;
 	private _backgroundLearningReview?: BackgroundLearningReview;
-	private _honchoProvider?: HonchoProvider;
 	private _learningSkillManager?: SkillManager;
 	private _skillCurator?: SkillCurator;
 	private _extensionUIContext?: ExtensionUIContext;
@@ -341,7 +338,6 @@ export class AgentSession {
 		this._sessionStartEvent = config.sessionStartEvent ?? { type: "session_start", reason: "startup" };
 		this._learningMemorySnapshot = config.learningMemorySnapshot;
 		this._backgroundLearningReview = config.backgroundLearningReview;
-		this._honchoProvider = config.honchoProvider;
 		this._learningSkillManager = config.learningSkillManager;
 		this._skillCurator = config.skillCurator;
 
@@ -561,7 +557,6 @@ export class AgentSession {
 		}
 
 		if (event.type === "agent_end") {
-			void this._honchoProvider?.syncTurn(event.messages);
 			this._backgroundLearningReview?.trigger(event.messages);
 			// Periodic LLM-driven consolidation (checks interval internally — usually no-op)
 			const streamFn = this.agent.streamFn?.bind(this.agent);
