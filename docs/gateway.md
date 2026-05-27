@@ -231,7 +231,7 @@ Gateway는 각 remote turn 직전에 session resources를 reload합니다. 따�
 /help
 ```
 
-Telegram에서는 control command 응답에 inline control button이 함께 표시됩니다. 버튼을 누르면 같은 control path로 `status`, `new`, `compact`, `stop`, `help`가 실행됩니다.
+Telegram에서는 gateway 시작 시 `setMyCommands` API를 호출해 봇 커맨드 메뉴에 등록합니다. 사용자가 `/` 를 입력하면 자동완성 메뉴에 표시됩니다. 등록이 실패해도 gateway 실행은 중단하지 않습니다.
 
 Discord에서는 gateway 시작 시 slash command를 등록하거나 갱신합니다. `serverId`가 있으면 guild command로 등록하고, 없으면 global command 등록을 시도합니다.
 
@@ -325,6 +325,60 @@ PIE_GATEWAY_VOICE_PLAY_TIMEOUT_MS=10000
 - TTS 설정, output directory, text length limit, local Pie server media route 접근성
 
 실패가 있으면 exit code 1을 반환하고, 경고만 있으면 성공으로 종료합니다.
+
+## 대화 내역 조회 CLI
+
+gateway가 수신하고 응답한 채팅 내역은 CLI로 바로 조회할 수 있습니다.
+
+### pie gateway history
+
+특정 채널의 대화 내역을 터미널에 출력합니다.
+
+```bash
+# 설정된 채널 목록 확인
+pie gateway history
+
+# Telegram DM 최근 50개 (기본값)
+pie gateway history dm-donghak-kim
+
+# Discord 채널 최근 20개
+pie gateway history channel-1465535874778271823 --limit 20
+
+# 전체 레코드 (checkpoint 포함)
+pie gateway history dm-donghak-kim --all
+```
+
+출력 예시:
+
+```
+[telegram] Pio / donghak kim  (최근 10/107개)
+──────────────────────────────────────────────────────────────────────
+2026. 5. 27. 12시  donghak: 오늘 날씨 어때?
+2026. 5. 27. 12시  AI: 오늘 서울은 흐리고 오전에 비가 내릴 예정입니다...
+```
+
+채널 지정은 `accountId/channelKey`, 채널 키, 또는 이름 일부를 허용합니다.
+
+| 옵션 | 설명 |
+|------|------|
+| `--limit N` | 최근 N개 표시 (기본값: 50) |
+| `--all` | checkpoint 등 모든 레코드 포함 |
+
+### pie gateway attach
+
+실행 중인 gateway의 채팅 이벤트를 실시간으로 스트리밍합니다.
+
+```bash
+# 전체 채널 실시간 감시
+pie gateway attach
+
+# 특정 채널만 감시
+pie gateway attach dm-donghak-kim
+```
+
+gateway가 메시지를 수신하거나 응답을 보낼 때마다 즉시 터미널에 출력됩니다. `Ctrl+C`로 종료합니다.
+
+내부적으로 `~/.pie/agent/chat/accounts/{accountId}/channels/{channelKey}/channel.jsonl` 파일을 `fs.watch()`로 감시하고, 새로 추가된 라인을 파싱해서 표시합니다.
 
 ## Usage 기록
 

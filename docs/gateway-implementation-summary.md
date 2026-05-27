@@ -474,20 +474,47 @@ pie session search “안녕” --source tui  # 소스 필터
 
 TUI 세션 AI도 `session_search` 도구로 과거 대화를 검색할 수 있습니다.
 
+### `pie gateway history` / `pie gateway attach`
+
+CLI에서 gateway 채팅 내역을 직접 조회하거나 실시간 스트리밍하는 명령을 추가했습니다.
+
+```bash
+# 채널 목록 확인
+pie gateway history
+
+# 특정 채널 최근 대화 출력
+pie gateway history dm-donghak-kim --limit 20
+pie gateway history channel-1465535874778271823
+
+# 실시간 스트리밍 (gateway가 메시지 수신/응답할 때마다 출력)
+pie gateway attach
+pie gateway attach dm-donghak-kim
+```
+
+- `history`: `channel.jsonl` JSONL 파싱 → inbound/outbound/error 레코드 렌더링
+- `attach`: `fs.watch()`로 channel.jsonl 실시간 감시, Ctrl+C로 종료
+- 채널 지정은 channelKey, accountId/channelKey, 이름 부분 문자열 모두 허용
+
+### Telegram 슬래시 커맨드 메뉴
+
+기존에 모든 응답 아래 표시되던 인라인 버튼(Status/New/Compact/Stop/Help)을 제거하고, gateway 시작 시 `setMyCommands` API로 봇 커맨드 메뉴에 등록하는 방식으로 전환했습니다.
+
+- 사용자가 `/` 입력 시 자동완성 메뉴에 표시
+- 기존 `parseControlCommand()`가 이미 `/status`, `/new` 등을 처리하므로 추가 라우팅 불필요
+- 등록 실패 시 non-fatal (`.catch(() => undefined)`)
+
 ## 다음 추천 작업
 
 우선순위는 다음이 좋습니다.
 
 ```txt
-1. pie gateway logs / logs --follow
-2. Discord thread continuity 보강
-3. Telegram topic routing 보강
-4. 실제 Telegram/Discord E2E 체크리스트 갱신
-5. Discord voice channel 실제 서버 E2E 검증과 polish
-6. pie gateway history [채널] — 특정 채널 대화 내역 출력
-7. pie gateway attach — 실시간 전 플랫폼 대화 스트리밍
+1. Discord thread continuity 보강
+2. Telegram topic routing 보강
+3. 실제 Telegram/Discord E2E 체크리스트 갱신
+4. Discord voice channel 실제 서버 E2E 검증과 polish
+5. pie gateway logs --follow (게이트웨이 로그 실시간 추적)
 ```
 
-지금 상태는 “Telegram/Discord/Web 중심의 Hermes-style gateway v2.0” 정도로 볼 수 있습니다. 단일 gateway process, platform registry, session key, scheduler delivery, native control UX, doctor, web IPC, 세션 검색까지 들어갔으므로 운영 기반은 갖춰졌고, 다음은 안정화와 platform coverage 확장 단계입니다.
+지금 상태는 “Telegram/Discord/Web 중심의 Hermes-style gateway v2.1” 정도로 볼 수 있습니다. 단일 gateway process, platform registry, session key, scheduler delivery, native control UX, doctor, web IPC, 세션 검색, 대화 내역 CLI까지 들어갔으므로 운영 기반은 갖춰졌고, 다음은 안정화와 platform coverage 확장 단계입니다.
 
 오디오 쪽 다음 작업은 별도 확장이 아니라 [Pie Gateway Audio](./gateway-audio.md)의 Hermes parity 목록만 기준으로 진행합니다.
