@@ -25,6 +25,7 @@ export interface BackgroundReviewOptions {
 export class BackgroundLearningReview {
 	private turnCount = 0;
 	private running = false;
+	private lastReviewAt: number | undefined;
 	private readonly options: BackgroundReviewOptions;
 
 	constructor(options: BackgroundReviewOptions) {
@@ -35,11 +36,18 @@ export class BackgroundLearningReview {
 		if (!this.options.settings.enabled || this.running) return;
 		if (this.options.settings.review.mode === "off") return;
 		this.turnCount += 1;
+
+		const intervalMinutes = this.options.settings.memory.reviewIntervalMinutes;
+		const elapsedMs = this.lastReviewAt !== undefined ? Date.now() - this.lastReviewAt : Infinity;
+		const timeDue = intervalMinutes > 0 && elapsedMs >= intervalMinutes * 60 * 1000;
+
 		const shouldRun =
+			timeDue ||
 			this.turnCount % this.options.settings.memory.reviewIntervalTurns === 0 ||
 			messages.some((message) => message.role === "assistant");
 		if (!shouldRun) return;
 		this.running = true;
+		this.lastReviewAt = Date.now();
 		void this.review(messages)
 			.catch(() => undefined)
 			.finally(() => {

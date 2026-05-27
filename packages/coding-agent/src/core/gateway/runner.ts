@@ -422,11 +422,12 @@ class GatewayConversationWorker implements GatewayConversationEndpoint {
 			sessionStartEvent: { type: "session_start", reason: "startup" },
 				customTools: createGatewayChatTools({
 					cwd: this.cwd,
+					agentDir: this.agentDir,
 					usageStore: services.usageStore,
 					runtime: () => this.runtimeValue,
-				isTurnActive: () => this.inFlight,
-				queueAttachment: (path) => this.queuedAttachments.push(path),
-			}),
+					isTurnActive: () => this.inFlight,
+					queueAttachment: (path) => this.queuedAttachments.push(path),
+				}),
 			chatOrigin: this.conversation.conversationId,
 		});
 		this.sessions.set(sessionKey, {
@@ -602,6 +603,8 @@ export async function runGateway(options: RunGatewayOptions = {}): Promise<void>
 	const workers: GatewayConversationWorker[] = [];
 	const workerByConversationId = new Map<string, GatewayConversationWorker>();
 	const workerCreatePromises = new Map<string, Promise<GatewayConversationWorker>>();
+	// Serialise all saveChatConfig calls to prevent concurrent auto-discovery writes racing.
+	let configSaveChain: Promise<void> = Promise.resolve();
 	for (const conversation of conversations) {
 		const worker = new GatewayConversationWorker({ conversation, cwd, agentDir, logger, usageStore });
 		try {
@@ -629,9 +632,14 @@ export async function runGateway(options: RunGatewayOptions = {}): Promise<void>
 			configuredAccount.channels ??= {};
 			if (!configuredAccount.channels[channelKey]) {
 				configuredAccount.channels[channelKey] = channel;
-				await saveChatConfig(config).catch((error) => {
-					logger.warn(`[${conversationId}] failed to persist auto-discovered channel: ${error instanceof Error ? error.message : String(error)}`);
-				});
+				// Chain saves through a single promise to avoid concurrent writes racing.
+				const save = configSaveChain
+					.then(() => saveChatConfig(config))
+					.catch((error) => {
+						logger.warn(`[${conversationId}] failed to persist auto-discovered channel: ${error instanceof Error ? error.message : String(error)}`);
+					});
+				configSaveChain = save.then(() => undefined);
+				await save;
 			}
 			const conversation = buildResolvedConversation(config, accountId, channelKey, configuredAccount.channels[channelKey] ?? channel);
 				const worker = new GatewayConversationWorker({ conversation, cwd, agentDir, logger, usageStore });

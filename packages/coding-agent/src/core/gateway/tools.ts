@@ -5,6 +5,7 @@ import { Type, type Static } from "typebox";
 import type { ToolDefinition } from "../extensions/types.ts";
 import type { ConversationRuntime } from "./chat/runtime.js";
 import { synthesizeGatewaySpeech } from "./speech.js";
+import { createSessionSearchToolDefinition } from "../session-search-tool.js";
 
 const chatHistorySchema = Type.Object({
 	query: Type.Optional(Type.String({ description: "Case-insensitive text to search for" })),
@@ -30,6 +31,7 @@ type ChatVoiceInput = Static<typeof chatVoiceSchema>;
 
 export interface GatewayToolState {
 	cwd: string;
+	agentDir?: string;
 	usageStore?: UsageStore;
 	runtime(): ConversationRuntime | undefined;
 	isTurnActive(): boolean;
@@ -38,6 +40,7 @@ export interface GatewayToolState {
 
 export function createGatewayChatTools(state: GatewayToolState): ToolDefinition[] {
 	return [
+		createSessionSearchToolDefinition(state.agentDir),
 		{
 			name: "chat_history",
 			label: "Chat History",

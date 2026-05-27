@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   API_BASE_URL,
   checkServerHealth,
+  fetchSessionHistory,
   listModels,
   streamChatCompletion,
   type OpenAiChatMessage,
@@ -32,15 +33,26 @@ interface ChatEntry {
 
 const QUICK_MODELS = ["auto:chat", "auto:coding", "auto:reasoning"];
 const MARKDOWN_REMARK_PLUGINS = [remarkGfm, remarkBreaks];
+const LS_CONVERSATION_KEY = "pie_chat_conversation_id";
+
+function getOrCreateConversationId(): string {
+  if (typeof window === "undefined") return createId("web");
+  const stored = localStorage.getItem(LS_CONVERSATION_KEY);
+  if (stored) return stored;
+  const id = createId("web");
+  localStorage.setItem(LS_CONVERSATION_KEY, id);
+  return id;
+}
 
 export function ChatApp() {
   const [messages, setMessages] = useState<ChatEntry[]>([]);
   const [input, setInput] = useState("");
   const [model, setModel] = useState("auto:chat");
-  const [conversationId, setConversationId] = useState(() => createId("web"));
+  const [conversationId, setConversationId] = useState<string>(() => getOrCreateConversationId());
   const [serverStatus, setServerStatus] = useState<ServerStatus>("checking");
   const [models, setModels] = useState<string[]>(QUICK_MODELS);
   const [isSending, setIsSending] = useState(false);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
 
@@ -50,6 +62,7 @@ export function ChatApp() {
     return `${lastRoute.routing_mode ?? "router"} · ${lastRoute.resolved_provider ?? "provider"}`;
   }, [messages]);
 
+  // Load server state (health + models)
   useEffect(() => {
     const controller = new AbortController();
 
@@ -68,6 +81,28 @@ export function ChatApp() {
     loadServerState();
     return () => controller.abort();
   }, []);
+
+  // Load conversation history from disk on mount (or when conversationId changes)
+  useEffect(() => {
+    const controller = new AbortController();
+    setIsLoadingHistory(true);
+
+    fetchSessionHistory(conversationId, controller.signal).then((history) => {
+      if (controller.signal.aborted) return;
+      if (history.length > 0) {
+        setMessages(
+          history.map((msg) => ({
+            id: createId(msg.role),
+            role: msg.role as "user" | "assistant",
+            content: msg.content,
+          })),
+        );
+      }
+      setIsLoadingHistory(false);
+    });
+
+    return () => controller.abort();
+  }, [conversationId]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -143,9 +178,11 @@ export function ChatApp() {
 
   function resetChat() {
     abortRef.current?.abort();
+    const newId = createId("web");
+    localStorage.setItem(LS_CONVERSATION_KEY, newId);
+    setConversationId(newId);
     setMessages([]);
     setInput("");
-    setConversationId(createId("web"));
   }
 
   return (
@@ -219,7 +256,14 @@ export function ChatApp() {
 
         <div className="flex-1 overflow-y-auto">
           <div className="mx-auto flex min-h-full w-full max-w-5xl flex-col px-4 py-5">
-            {messages.length === 0 ? (
+            {isLoadingHistory ? (
+              <div className="flex flex-1 items-center justify-center py-16">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <RefreshCw className="size-4 animate-spin" />
+                  <span>이전 대화 불러오는 중…</span>
+                </div>
+              </div>
+            ) : messages.length === 0 ? (
               <div className="flex flex-1 items-center justify-center py-16">
                 <div className="w-full max-w-xl rounded-lg border bg-card px-5 py-5 shadow-sm">
                   <div className="flex items-center gap-3">
@@ -239,7 +283,7 @@ export function ChatApp() {
                   <MessageBubble key={message.id} message={message} isStreaming={isSending} />
                 ))}
               </div>
-            )}
+            ) /* end messages list */}
             <div ref={endRef} />
           </div>
         </div>

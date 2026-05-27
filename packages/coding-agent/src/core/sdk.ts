@@ -32,6 +32,7 @@ import { findInitialModel } from "./model-resolver.ts";
 import type { ResourceLoader } from "./resource-loader.ts";
 import { DefaultResourceLoader } from "./resource-loader.ts";
 import { createSchedulerToolDefinitions, CronJobStore } from "./scheduler/index.ts";
+import { createSessionSearchToolDefinition } from "./session-search-tool.js";
 import { getDefaultSessionDir, SessionManager } from "./session-manager.ts";
 import { SettingsManager } from "./settings-manager.ts";
 import { isInstallTelemetryEnabled } from "./telemetry.ts";
@@ -323,7 +324,8 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 					getOrigin: () => options.chatOrigin,
 				})
 			: [];
-	const customTools = [...(options.customTools ?? []), ...learningTools, ...schedulerTools];
+	const sessionSearchTool = !options.noTools ? [createSessionSearchToolDefinition(agentDir)] : [];
+	const customTools = [...(options.customTools ?? []), ...learningTools, ...schedulerTools, ...sessionSearchTool];
 
 	// Check if session has existing data to restore
 	const existingSession = sessionManager.buildSessionContext();

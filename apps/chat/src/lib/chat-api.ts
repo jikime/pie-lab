@@ -30,6 +30,33 @@ interface ModelListResponse {
   data?: Array<{ id?: unknown }>;
 }
 
+export interface SessionHistoryMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export interface SessionHistoryResponse {
+  conversation_id: string;
+  messages: SessionHistoryMessage[];
+}
+
+export async function fetchSessionHistory(
+  conversationId: string,
+  signal?: AbortSignal,
+): Promise<SessionHistoryMessage[]> {
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/v1/pie/chat/sessions?conversation_id=${encodeURIComponent(conversationId)}`,
+      { signal },
+    );
+    if (!response.ok) return [];
+    const body = (await response.json()) as SessionHistoryResponse;
+    return body.messages ?? [];
+  } catch {
+    return [];
+  }
+}
+
 export async function checkServerHealth(signal?: AbortSignal): Promise<boolean> {
   try {
     const response = await fetch(`${API_BASE_URL}/health`, {

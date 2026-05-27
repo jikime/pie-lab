@@ -179,29 +179,47 @@ async function postTranscriptionForm(options: {
 	headers?: Record<string, string>;
 	timeoutMs: number;
 	fetchImpl: typeof fetch;
+	maxRetries?: number;
 }): Promise<string> {
 	const data = options.fileData ?? (await readFile(options.filePath));
-	const form = new FormData();
-	form.set("model", options.model);
-	form.set("file", new Blob([Buffer.from(data)], { type: audioContentType(options.filePath, options.mimeType) }), basename(options.filePath));
-	if (options.language) form.set("language", options.language);
-	if (options.prompt) form.set("prompt", options.prompt);
-	const response = await options.fetchImpl(options.endpoint, {
-		method: "POST",
-		headers: options.headers,
-		body: form,
-		signal: timeoutSignal(options.timeoutMs),
-	});
-	const contentType = response.headers.get("content-type") || "";
-	const raw = await response.text();
-	const shouldParseJson = contentType.includes("application/json") || raw.trim().startsWith("{");
-	if (shouldParseJson) {
-		const body = JSON.parse(raw || "{}") as { text?: string; error?: { message?: string }; message?: string };
-		if (!response.ok) throw new Error(body.error?.message || body.message || `STT failed with HTTP ${response.status}`);
-		return body.text?.trim() || "";
+	const maxRetries = options.maxRetries ?? 3;
+
+	for (let attempt = 0; attempt <= maxRetries; attempt++) {
+		const form = new FormData();
+		form.set("model", options.model);
+		form.set("file", new Blob([Buffer.from(data)], { type: audioContentType(options.filePath, options.mimeType) }), basename(options.filePath));
+		if (options.language) form.set("language", options.language);
+		if (options.prompt) form.set("prompt", options.prompt);
+		const response = await options.fetchImpl(options.endpoint, {
+			method: "POST",
+			headers: options.headers,
+			body: form,
+			signal: timeoutSignal(options.timeoutMs),
+		});
+
+		// Exponential backoff on 429 rate-limit responses.
+		if (response.status === 429 && attempt < maxRetries) {
+			const retryAfterHeader = response.headers.get("retry-after");
+			const retryAfterMs = retryAfterHeader
+				? Number(retryAfterHeader) * 1000
+				: Math.min(1000 * 2 ** attempt + Math.random() * 500, 30_000);
+			await new Promise<void>((resolve) => setTimeout(resolve, retryAfterMs));
+			continue;
+		}
+
+		const contentType = response.headers.get("content-type") || "";
+		const raw = await response.text();
+		const shouldParseJson = contentType.includes("application/json") || raw.trim().startsWith("{");
+		if (shouldParseJson) {
+			const body = JSON.parse(raw || "{}") as { text?: string; error?: { message?: string }; message?: string };
+			if (!response.ok) throw new Error(body.error?.message || body.message || `STT failed with HTTP ${response.status}`);
+			return body.text?.trim() || "";
+		}
+		if (!response.ok) throw new Error(raw || `STT failed with HTTP ${response.status}`);
+		return raw.trim();
 	}
-	if (!response.ok) throw new Error(raw || `STT failed with HTTP ${response.status}`);
-	return raw.trim();
+
+	throw new Error(`STT failed after ${maxRetries} retries (rate limited).`);
 }
 
 export async function transcribeGatewayAudio(options: {

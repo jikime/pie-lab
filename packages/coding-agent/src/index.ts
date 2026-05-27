@@ -243,6 +243,7 @@ export {
 	type SessionHeader,
 	type SessionInfo,
 	type SessionInfoEntry,
+	loadEntriesFromFile,
 	SessionManager,
 	type SessionMessageEntry,
 	type ThinkingLevelChangeEntry,

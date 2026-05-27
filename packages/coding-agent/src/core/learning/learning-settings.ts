@@ -6,6 +6,8 @@ export interface LearningSettings {
 	memory: {
 		enabled: boolean;
 		reviewIntervalTurns: number;
+		/** Minimum minutes between background reviews regardless of turn count (0 = disabled). */
+		reviewIntervalMinutes: number;
 	};
 	skills: {
 		enabled: boolean;
@@ -37,6 +39,7 @@ export const DEFAULT_LEARNING_SETTINGS: LearningSettings = {
 	memory: {
 		enabled: true,
 		reviewIntervalTurns: 5,
+		reviewIntervalMinutes: 60,
 	},
 	skills: {
 		enabled: true,
@@ -102,6 +105,10 @@ export function normalizeLearningSettings(input: unknown): LearningSettings {
 				memory.reviewIntervalTurns,
 				DEFAULT_LEARNING_SETTINGS.memory.reviewIntervalTurns,
 			),
+			reviewIntervalMinutes:
+				typeof memory.reviewIntervalMinutes === "number" && Number.isFinite(memory.reviewIntervalMinutes) && memory.reviewIntervalMinutes >= 0
+					? Math.floor(memory.reviewIntervalMinutes)
+					: DEFAULT_LEARNING_SETTINGS.memory.reviewIntervalMinutes,
 		},
 		skills: {
 			enabled: asBoolean(skills.enabled, DEFAULT_LEARNING_SETTINGS.skills.enabled),

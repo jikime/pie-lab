@@ -239,8 +239,35 @@ export class DiscordVoiceController {
 		connection.receiver.speaking.on("start", (userId) => {
 			void this.handleSpeakingStart(session, userId).catch((error) => this.reportError(error));
 		});
-		connection.on(VoiceConnectionStatus.Disconnected, () => {
-			this.sessions.delete(textChannelId);
+		connection.on(VoiceConnectionStatus.Disconnected, async () => {
+			// Attempt to distinguish a transient network blip from a true disconnect.
+			try {
+				await Promise.race([
+					entersState(connection, VoiceConnectionStatus.Signalling, 5_000),
+					entersState(connection, VoiceConnectionStatus.Connecting, 5_000),
+				]);
+				// Successfully entered a reconnecting state — wait for Ready (20 s).
+				try {
+					await entersState(connection, VoiceConnectionStatus.Ready, envInt("PIE_GATEWAY_VOICE_JOIN_TIMEOUT_MS", 20_000));
+				} catch {
+					// Still not ready — give up and clean up.
+					if (connection.state.status !== VoiceConnectionStatus.Destroyed) connection.destroy();
+					this.sessions.delete(textChannelId);
+				}
+			} catch {
+				// Could not enter a reconnecting state within 5 s — truly disconnected.
+				this.sessions.delete(textChannelId);
+			}
+		});
+
+		// Guard against a connection stuck indefinitely in Signaling/Connecting.
+		connection.on(VoiceConnectionStatus.Connecting, () => {
+			entersState(connection, VoiceConnectionStatus.Ready, envInt("PIE_GATEWAY_VOICE_JOIN_TIMEOUT_MS", 20_000)).catch(() => {
+				if (connection.state.status !== VoiceConnectionStatus.Destroyed) {
+					connection.destroy();
+					this.sessions.delete(textChannelId);
+				}
+			});
 		});
 		return `Joined voice channel ${voiceChannel.name}. Voice input is active for this text channel.`;
 	}

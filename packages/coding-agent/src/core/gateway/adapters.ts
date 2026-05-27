@@ -397,7 +397,7 @@ async function sendTelegramMessage(
 							parse_mode: rendered.parseMode,
 							disable_web_page_preview: true,
 							...(i === 0 ? replyParam : {}),
-							...(i === 0 && replyMarkup ? { reply_markup: replyMarkup } : {}),
+							...(i === chunks.length - 1 && replyMarkup ? { reply_markup: replyMarkup } : {}),
 						},
 						telegramHtmlToPlainText(chunks[i] ?? ""),
 						{ signal },
@@ -482,7 +482,7 @@ class TelegramTransport implements GatewayTransport {
 		signal?: AbortSignal,
 		replyToMessageId?: string,
 	): Promise<string> {
-		return sendTelegramMessage(this.account, this.conversation.channel.id, text, attachmentPaths, signal, replyToMessageId);
+		return sendTelegramMessage(this.account, this.conversation.channel.id, text, attachmentPaths, signal, replyToMessageId, telegramControlKeyboard());
 	}
 
 	async startTyping(): Promise<void> {
@@ -1072,7 +1072,7 @@ async function catchUpDiscordChannel(
 	const allMessages: Message[] = [];
 	let cursor = afterId;
 	while (true) {
-		const batch = await channel.messages.fetch(cursor ? { after: cursor, limit: 100 } : { limit: 25 });
+		const batch = await channel.messages.fetch(cursor ? { after: cursor, limit: 100 } : { limit: 100 });
 		if (batch.size === 0) break;
 		const sorted = [...batch.values()].sort((a, b) => a.createdTimestamp - b.createdTimestamp);
 		allMessages.push(...sorted);

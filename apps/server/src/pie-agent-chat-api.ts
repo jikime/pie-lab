@@ -4,8 +4,13 @@ import {
 	createAgentSession,
 	type AgentSessionEvent,
 	type CreateAgentSessionOptions,
+	getAgentDir,
+	loadEntriesFromFile,
 	SessionManager,
+	type SessionMessageEntry,
 } from "@pie-lab/coding-agent";
+import { readdirSync } from "node:fs";
+import { join } from "node:path";
 import { PIE_LAB_ROUTER_PROVIDER } from "@pie-lab/router";
 import { randomUUID } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -78,6 +83,7 @@ const CORS_HEADERS = {
 };
 
 const DEFAULT_ENDPOINT = "/v1/pie/chat/completions";
+const SESSIONS_ENDPOINT = "/v1/pie/chat/sessions";
 const DEFAULT_MODEL = "auto:chat";
 const DEFAULT_MAX_SESSIONS = 20;
 
@@ -126,6 +132,22 @@ async function handlePieAgentChatRequest(
 	}
 
 	const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
+
+	// GET /v1/pie/chat/sessions?conversation_id=… — return session history from disk
+	if (url.pathname === SESSIONS_ENDPOINT && request.method === "GET") {
+		const conversationId = url.searchParams.get("conversation_id")?.slice(0, 160);
+		if (!conversationId) {
+			writeJson(response, 400, { error: { message: "conversation_id query param required." } });
+			return;
+		}
+		const agentDir = options.agentDir ?? getAgentDir();
+		const sessionDir = process.env.PIE_WEB_CHAT_SESSION_DIR ?? join(agentDir, "sessions", "web-chat");
+		const convDir = join(sessionDir, conversationId);
+		const messages = loadConversationHistory(convDir);
+		writeJson(response, 200, { conversation_id: conversationId, messages });
+		return;
+	}
+
 	if (url.pathname !== DEFAULT_ENDPOINT) {
 		writeJson(response, 404, { error: { message: "Not found", path: url.pathname } });
 		return;
@@ -253,13 +275,20 @@ async function defaultPieAgentSessionFactory(options: {
 	cwd?: string;
 	agentDir?: string;
 }): Promise<PieAgentChatSession> {
+	const cwd = options.cwd ?? process.env.PIE_WEB_CHAT_CWD ?? process.cwd();
+	const agentDir = options.agentDir ?? getAgentDir();
+	// Each conversationId gets its own subdirectory so it can be resumed across
+	// page refreshes and server restarts. continueRecent() finds the existing
+	// JSONL file if one exists, otherwise creates a fresh session.
+	const sessionDir = process.env.PIE_WEB_CHAT_SESSION_DIR ?? join(agentDir, "sessions", "web-chat");
+	const convDir = join(sessionDir, options.conversationId);
 	const result = await createAgentSession({
-		cwd: options.cwd ?? process.env.PIE_WEB_CHAT_CWD ?? process.cwd(),
-		agentDir: options.agentDir,
+		cwd,
+		agentDir,
 		model: options.model,
 		modelRegistry: options.modelRegistry,
 		usageStore: options.usageStore,
-		sessionManager: SessionManager.inMemory(options.cwd ?? process.env.PIE_WEB_CHAT_CWD ?? process.cwd()),
+		sessionManager: SessionManager.continueRecent(cwd, convDir),
 		sessionStartEvent: {
 			type: "session_start",
 			reason: "startup",
@@ -729,4 +758,54 @@ function isOpenAIChatMessage(value: unknown): value is OpenAIChatMessage {
 
 function isOpenAIContentPart(value: unknown): value is OpenAIContentPart {
 	return !!value && typeof value === "object";
+}
+
+/**
+ * Read JSONL session files from a per-conversation directory and return
+ * the chat history as OpenAI-compatible messages.
+ */
+function loadConversationHistory(convDir: string): Array<{ role: string; content: string }> {
+	let files: string[];
+	try {
+		files = readdirSync(convDir)
+			.filter((f) => f.endsWith(".jsonl"))
+			.sort() // lexicographic = chronological (timestamp prefix)
+			.map((f) => join(convDir, f));
+	} catch {
+		// Directory doesn't exist yet — no history
+		return [];
+	}
+
+	const messages: Array<{ role: string; content: string }> = [];
+
+	for (const file of files) {
+		let entries;
+		try {
+			entries = loadEntriesFromFile(file);
+		} catch {
+			continue;
+		}
+
+		for (const entry of entries) {
+			if (entry.type !== "message") continue;
+			const msg = (entry as SessionMessageEntry).message;
+			if (msg.role !== "user" && msg.role !== "assistant") continue;
+
+			const text = extractMessageText(msg.content);
+			if (!text.trim()) continue;
+			messages.push({ role: msg.role, content: text });
+		}
+	}
+
+	return messages;
+}
+
+/** Extract plain text from an agent message content (string | content block array). */
+function extractMessageText(content: unknown): string {
+	if (typeof content === "string") return content;
+	if (!Array.isArray(content)) return "";
+	return (content as Array<{ type: string; text?: string }>)
+		.filter((block) => block.type === "text" && typeof block.text === "string")
+		.map((block) => block.text as string)
+		.join("");
 }
