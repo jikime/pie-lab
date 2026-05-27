@@ -58,6 +58,7 @@ import { ExtensionSelectorComponent } from "./modes/interactive/components/exten
 import { initTheme, stopThemeWatcher } from "./modes/interactive/theme/theme.ts";
 import { handleConfigCommand, handlePackageCommand } from "./package-manager-cli.ts";
 import { handleCronCommand } from "./scheduler-cli.ts";
+import { handleSessionCommand } from "./session-cli.ts";
 import { isLocalPath, normalizePath, resolvePath } from "./utils/paths.ts";
 import { cleanupWindowsSelfUpdateQuarantine } from "./utils/windows-self-update.ts";
 
@@ -469,6 +470,10 @@ export async function main(args: string[], options?: MainOptions) {
 	}
 
 	if (await handleCronCommand(args)) {
+		return;
+	}
+
+	if (await handleSessionCommand(args)) {
 		return;
 	}
 

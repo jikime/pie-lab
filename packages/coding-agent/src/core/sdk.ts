@@ -387,11 +387,17 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 
 	const defaultActiveToolNames: ToolName[] = ["read", "bash", "edit", "write"];
 	const allowedToolNames = options.tools ?? (options.noTools === "all" ? [] : undefined);
+	// session_search and scheduler tools are custom tools — they are registered in
+	// _toolRegistry but NOT added to active tools automatically unless we list them here.
+	const extraDefaultTools: string[] = [
+		...sessionSearchTool.map((t) => t.name),
+		...schedulerTools.map((t) => t.name),
+	];
 	const initialActiveToolNames: string[] = options.tools
 		? [...options.tools]
 		: options.noTools
 			? []
-			: defaultActiveToolNames;
+			: [...defaultActiveToolNames, ...extraDefaultTools];
 
 	let agent: Agent;
 

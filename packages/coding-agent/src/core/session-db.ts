@@ -427,43 +427,91 @@ export class SessionDB {
 			ftsQuery = `"${ftsQuery.replace(/"/g, '""')}"`;
 		}
 
-		const sourceFilter = sources && sources.length > 0 ? `AND s.source IN (${sources.map(() => "?").join(",")})` : "";
-		const sql = `
-			SELECT
-				s.id,
-				s.source,
-				s.service,
-				s.channel_key,
-				s.name,
-				s.created_at,
-				s.modified_at,
-				snippet(messages_fts, 4, '[', ']', '…', 24) AS snippet,
-				s.rowid AS session_rowid
-			FROM messages_fts
-			JOIN sessions s ON s.rowid = messages_fts.session_rowid
-			WHERE messages_fts MATCH ?
-			${sourceFilter}
-			GROUP BY s.rowid
-			ORDER BY rank
-			LIMIT ?
-		`;
+		// Node.js built-in SQLite does not support FTS5 auxiliary functions (snippet,
+		// highlight, bm25) in subqueries or JOINs — only when the FTS table is the
+		// sole FROM clause. We therefore use a two-query approach:
+		//   Step 1: Run plain FTS5 MATCH to get (session_rowid, text) ordered by rank.
+		//           Fetch limit*5 rows so we have enough to deduplicate across sources.
+		//   Step 2: Fetch session metadata from the sessions table by rowid.
+		//   Step 3: Build snippet manually in JS from the matching text.
+		//
+		// FTS5 trigram tokenizer requires ≥3 characters per search term. For shorter
+		// queries (e.g. 2-char Korean words like "안녕") we fall back to a LIKE scan
+		// on the FTS shadow table — slower but correct.
 
-		const sqlParams: (string | number | null)[] = [ftsQuery, ...(sources ?? []), limit];
-		let rows: unknown[];
-		try {
-			rows = (this.db.prepare(sql) as StatementSync).all(...sqlParams) as unknown[];
-		} catch {
-			// FTS5 query syntax error — retry as plain substring
+		type FtsRow = { session_rowid: number; text: string };
+
+		const termLen = query.trim().replace(/^"|"$/g, "").length;
+		const useLikeFallback = termLen < 3;
+
+		let ftsRows: FtsRow[];
+
+		if (useLikeFallback) {
+			// LIKE-based full scan — no ranking, but works for short terms.
+			const likeSQL = `
+				SELECT session_rowid, text
+				FROM messages_fts
+				WHERE text LIKE ?
+				LIMIT ?
+			`;
+			const likeTerm = `%${query.trim().replace(/^"|"$/g, "")}%`;
 			try {
-				const plain = `"${query.trim().replace(/"/g, '""')}"`;
-				const retryParams: (string | number | null)[] = [plain, ...(sources ?? []), limit];
-				rows = (this.db.prepare(sql) as StatementSync).all(...retryParams) as unknown[];
+				ftsRows = (this.db.prepare(likeSQL) as StatementSync).all(likeTerm, limit * 5) as FtsRow[];
 			} catch {
 				return [];
 			}
+		} else {
+			const ftsSQL = `
+				SELECT session_rowid, text
+				FROM messages_fts
+				WHERE messages_fts MATCH ?
+				ORDER BY rank
+				LIMIT ?
+			`;
+
+			const fetchFts = (q: string): FtsRow[] =>
+				(this.db.prepare(ftsSQL) as StatementSync).all(q, limit * 5) as FtsRow[];
+
+			try {
+				ftsRows = fetchFts(ftsQuery);
+			} catch {
+				try {
+					const plain = `"${query.trim().replace(/"/g, '""')}"`;
+					ftsRows = fetchFts(plain);
+				} catch {
+					return [];
+				}
+			}
 		}
 
-		return (rows as Array<{
+		if (ftsRows.length === 0) return [];
+
+		// Deduplicate by session_rowid — keep first (best-ranked) match per session.
+		const seenRowids = new Set<number>();
+		const bestMatchText = new Map<number, string>();
+		for (const row of ftsRows) {
+			if (!seenRowids.has(row.session_rowid)) {
+				seenRowids.add(row.session_rowid);
+				bestMatchText.set(row.session_rowid, row.text);
+				if (seenRowids.size >= limit * 3) break; // over-fetch for source filtering
+			}
+		}
+
+		const rowids = [...seenRowids];
+		const placeholders = rowids.map(() => "?").join(",");
+		const sourceFilter =
+			sources && sources.length > 0
+				? `AND source IN (${sources.map(() => "?").join(",")})`
+				: "";
+
+		const sessionSQL = `
+			SELECT id, source, service, channel_key, name, created_at, modified_at, rowid
+			FROM sessions
+			WHERE rowid IN (${placeholders}) ${sourceFilter}
+			LIMIT ?
+		`;
+
+		type SessionRow2 = {
 			id: string;
 			source: SessionSource;
 			service: string | null;
@@ -471,20 +519,32 @@ export class SessionDB {
 			name: string | null;
 			created_at: string | null;
 			modified_at: string | null;
-			snippet: string;
-			session_rowid: number;
-		}>).map((row) => {
-			const window = this.getWindowAroundMatch(row.session_rowid, query, 3);
-			const all = this.getSessionMessages(row.session_rowid);
+			rowid: number;
+		};
+
+		const sessionRows = (this.db.prepare(sessionSQL) as StatementSync).all(
+			...rowids, ...(sources ?? []), limit
+		) as SessionRow2[];
+
+		// Restore rank order from FTS step.
+		const rowidOrder = new Map<number, number>();
+		rowids.forEach((rid, i) => rowidOrder.set(rid, i));
+		sessionRows.sort((a, b) => (rowidOrder.get(a.rowid) ?? 999) - (rowidOrder.get(b.rowid) ?? 999));
+
+		return sessionRows.map((session) => {
+			const matchText = bestMatchText.get(session.rowid) ?? "";
+			const snippet = makeTextSnippet(matchText, query.trim().replace(/^"|"$/g, ""), 120);
+			const window = this.getWindowAroundMatch(session.rowid, query, 3);
+			const all = this.getSessionMessages(session.rowid);
 			return {
-				sessionId: row.id,
-				source: row.source,
-				service: row.service ?? undefined,
-				channelKey: row.channel_key ?? undefined,
-				name: row.name ?? undefined,
-				createdAt: row.created_at ?? undefined,
-				modifiedAt: row.modified_at ?? undefined,
-				snippet: row.snippet ?? "",
+				sessionId: session.id,
+				source: session.source,
+				service: session.service ?? undefined,
+				channelKey: session.channel_key ?? undefined,
+				name: session.name ?? undefined,
+				createdAt: session.created_at ?? undefined,
+				modifiedAt: session.modified_at ?? undefined,
+				snippet,
 				bookendStart: all.slice(0, 2).map((m) => `${m.speaker}: ${m.text}`),
 				bookendEnd: all.slice(-2).map((m) => `${m.speaker}: ${m.text}`),
 				window,
@@ -598,6 +658,43 @@ export class SessionDB {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/**
+ * Build a plain-text snippet from `text` that highlights the first occurrence
+ * of `term`. Returns up to `maxLen` characters with leading/trailing "…".
+ * Since Node.js built-in SQLite does not support FTS5 snippet() in subqueries
+ * or JOINs, we generate snippets in JavaScript instead.
+ */
+function makeTextSnippet(text: string, term: string, maxLen: number): string {
+	if (!text) return "";
+	const lower = text.toLowerCase();
+	const termLower = term.toLowerCase();
+	const idx = termLower ? lower.indexOf(termLower) : -1;
+
+	if (idx === -1) {
+		// Term not found in this text — return start of text
+		return text.length > maxLen ? text.slice(0, maxLen) + "…" : text;
+	}
+
+	// Center snippet around the match
+	const pad = Math.floor((maxLen - termLower.length) / 2);
+	const start = Math.max(0, idx - pad);
+	const end = Math.min(text.length, idx + termLower.length + pad);
+
+	let snippet = text.slice(start, end);
+	// Highlight the matched portion with brackets (matches FTS5 snippet convention)
+	const relIdx = idx - start;
+	snippet =
+		snippet.slice(0, relIdx) +
+		"[" +
+		snippet.slice(relIdx, relIdx + termLower.length) +
+		"]" +
+		snippet.slice(relIdx + termLower.length);
+
+	if (start > 0) snippet = "…" + snippet;
+	if (end < text.length) snippet = snippet + "…";
+	return snippet;
+}
 
 function tryParse(line: string): unknown {
 	try {
