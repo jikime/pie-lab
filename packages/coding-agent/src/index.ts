@@ -185,6 +185,8 @@ export {
 	type GatewayStatus,
 	type RunGatewayOptions,
 } from "./core/gateway/runner.ts";
+export { WebIPCClient, type WebIPCEvent, type WebIPCSessionOptions } from "./core/gateway/web-ipc-client.ts";
+export { getWebIpcSocketPath } from "./core/gateway/web-ipc-server.ts";
 export type {
 	PackageManager,
 	PathMetadata,

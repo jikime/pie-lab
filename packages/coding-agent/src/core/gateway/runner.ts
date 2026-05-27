@@ -27,6 +27,7 @@ import { ConversationRuntime } from "./chat/runtime.js";
 import { buildGatewaySystemPrompt } from "./prompt.ts";
 import { buildGatewaySessionKey, buildGatewaySessionSource } from "./session.ts";
 import { createGatewayChatTools } from "./tools.ts";
+import { WebIPCServer } from "./web-ipc-server.js";
 
 export interface GatewayLogger {
 	info(message: string): void;
@@ -656,6 +657,27 @@ export async function runGateway(options: RunGatewayOptions = {}): Promise<void>
 			workerCreatePromises.delete(conversationId);
 		}
 	};
+	// Start the web IPC server so web chat can route through the gateway.
+	// The createWorker factory builds a GatewayConversationWorker for each
+	// web conversationId on demand — keeping web-ipc-server.ts dependency-free
+	// of runner internals (avoids circular imports).
+	const webIpc = new WebIPCServer({
+		agentDir,
+		logger,
+		createWorker: async (conversationId: string) => {
+			const { buildWebConversation } = await import("./web-ipc-server.js");
+			const conversation = buildWebConversation(agentDir, conversationId);
+			const worker = new GatewayConversationWorker({ conversation, cwd, agentDir, logger, usageStore });
+			await worker.start();
+			workers.push(worker);
+			workerByConversationId.set(`web/${conversationId}`, worker);
+			return worker;
+		},
+	});
+	await webIpc.start().catch((err: unknown) => {
+		logger.warn(`[web-ipc] failed to start: ${err instanceof Error ? err.message : String(err)}`);
+	});
+
 	let adapters: GatewayAdapter[] = [];
 	const stopScheduler = startSchedulerLoop({ cwd, agentDir, logger });
 	const buildHealth = (): GatewayHealthSnapshot => ({
@@ -688,6 +710,7 @@ export async function runGateway(options: RunGatewayOptions = {}): Promise<void>
 	} finally {
 		clearInterval(healthTimer);
 		stopScheduler();
+		await webIpc.stop().catch(() => undefined);
 		await Promise.allSettled(adapters.map((adapter) => adapter.disconnect()));
 		await Promise.allSettled(workers.map((worker) => worker.disconnect()));
 		await writeGatewayHealth(agentDir, buildHealth()).catch(() => undefined);

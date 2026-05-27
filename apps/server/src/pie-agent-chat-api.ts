@@ -9,6 +9,7 @@ import {
 	SessionManager,
 	type SessionMessageEntry,
 } from "@pie-lab/coding-agent";
+import { WebIPCClient, type WebIPCEvent } from "@pie-lab/coding-agent";
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import { PIE_LAB_ROUTER_PROVIDER } from "@pie-lab/router";
@@ -275,11 +276,22 @@ async function defaultPieAgentSessionFactory(options: {
 	cwd?: string;
 	agentDir?: string;
 }): Promise<PieAgentChatSession> {
-	const cwd = options.cwd ?? process.env.PIE_WEB_CHAT_CWD ?? process.cwd();
 	const agentDir = options.agentDir ?? getAgentDir();
+
+	// ── Try gateway IPC first ─────────────────────────────────────────────
+	// When `pie gateway run` is active, route the web conversation through the
+	// same GatewayConversationWorker pool as Telegram and Discord.
+	// If the gateway is not running we fall back to a standalone AgentSession.
+	const ipcClient = new WebIPCClient(agentDir);
+	const gatewayAvailable = await ipcClient.probe();
+	if (gatewayAvailable) {
+		return createGatewayIPCSession(options.conversationId, ipcClient, options.model);
+	}
+
+	// ── Standalone fallback ───────────────────────────────────────────────
+	const cwd = options.cwd ?? process.env.PIE_WEB_CHAT_CWD ?? process.cwd();
 	// Each conversationId gets its own subdirectory so it can be resumed across
-	// page refreshes and server restarts. continueRecent() finds the existing
-	// JSONL file if one exists, otherwise creates a fresh session.
+	// page refreshes and server restarts.
 	const sessionDir = process.env.PIE_WEB_CHAT_SESSION_DIR ?? join(agentDir, "sessions", "web-chat");
 	const convDir = join(sessionDir, options.conversationId);
 	const result = await createAgentSession({
@@ -289,12 +301,103 @@ async function defaultPieAgentSessionFactory(options: {
 		modelRegistry: options.modelRegistry,
 		usageStore: options.usageStore,
 		sessionManager: SessionManager.continueRecent(cwd, convDir),
-		sessionStartEvent: {
-			type: "session_start",
-			reason: "startup",
-		},
+		sessionStartEvent: { type: "session_start", reason: "startup" },
 	});
 	return result.session;
+}
+
+/**
+ * Wraps WebIPCClient as a PieAgentChatSession so the rest of the handler
+ * code needs no changes — streaming, abort, subscribe all work identically.
+ */
+function createGatewayIPCSession(
+	conversationId: string,
+	client: WebIPCClient,
+	_model?: Model<Api>,
+): PieAgentChatSession {
+	let isStreaming = false;
+	let abortController: AbortController | null = null;
+	const listeners = new Set<(event: AgentSessionEvent) => void>();
+
+	const emit = (event: AgentSessionEvent) => {
+		for (const listener of listeners) listener(event);
+	};
+
+	const sessionId = `gateway-web-${conversationId}`;
+
+	// Accumulate full assistant text across deltas
+	let assistantBuffer = "";
+
+	const makeAssistantMsg = (text: string) => ({
+		role: "assistant" as const,
+		content: [{ type: "text" as const, text }],
+		api: "anthropic-messages" as const,
+		provider: "gateway",
+		model: "gateway",
+		usage: emptyUsage(),
+		stopReason: "stop" as const,
+		timestamp: Date.now(),
+	});
+
+	const onIPCEvent = (event: WebIPCEvent) => {
+		if (event.type === "delta") {
+			assistantBuffer += event.text;
+			const partial = makeAssistantMsg(assistantBuffer);
+			emit({
+				type: "message_update",
+				message: partial,
+				assistantMessageEvent: {
+					type: "text_delta",
+					delta: event.text,
+					partial,
+				},
+			} as unknown as AgentSessionEvent);
+		}
+		if (event.type === "done") {
+			const msg = makeAssistantMsg(event.text ?? assistantBuffer);
+			emit({ type: "message_end", message: msg } as unknown as AgentSessionEvent);
+		}
+	};
+
+	return {
+		sessionId,
+		get isStreaming() { return isStreaming; },
+		model: undefined,
+		agent: {
+			state: { messages: [], model: undefined },
+		},
+
+		async prompt(text: string): Promise<void> {
+			isStreaming = true;
+			assistantBuffer = "";
+			abortController = new AbortController();
+			try {
+				await client.sendMessage({
+					conversationId,
+					text,
+					userId: "web-user",
+					onEvent: onIPCEvent,
+					signal: abortController.signal,
+				});
+			} finally {
+				isStreaming = false;
+				abortController = null;
+			}
+		},
+
+		async abort(): Promise<void> {
+			abortController?.abort();
+		},
+
+		subscribe(listener: (event: AgentSessionEvent) => void): () => void {
+			listeners.add(listener);
+			return () => listeners.delete(listener);
+		},
+
+		dispose(): void {
+			listeners.clear();
+		},
+	};
 }
 
 async function handleStreamingAgentChat(options: {
