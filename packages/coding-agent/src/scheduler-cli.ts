@@ -1,6 +1,7 @@
 import chalk from "chalk";
 import { APP_NAME, getAgentDir } from "./config.ts";
 import { type CronJob, CronJobStore, runCronJob, tickCronScheduler } from "./core/scheduler/index.ts";
+import { readGatewayStatus } from "./core/gateway/runner.ts";
 import { SettingsManager } from "./core/settings-manager.ts";
 
 interface ParsedCronArgs {
@@ -32,24 +33,34 @@ export async function handleCronCommand(args: string[]): Promise<boolean> {
 		switch (parsed.command) {
 			case "status": {
 				const jobs = await store.list();
+				const gatewayStatus = await readGatewayStatus({ agentDir }).catch(() => undefined);
+				const gatewayRunning = gatewayStatus?.running ?? false;
 				printResult(
 					{
 						settings,
+						gatewayRunning,
 						jobs: jobs.length,
 						enabled: jobs.filter((job) => job.enabled).length,
 						due: jobs.filter((job) => job.enabled && job.nextRunAt && new Date(job.nextRunAt) <= new Date())
 							.length,
 					},
 					parsed.json,
-					(value) =>
-						[
+					(value) => {
+						const lines = [
 							`Scheduler: ${value.settings.enabled ? "enabled" : "disabled"}`,
+							`Gateway: ${value.gatewayRunning ? "running" : chalk.yellow("not running")}`,
 							`Tick interval: ${value.settings.tickIntervalSeconds}s`,
-							`Timeout: ${value.settings.timeoutSeconds}s`,
+							`Timeout (agent): ${value.settings.timeoutSeconds}s`,
+							`Timeout (script): ${value.settings.scriptTimeoutSeconds}s`,
 							`Jobs: ${value.jobs}`,
 							`Enabled: ${value.enabled}`,
 							`Due now: ${value.due}`,
-						].join("\n"),
+						];
+						if (!value.gatewayRunning && value.settings.enabled) {
+							lines.push("", chalk.yellow("⚠ Gateway is not running — scheduled jobs will not tick. Start it with: pie gateway run"));
+						}
+						return lines.join("\n");
+					},
 				);
 				return true;
 			}
@@ -82,6 +93,7 @@ export async function handleCronCommand(args: string[]): Promise<boolean> {
 					tools: getCsvFlag(parsed, "tools"),
 					workdir: getStringFlag(parsed, "workdir"),
 					model: getModelFlag(parsed),
+					timezone: getStringFlag(parsed, "timezone"),
 				});
 				printResult(
 					job,
@@ -105,6 +117,7 @@ export async function handleCronCommand(args: string[]): Promise<boolean> {
 					tools: getNullableCsvFlag(parsed, "tools"),
 					workdir: getNullableStringFlag(parsed, "workdir"),
 					model: getModelFlag(parsed),
+					timezone: getNullableStringFlag(parsed, "timezone"),
 				});
 				printResult(job, parsed.json, (value) => `Updated ${value.id}: ${value.name}`);
 				return true;
