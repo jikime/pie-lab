@@ -71,7 +71,7 @@ import {
 	wrapRegisteredTools,
 } from "./extensions/index.js";
 import { emitSessionShutdownEvent } from "./extensions/runner.js";
-import type { BackgroundLearningReview, HonchoProvider, SkillManager } from "./learning/index.js";
+import type { BackgroundLearningReview, HonchoProvider, SkillCurator, SkillManager } from "./learning/index.js";
 import type { BashExecutionMessage, CustomMessage } from "./messages.js";
 import type { ModelRegistry } from "./model-registry.js";
 import { expandPromptTemplate, type PromptTemplate } from "./prompt-templates.js";
@@ -183,6 +183,8 @@ export interface AgentSessionConfig {
 	honchoProvider?: HonchoProvider;
 	/** Learning skill manager used for agent-created skill usage accounting. */
 	learningSkillManager?: SkillManager;
+	/** Skill curator for periodic LLM-driven consolidation. */
+	skillCurator?: SkillCurator;
 }
 
 export interface ExtensionBindings {
@@ -302,6 +304,7 @@ export class AgentSession {
 	private _backgroundLearningReview?: BackgroundLearningReview;
 	private _honchoProvider?: HonchoProvider;
 	private _learningSkillManager?: SkillManager;
+	private _skillCurator?: SkillCurator;
 	private _extensionUIContext?: ExtensionUIContext;
 	private _extensionCommandContextActions?: ExtensionCommandContextActions;
 	private _extensionAbortHandler?: () => void;
@@ -340,6 +343,7 @@ export class AgentSession {
 		this._backgroundLearningReview = config.backgroundLearningReview;
 		this._honchoProvider = config.honchoProvider;
 		this._learningSkillManager = config.learningSkillManager;
+		this._skillCurator = config.skillCurator;
 
 		// Always subscribe to agent events for internal handling
 		// (session persistence, extensions, auto-compaction, retry logic)
@@ -559,6 +563,13 @@ export class AgentSession {
 		if (event.type === "agent_end") {
 			void this._honchoProvider?.syncTurn(event.messages);
 			this._backgroundLearningReview?.trigger(event.messages);
+			// Periodic LLM-driven consolidation (checks interval internally — usually no-op)
+			const streamFn = this.agent.streamFn?.bind(this.agent);
+			if (streamFn && this._skillCurator) {
+				void this._skillCurator
+					.maybeConsolidate(streamFn, { onLog: () => undefined })
+					.catch(() => undefined);
+			}
 		}
 	};
 

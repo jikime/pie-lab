@@ -503,6 +503,39 @@ pie gateway attach dm-donghak-kim
 - 기존 `parseControlCommand()`가 이미 `/status`, `/new` 등을 처리하므로 추가 라우팅 불필요
 - 등록 실패 시 non-fatal (`.catch(() => undefined)`)
 
+### 2026-05-27 추가 구현 — Curator LLM 통합 패스
+
+**LLM 기반 스킬 통합(Consolidation) 패스를 `SkillCurator`에 추가했습니다.**
+
+Hermes agent의 `curator.py` 1781 LOC 통합 엔진에서 핵심 로직을 포팅해, 좁은(narrow) 스킬들을 클래스 단위(umbrella) 스킬로 병합하는 기능을 구현했습니다.
+
+추가된 기능:
+
+- `SkillCurator.consolidate(streamFn, options)` — LLM이 도구를 호출하며 스킬 라이브러리를 직접 정리
+- `SkillCurator.maybeConsolidate(streamFn, options)` — 7일 간격으로 자동 통합 (세션 종료 시 트리거)
+- `SkillCurator.getConsolidationState()` — 마지막 통합 시점/횟수 조회
+- `pie curator consolidate [--dry-run]` — CLI에서 수동으로 통합 패스 실행
+- `pie curator status` — 스킬 상태 + 마지막 통합 정보 함께 표시
+- `pie curator settings --consolidate-days N` — 통합 주기 설정
+- `.curator_state` JSON 파일로 통합 타이밍 영속화
+
+LLM 통합 패스 동작 방식:
+
+1. 활성 agent-created 스킬 전체를 컨텍스트로 전달
+2. LLM이 `skills_list`, `skill_view`, `skill_manage` 도구를 호출하며 클러스터 식별
+3. PREFIX 기준 클러스터(gateway-*, discord-*, session-* 등) → umbrella 스킬로 통합
+4. 통합 후 좁은 스킬을 archive, YAML 요약 반환
+5. dry-run 모드: 실제 변경 없이 리포트만 생성
+
+관련 파일:
+
+- `packages/coding-agent/src/core/learning/skill-curator.ts` — consolidate/maybeConsolidate 추가
+- `packages/coding-agent/src/core/learning/learning-settings.ts` — `consolidateIntervalDays` 필드 추가
+- `packages/coding-agent/src/core/agent-session.ts` — `skillCurator` 설정 + agent_end 트리거
+- `packages/coding-agent/src/core/sdk.ts` — SkillCurator 인스턴스 생성 및 AgentSession 주입
+- `packages/coding-agent/src/curator-cli.ts` — `consolidate` 명령 추가
+- `packages/coding-agent/test/curator-consolidate.test.ts` — 8개 단위 테스트
+
 ## 다음 추천 작업
 
 우선순위는 다음이 좋습니다.
@@ -513,8 +546,9 @@ pie gateway attach dm-donghak-kim
 3. 실제 Telegram/Discord E2E 체크리스트 갱신
 4. Discord voice channel 실제 서버 E2E 검증과 polish
 5. pie gateway logs --follow (게이트웨이 로그 실시간 추적)
+6. Honcho model-callable tools (hermes의 4개 도구 포팅)
 ```
 
-지금 상태는 “Telegram/Discord/Web 중심의 Hermes-style gateway v2.1” 정도로 볼 수 있습니다. 단일 gateway process, platform registry, session key, scheduler delivery, native control UX, doctor, web IPC, 세션 검색, 대화 내역 CLI까지 들어갔으므로 운영 기반은 갖춰졌고, 다음은 안정화와 platform coverage 확장 단계입니다.
+지금 상태는 “Telegram/Discord/Web 중심의 Hermes-style gateway v2.1” 정도로 볼 수 있습니다. 단일 gateway process, platform registry, session key, scheduler delivery, native control UX, doctor, web IPC, 세션 검색, 대화 내역 CLI, LLM 기반 스킬 통합 패스까지 들어갔으므로 운영 기반은 갖춰졌고, 다음은 안정화와 platform coverage 확장 단계입니다.
 
 오디오 쪽 다음 작업은 별도 확장이 아니라 [Pie Gateway Audio](./gateway-audio.md)의 Hermes parity 목록만 기준으로 진행합니다.

@@ -149,13 +149,17 @@ export {
 export type { ReadonlyFooterDataProvider } from "./core/footer-data-provider.ts";
 export {
 	BackgroundLearningReview,
+	type ConsolidationEntry,
 	type CuratedSkillStatus,
+	type CuratorConsolidateOptions,
+	type CuratorConsolidateResult,
 	type CuratorRunResult,
 	DEFAULT_CURATOR_POLICY,
 	type LearningReviewRecord,
 	LearningReviewStore,
 	type MemorySnapshot,
 	MemoryStore,
+	type PruningEntry,
 	type ReviewAction,
 	type ReviewActionResult,
 	SkillCurator,

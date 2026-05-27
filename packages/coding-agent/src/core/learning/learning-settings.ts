@@ -20,6 +20,7 @@ export interface LearningSettings {
 			autoArchive: boolean;
 			backupBeforeRun: boolean;
 			pruneAfterDays: number;
+			consolidateIntervalDays: number;
 		};
 	};
 	honcho: {
@@ -52,6 +53,7 @@ export const DEFAULT_LEARNING_SETTINGS: LearningSettings = {
 			autoArchive: true,
 			backupBeforeRun: true,
 			pruneAfterDays: 180,
+			consolidateIntervalDays: 7,
 		},
 	},
 	honcho: {
@@ -156,6 +158,10 @@ function normalizeCuratorSettings(input: unknown): LearningSettings["skills"]["c
 		pruneAfterDays: asPositiveInteger(
 			curator.pruneAfterDays,
 			DEFAULT_LEARNING_SETTINGS.skills.curator.pruneAfterDays,
+		),
+		consolidateIntervalDays: asPositiveInteger(
+			curator.consolidateIntervalDays,
+			DEFAULT_LEARNING_SETTINGS.skills.curator.consolidateIntervalDays,
 		),
 	};
 }

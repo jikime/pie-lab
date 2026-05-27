@@ -14,8 +14,12 @@ export {
 	type ReviewActionResult,
 } from "./review-store.ts";
 export {
+	type ConsolidationEntry,
 	type CuratedSkillStatus,
+	type CuratorConsolidateOptions,
+	type CuratorConsolidateResult,
 	type CuratorRunResult,
+	type PruningEntry,
 	DEFAULT_CURATOR_POLICY,
 	SkillCurator,
 } from "./skill-curator.ts";

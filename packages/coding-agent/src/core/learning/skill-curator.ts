@@ -1,7 +1,19 @@
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+	cpSync,
+	existsSync,
+	mkdirSync,
+	readdirSync,
+	readFileSync,
+	rmSync,
+	statSync,
+	writeFileSync,
+} from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { parse as parseYaml } from "yaml";
+import type { AssistantMessage, Message, Model, ToolCall, ToolResultMessage } from "@pie-lab/ai";
+import { PIE_LAB_ROUTER_PROVIDER } from "@pie-lab/router";
 import type { SkillManager, SkillUsageRecord } from "./skill-manager.ts";
+import { createLearningToolDefinitions } from "./tools.ts";
 
 export interface SkillCuratorPolicy {
 	staleAfterDays: number;
@@ -9,6 +21,7 @@ export interface SkillCuratorPolicy {
 	autoArchive: boolean;
 	backupBeforeRun: boolean;
 	pruneAfterDays: number;
+	consolidateIntervalDays: number;
 }
 
 export interface CuratedSkillStatus {
@@ -50,13 +63,174 @@ export interface CuratorRollbackResult {
 	restoredArchived: number;
 }
 
+export interface CuratorConsolidateOptions {
+	dryRun?: boolean;
+	onLog?: (msg: string) => void;
+}
+
+export interface ConsolidationEntry {
+	from: string;
+	into: string;
+	reason: string;
+}
+
+export interface PruningEntry {
+	name: string;
+	reason: string;
+}
+
+export interface CuratorConsolidateResult {
+	dryRun: boolean;
+	backupPath?: string;
+	rawOutput: string;
+	consolidations: ConsolidationEntry[];
+	prunings: PruningEntry[];
+	iterations: number;
+}
+
+// ---------------------------------------------------------------------------
+// Curator state file — tracks consolidation timing
+// ---------------------------------------------------------------------------
+
+interface CuratorState {
+	lastConsolidatedAt: string | null;
+	consolidationCount: number;
+	lastConsolidationSummary: string | null;
+}
+
+function defaultCuratorState(): CuratorState {
+	return {
+		lastConsolidatedAt: null,
+		consolidationCount: 0,
+		lastConsolidationSummary: null,
+	};
+}
+
+// ---------------------------------------------------------------------------
+// Consolidation prompt — ported from hermes-agent curator.py
+// ---------------------------------------------------------------------------
+
+const CURATOR_CONSOLIDATION_PROMPT = `You are running as Pie's background skill CURATOR. This is an \
+UMBRELLA-BUILDING consolidation pass, not a passive audit and not a \
+duplicate-finder.
+
+The goal of the skill collection is a LIBRARY OF CLASS-LEVEL \
+INSTRUCTIONS AND EXPERIENTIAL KNOWLEDGE. A collection of hundreds of \
+narrow skills where each one captures one session's specific bug is \
+a FAILURE of the library — not a feature. An agent searching skills \
+matches on descriptions, not on exact names; one broad umbrella \
+skill with labeled subsections beats five narrow siblings for \
+discoverability, not the other way around.
+
+The right target shape is CLASS-LEVEL skills with rich SKILL.md \
+bodies + references/, templates/, and scripts/ subfiles for \
+session-specific detail — not one-session-one-skill micro-entries.
+
+Hard rules — do not violate:
+1. DO NOT touch bundled or project skills. The candidate list \
+below is already filtered to agent-created user skills only.
+2. DO NOT delete any skill. Archiving (action=archive on skill_manage) is \
+the maximum destructive action. Archives are recoverable; deletion is not.
+3. DO NOT touch skills shown as pinned=yes. Skip them entirely.
+4. DO NOT use usage counters as a reason to skip consolidation. The \
+counters are new and often mostly zero. Judge overlap on CONTENT, \
+not on use_count. 'use=0' is not evidence a skill is valuable; it's \
+absence of evidence either way.
+5. DO NOT reject consolidation on the grounds that 'each skill has \
+a distinct trigger'. Pairwise distinctness is the wrong bar. The \
+right bar is: 'would a human maintainer write this as N separate \
+skills, or as one skill with N labeled subsections?' When the \
+answer is the latter, merge.
+
+How to work — not optional:
+1. Scan the full candidate list. Identify PREFIX CLUSTERS (skills \
+sharing a first word or domain keyword). Examples you are likely \
+to find: gateway-*, discord-*, telegram-*, cron-*, learning-*, \
+session-*, skill-*, memory-*, api-*, debug-*, etc.
+2. For each cluster with 2+ members, do NOT ask 'are these pairs \
+overlapping?' — ask 'what is the UMBRELLA CLASS these skills all \
+serve? Would a maintainer name that class and write one skill for \
+it?' If yes, pick (or create) the umbrella and absorb the siblings \
+into it.
+3. Three ways to consolidate — use the right one per cluster:
+   a. MERGE INTO EXISTING UMBRELLA — one skill in the cluster is \
+already broad enough to be the umbrella. Use skill_manage action=patch \
+to add a labeled section for each sibling's unique insight, then \
+archive the siblings with skill_manage action=archive.
+   b. CREATE A NEW UMBRELLA SKILL.md — no existing member is broad \
+enough. Use skill_manage action=create to write a new class-level \
+skill whose SKILL.md covers the shared workflow and has short \
+labeled subsections. Archive the now-absorbed narrow siblings.
+   c. DEMOTE TO REFERENCES/TEMPLATES/SCRIPTS — a sibling has \
+narrow-but-valuable session-specific content. Move it into the \
+umbrella's appropriate support directory using skill_manage action=write_file:
+      • references/<topic>.md for session-specific detail OR \
+condensed knowledge banks
+      • templates/<name>.<ext> for starter files meant to be copied
+      • scripts/<name>.<ext> for re-runnable verification scripts
+      Then archive the old sibling with skill_manage action=archive.
+4. Also flag skills whose NAME is too narrow (contains a specific \
+error string, an 'audit' / 'diagnosis' / 'salvage' session artifact, \
+a specific date or version). These almost always belong as a \
+subsection or support file under a class-level umbrella.
+5. Iterate. After one consolidation round, scan the remaining set \
+and look for the NEXT umbrella opportunity. Don't stop after 3 merges.
+
+Your toolset:
+  - skills_list                    — read the current landscape
+  - skill_view                     — inspect a specific skill's content
+  - skill_manage action=patch      — add sections to the umbrella
+  - skill_manage action=create     — create a new umbrella SKILL.md
+  - skill_manage action=write_file — add a references/, templates/, \
+or scripts/ file under an existing skill
+  - skill_manage action=archive    — archive a narrow skill after merging
+
+'keep' is a legitimate decision ONLY when the skill is already a \
+class-level umbrella and none of the proposed merges would improve \
+discoverability.
+
+Expected output: real umbrella-ification. Process every obvious \
+cluster. If you end the pass with fewer than 5 archives and you have \
+more than 10 candidate skills, you stopped too early — go back and \
+look at the clusters you left alone.
+
+When done, write a human summary AND a structured machine-readable \
+block. Format EXACTLY:
+
+## Structured summary (required)
+\`\`\`yaml
+consolidations:
+  - from: <old-skill-name>
+    into: <umbrella-skill-name>
+    reason: <one short sentence — why merged, not just 'similar'>
+prunings:
+  - name: <skill-name>
+    reason: <one short sentence — why archived with no merge target>
+\`\`\`
+
+Every skill you archived MUST appear in exactly one of the two lists. \
+If you consolidated X into umbrella Y (patched Y, wrote a references \
+file to Y, or created Y with X's content absorbed), X goes under \
+\`consolidations\` with \`into: Y\`. If you archived X with no \
+absorption — truly stale, irrelevant, or obsolete — X goes under \
+\`prunings\`. Leave a list empty (\`consolidations: []\`) if none. \
+Do not omit the block.`;
+
 export const DEFAULT_CURATOR_POLICY: SkillCuratorPolicy = {
 	staleAfterDays: 30,
 	archiveAfterDays: 90,
 	autoArchive: true,
 	backupBeforeRun: true,
 	pruneAfterDays: 180,
+	consolidateIntervalDays: 7,
 };
+
+// Type alias for streamFn (same as BackgroundLearningReview uses)
+type StreamFn = (
+	model: Model<any>,
+	context: { systemPrompt?: string; messages: Message[] },
+	options?: any,
+) => any;
 
 export class SkillCurator {
 	private readonly manager: SkillManager;
@@ -204,6 +378,203 @@ export class SkillCurator {
 		return { backupPath: selectedBackupPath, restoredActive, restoredArchived };
 	}
 
+	// ---------------------------------------------------------------------------
+	// LLM-driven consolidation pass
+	// ---------------------------------------------------------------------------
+
+	/**
+	 * Run the LLM umbrella-building consolidation pass.
+	 *
+	 * The curator LLM reviews all active agent-created skills and identifies
+	 * clusters of narrow skills that should be merged into class-level umbrella
+	 * skills. This is the primary mechanism for keeping the skill library
+	 * manageable as it grows over time.
+	 *
+	 * @param streamFn - The same streamFn used by BackgroundLearningReview.
+	 *   In session context, this is `agent.streamFn`. In CLI context, create
+	 *   one via createAgentSession().session.agent.streamFn.
+	 * @param options - Dry run flag and optional log callback.
+	 */
+	async consolidate(streamFn: StreamFn, options: CuratorConsolidateOptions = {}): Promise<CuratorConsolidateResult> {
+		const { dryRun = false, onLog } = options;
+		const log = (msg: string) => onLog?.(msg);
+
+		const activeSkills = this.status().filter((s) => s.state !== "archived");
+
+		if (activeSkills.length < 2) {
+			log("Not enough active skills to consolidate (need ≥ 2).");
+			return {
+				dryRun,
+				rawOutput: "",
+				consolidations: [],
+				prunings: [],
+				iterations: 0,
+			};
+		}
+
+		let backupPath: string | undefined;
+		if (this.policy.backupBeforeRun && !dryRun) {
+			backupPath = this.backup();
+			log(`Backup created: ${backupPath}`);
+		}
+
+		const skillContext = this.buildConsolidationSkillContext(activeSkills);
+		const toolDefinitions = createLearningToolDefinitions({
+			memoryStore: {
+				read: () => "",
+				append: () => "",
+				replace: () => "",
+				clear: () => "",
+				readSnapshot: () => ({ memory: "", user: "" }),
+				formatForSystemPrompt: () => "",
+			} as any,
+			skillManager: this.manager,
+		});
+		// Exclude memory tool — curator only touches skills
+		const curatorTools = toolDefinitions.filter((t) => t.name !== "memory");
+		const toolsByName = new Map(curatorTools.map((t) => [t.name, t]));
+
+		const systemPrompt = dryRun
+			? `DRY-RUN MODE — REPORT ONLY. DO NOT mutate any skills.\n\nDO NOT call skill_manage with action=patch, create, archive, write_file, or remove_file.\nskills_list and skill_view are FINE — read as much as you need.\n\nYour output IS the deliverable. Describe actions you WOULD take, not actions you took.\n\n${CURATOR_CONSOLIDATION_PROMPT}`
+			: CURATOR_CONSOLIDATION_PROMPT;
+
+		const model = createRouterModel("auto:learning");
+		const messages: Message[] = [
+			{
+				role: "user",
+				content: `Please run the skill consolidation pass on the following agent-created skill library:\n\n${skillContext}\n\nAnalyze clusters, identify umbrella opportunities, and consolidate narrow skills.`,
+				timestamp: Date.now(),
+			},
+		];
+
+		const rawOutputs: string[] = [];
+		let iterations = 0;
+		const maxIterations = 12;
+
+		log(`Starting consolidation pass on ${activeSkills.length} active skills...`);
+
+		for (let i = 0; i < maxIterations; i++) {
+			iterations += 1;
+			const assistant = await runConsolidationModelTurn(streamFn, model, {
+				systemPrompt,
+				messages,
+				tools: curatorTools.map(({ name, description, parameters }) => ({ name, description, parameters })),
+			});
+			messages.push(assistant);
+
+			const assistantText = extractAssistantText(assistant);
+			if (assistantText) {
+				rawOutputs.push(assistantText);
+			}
+
+			const toolCalls = assistant.content.filter((item): item is ToolCall => item.type === "toolCall");
+			if (toolCalls.length === 0) {
+				// No more tool calls — LLM is done
+				break;
+			}
+
+			for (const toolCall of toolCalls) {
+				const definition = toolsByName.get(toolCall.name);
+				if (!definition) {
+					messages.push(
+						createToolResult(toolCall, `Unknown tool: ${toolCall.name}. Only skills_list, skill_view, and skill_manage are available.`, true),
+					);
+					continue;
+				}
+
+				// In dry-run mode, block mutating tool calls
+				if (dryRun && isMutatingSkillCall(toolCall)) {
+					const action = (toolCall.arguments as any)?.action ?? "?";
+					messages.push(
+						createToolResult(toolCall, `DRY-RUN: Would execute skill_manage action=${action} on '${(toolCall.arguments as any)?.name}'.`),
+					);
+					log(`  [dry-run] would ${action} '${(toolCall.arguments as any)?.name}'`);
+					continue;
+				}
+
+				try {
+					const result = await definition.execute(
+						toolCall.id,
+						toolCall.arguments as any,
+						undefined,
+						undefined,
+						undefined as any,
+					);
+					const text = result.content
+						.map((item) => (item.type === "text" ? item.text : `[${item.mimeType} image]`))
+						.join("\n");
+					messages.push(createToolResult(toolCall, text || JSON.stringify(result.details ?? {})));
+
+					if (!dryRun) {
+						const action = (toolCall.arguments as any)?.action;
+						const name = (toolCall.arguments as any)?.name;
+						if (action && name) {
+							log(`  ${action} '${name}'`);
+						}
+					}
+				} catch (error) {
+					const msg = error instanceof Error ? error.message : String(error);
+					messages.push(createToolResult(toolCall, msg, true));
+					log(`  error: ${msg}`);
+				}
+			}
+		}
+
+		const rawOutput = rawOutputs.join("\n\n");
+		const { consolidations, prunings } = parseStructuredSummary(rawOutput);
+
+		// Persist state
+		const state = this.loadState();
+		state.lastConsolidatedAt = new Date().toISOString();
+		state.consolidationCount += 1;
+		state.lastConsolidationSummary = `${consolidations.length} consolidated, ${prunings.length} pruned`;
+		this.saveState(state);
+
+		log(`Consolidation complete: ${consolidations.length} merged, ${prunings.length} pruned.`);
+
+		return {
+			dryRun,
+			backupPath,
+			rawOutput,
+			consolidations,
+			prunings,
+			iterations,
+		};
+	}
+
+	/**
+	 * Run consolidation if the interval since last run has passed.
+	 * Returns null if consolidation was not needed.
+	 */
+	async maybeConsolidate(
+		streamFn: StreamFn,
+		options: CuratorConsolidateOptions = {},
+	): Promise<CuratorConsolidateResult | null> {
+		const state = this.loadState();
+		if (!state.lastConsolidatedAt) {
+			// Never consolidated — but only auto-run if there are enough skills
+			const active = this.status().filter((s) => s.state !== "archived");
+			if (active.length < 5) return null;
+		} else {
+			const daysSinceLast = daysSince(state.lastConsolidatedAt) ?? 0;
+			if (daysSinceLast < this.policy.consolidateIntervalDays) {
+				return null;
+			}
+		}
+		return this.consolidate(streamFn, options);
+	}
+
+	/**
+	 * Return the curator state (last consolidation time, count, etc.)
+	 */
+	getConsolidationState(): CuratorState {
+		return this.loadState();
+	}
+
+	// ---------------------------------------------------------------------------
+	// Private helpers
+	// ---------------------------------------------------------------------------
+
 	private requireStatus(name: string): CuratedSkillStatus {
 		const status = this.status().find((skill) => skill.name === name && skill.state !== "archived");
 		if (!status) throw new Error(`Agent-created skill not found: ${name}`);
@@ -286,7 +657,79 @@ export class SkillCurator {
 			archivedAt: usage?.archivedAt,
 		};
 	}
+
+	private buildConsolidationSkillContext(activeSkills: CuratedSkillStatus[]): string {
+		if (activeSkills.length === 0) {
+			return "<skill-library>\nNo active agent-created skills.\n</skill-library>";
+		}
+
+		const lines = activeSkills.map((s) => {
+			const flags = [
+				s.pinned ? "pinned=yes" : "pinned=no",
+				`use=${s.useCount}`,
+				`idle=${s.idleDays ?? "?"} days`,
+			].join(", ");
+			return `- ${s.name} (${flags})`;
+		});
+
+		const bodies: string[] = [];
+		let budget = 16_000;
+		for (const skill of activeSkills) {
+			if (budget <= 0) break;
+			try {
+				const content = readFileSync(skill.location, "utf-8");
+				const clipped = content.length > 2_500 ? `${content.slice(0, 2_500)}\n... [truncated]` : content;
+				budget -= clipped.length;
+				bodies.push(
+					`<skill name="${skill.name}" state="${skill.state}" idle="${skill.idleDays ?? "?"}d">\n${clipped}\n</skill>`,
+				);
+			} catch {
+				// Ignore unreadable skills.
+			}
+		}
+
+		return [
+			"<skill-library>",
+			`${activeSkills.length} active agent-created skills to consolidate:`,
+			...lines,
+			bodies.length > 0 ? "\n<skill-bodies>" : "",
+			...bodies,
+			bodies.length > 0 ? "</skill-bodies>" : "",
+			"</skill-library>",
+		]
+			.filter(Boolean)
+			.join("\n");
+	}
+
+	private stateFilePath(): string {
+		return join(this.manager.userSkillsDir, ".curator_state");
+	}
+
+	private loadState(): CuratorState {
+		const path = this.stateFilePath();
+		if (!existsSync(path)) return defaultCuratorState();
+		try {
+			const data = JSON.parse(readFileSync(path, "utf-8")) as Partial<CuratorState>;
+			return { ...defaultCuratorState(), ...data };
+		} catch {
+			return defaultCuratorState();
+		}
+	}
+
+	private saveState(state: CuratorState): void {
+		const path = this.stateFilePath();
+		try {
+			mkdirSync(dirname(path), { recursive: true });
+			writeFileSync(path, JSON.stringify(state, null, 2), "utf-8");
+		} catch {
+			// Ignore state write failures — not critical.
+		}
+	}
 }
+
+// ---------------------------------------------------------------------------
+// Standalone helpers
+// ---------------------------------------------------------------------------
 
 function daysSince(value: string | undefined): number | undefined {
 	if (!value) return undefined;
@@ -309,4 +752,118 @@ function readSkillName(skillFile: string, fallback: string): string {
 		}
 	}
 	return basename(fallback).replace(/-\d+$/u, "");
+}
+
+function createRouterModel(id: string): Model<any> {
+	return {
+		id,
+		name: `Router ${id}`,
+		provider: PIE_LAB_ROUTER_PROVIDER,
+		api: PIE_LAB_ROUTER_PROVIDER as any,
+		baseUrl: "",
+		input: ["text"],
+		reasoning: false,
+		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+		contextWindow: 200_000,
+		maxTokens: 8192,
+	};
+}
+
+async function runConsolidationModelTurn(
+	streamFn: StreamFn,
+	model: Model<any>,
+	context: {
+		systemPrompt: string;
+		messages: Message[];
+		tools: { name: string; description: string; parameters: any }[];
+	},
+): Promise<AssistantMessage> {
+	const stream = await Promise.resolve(streamFn(model, context));
+	let message: AssistantMessage | undefined;
+	for await (const event of stream) {
+		if (event.type === "done") {
+			message = event.message;
+		} else if (event.type === "error") {
+			throw new Error(event.error?.errorMessage ?? "Consolidation model error.");
+		}
+	}
+	if (!message) throw new Error("Consolidation model returned no message.");
+	return message;
+}
+
+function extractAssistantText(message: AssistantMessage): string {
+	return message.content
+		.filter((item) => item.type === "text")
+		.map((item) => item.text)
+		.join("\n")
+		.trim();
+}
+
+function createToolResult(toolCall: ToolCall, text: string, isError = false): ToolResultMessage {
+	return {
+		role: "toolResult",
+		toolCallId: toolCall.id,
+		toolName: toolCall.name,
+		content: [{ type: "text", text }],
+		isError,
+		timestamp: Date.now(),
+	};
+}
+
+function isMutatingSkillCall(toolCall: ToolCall): boolean {
+	if (toolCall.name !== "skill_manage") return false;
+	const action = (toolCall.arguments as any)?.action;
+	return action !== undefined && action !== "list";
+}
+
+/**
+ * Parse the structured YAML summary from the curator's final response.
+ *
+ * Expected format:
+ * ```yaml
+ * consolidations:
+ *   - from: <old-skill-name>
+ *     into: <umbrella-skill-name>
+ *     reason: <why merged>
+ * prunings:
+ *   - name: <skill-name>
+ *     reason: <why archived with no merge target>
+ * ```
+ */
+function parseStructuredSummary(output: string): {
+	consolidations: ConsolidationEntry[];
+	prunings: PruningEntry[];
+} {
+	const empty = { consolidations: [], prunings: [] };
+	if (!output) return empty;
+
+	// Find the ```yaml block under ## Structured summary
+	const match = output.match(/```ya?ml\s*\n([\s\S]*?)\n```/i);
+	if (!match) return empty;
+
+	try {
+		const parsed = parseYaml(match[1]) as {
+			consolidations?: Array<{ from?: string; into?: string; reason?: string }>;
+			prunings?: Array<{ name?: string; reason?: string }>;
+		};
+
+		const consolidations: ConsolidationEntry[] = (parsed?.consolidations ?? [])
+			.filter((item) => item?.from && item?.into)
+			.map((item) => ({
+				from: String(item.from),
+				into: String(item.into),
+				reason: String(item.reason ?? ""),
+			}));
+
+		const prunings: PruningEntry[] = (parsed?.prunings ?? [])
+			.filter((item) => item?.name)
+			.map((item) => ({
+				name: String(item.name),
+				reason: String(item.reason ?? ""),
+			}));
+
+		return { consolidations, prunings };
+	} catch {
+		return empty;
+	}
 }

@@ -24,6 +24,7 @@ import {
 	HonchoProvider,
 	LearningReviewStore,
 	MemoryStore,
+	SkillCurator,
 	SkillManager,
 } from "./learning/index.ts";
 import { convertToLlm } from "./messages.ts";
@@ -671,6 +672,11 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		onSkillsChanged: onLearningSkillsChanged,
 	});
 
+	const skillCurator =
+		learningSettings.enabled && learningSettings.skills.enabled && learningSettings.skills.curatorEnabled
+			? new SkillCurator({ skillManager, policy: learningSettings.skills.curator })
+			: undefined;
+
 	const session = new AgentSession({
 		agent,
 		sessionManager,
@@ -688,6 +694,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		backgroundLearningReview,
 		honchoProvider,
 		learningSkillManager: skillManager,
+		skillCurator,
 	});
 	reloadSessionResources = () => session.reload();
 	const extensionsResult = resourceLoader.getExtensions();
