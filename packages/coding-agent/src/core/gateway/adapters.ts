@@ -120,14 +120,6 @@ interface TelegramUpdate {
 	update_id: number;
 	message?: TelegramMessage;
 	edited_message?: TelegramMessage;
-	callback_query?: TelegramCallbackQuery;
-}
-
-interface TelegramCallbackQuery {
-	id: string;
-	from: TelegramUser;
-	message?: TelegramMessage;
-	data?: string;
 }
 
 interface TelegramGetFileResult {
@@ -350,21 +342,6 @@ function telegramChatId(channelId: string): string | number {
 	return Number.isFinite(Number(channelId)) ? Number(channelId) : channelId;
 }
 
-function telegramControlKeyboard(): Record<string, unknown> {
-	return {
-		inline_keyboard: [
-			[
-				{ text: "Status", callback_data: "pie:status" },
-				{ text: "New", callback_data: "pie:new" },
-				{ text: "Compact", callback_data: "pie:compact" },
-			],
-			[
-				{ text: "Stop", callback_data: "pie:stop" },
-				{ text: "Help", callback_data: "pie:help" },
-			],
-		],
-	};
-}
 
 function telegramAttachmentUpload(kind: "image" | "file" | "audio" | "video"): { method: string; field: string } {
 	if (kind === "image") return { method: "sendPhoto", field: "photo" };
@@ -380,7 +357,6 @@ async function sendTelegramMessage(
 	attachmentPaths: string[] = [],
 	signal?: AbortSignal,
 	replyToMessageId?: string,
-	replyMarkup?: Record<string, unknown>,
 ): Promise<string> {
 	const rendered = formatMarkdownForService("telegram", text);
 	const replyParam = replyToMessageId ? { reply_to_message_id: Number(replyToMessageId) } : {};
@@ -394,13 +370,12 @@ async function sendTelegramMessage(
 				{
 					chat_id: telegramChatId(channelId),
 					text: chunks[i],
-							parse_mode: rendered.parseMode,
-							disable_web_page_preview: true,
-							...(i === 0 ? replyParam : {}),
-							...(i === chunks.length - 1 && replyMarkup ? { reply_markup: replyMarkup } : {}),
-						},
-						telegramHtmlToPlainText(chunks[i] ?? ""),
-						{ signal },
+					parse_mode: rendered.parseMode,
+					disable_web_page_preview: true,
+					...(i === 0 ? replyParam : {}),
+				},
+				telegramHtmlToPlainText(chunks[i] ?? ""),
+				{ signal },
 			);
 			const id = sent?.message_id !== undefined ? String(sent.message_id) : "";
 			firstId ??= id;
@@ -418,7 +393,6 @@ async function sendTelegramMessage(
 		if (replyToMessageId) form.set("reply_to_message_id", String(Number(replyToMessageId)));
 		if (caption) form.set("caption", caption);
 		if (caption && parseMode) form.set("parse_mode", parseMode);
-		if (replyMarkup) form.set("reply_markup", JSON.stringify(replyMarkup));
 		form.set(firstField, new Blob([Buffer.from(first.data)], { type: first.mimeType }), first.name);
 		return form;
 	};
@@ -473,7 +447,7 @@ class TelegramTransport implements GatewayTransport {
 	}
 
 	async sendImmediate(text: string, replyToMessageId?: string): Promise<string> {
-		return sendTelegramMessage(this.account, this.conversation.channel.id, text, [], undefined, replyToMessageId, telegramControlKeyboard());
+		return sendTelegramMessage(this.account, this.conversation.channel.id, text, [], undefined, replyToMessageId);
 	}
 
 	async send(
@@ -482,7 +456,7 @@ class TelegramTransport implements GatewayTransport {
 		signal?: AbortSignal,
 		replyToMessageId?: string,
 	): Promise<string> {
-		return sendTelegramMessage(this.account, this.conversation.channel.id, text, attachmentPaths, signal, replyToMessageId, telegramControlKeyboard());
+		return sendTelegramMessage(this.account, this.conversation.channel.id, text, attachmentPaths, signal, replyToMessageId);
 	}
 
 	async startTyping(): Promise<void> {
@@ -495,6 +469,15 @@ class TelegramTransport implements GatewayTransport {
 	async stopTyping(): Promise<void> {}
 }
 
+/** Telegram bot commands registered in the "/" command menu. */
+const TELEGRAM_BOT_COMMANDS = [
+	{ command: "status",  description: "Show gateway session status" },
+	{ command: "new",     description: "Start a new session" },
+	{ command: "compact", description: "Compact the current session" },
+	{ command: "stop",    description: "Abort the active turn" },
+	{ command: "help",    description: "Show available commands" },
+] as const;
+
 async function startTelegramAccountAdapter(
 	accountId: string,
 	account: TelegramAccountConfig,
@@ -504,6 +487,12 @@ async function startTelegramAccountAdapter(
 	for (const endpoint of endpoints) {
 		endpoint.setTransport(new TelegramTransport(endpoint.conversation, account));
 	}
+
+	// Register slash commands in the Telegram "/" command menu.
+	await callTelegram(account.botToken, "setMyCommands", {
+		commands: TELEGRAM_BOT_COMMANDS,
+	}).catch(() => undefined); // non-fatal — bot still works without the menu
+
 	const health: GatewayAdapterHealth = {
 		accountId,
 		service: "telegram",
@@ -516,36 +505,8 @@ async function startTelegramAccountAdapter(
 	let offset = cursor !== undefined ? cursor + 1 : 0;
 	const pollController = new AbortController();
 
-	const processCallbackQuery = async (query: TelegramCallbackQuery): Promise<void> => {
-		const command = parseGatewayControlData(query.data);
-		if (!command || !query.message) return;
-		const endpoint = byChannelId.get(String(query.message.chat.id));
-		if (!endpoint) return;
-		await callTelegram(account.botToken, "answerCallbackQuery", {
-			callback_query_id: query.id,
-			text: `Pie ${command}`,
-		}).catch(() => undefined);
-		health.lastActivityAt = new Date().toISOString();
-		await endpoint.onMessage({
-			messageId: `${query.message.message_id}:callback:${query.id}`,
-			chatId: String(query.message.chat.id),
-			chatName: query.message.chat.title || query.message.chat.username || query.message.chat.first_name || endpoint.conversation.channel.name,
-			chatType: query.message.chat.type === "private" ? "dm" : "channel",
-			userId: String(query.from.id),
-			userName: query.from.username || query.from.first_name,
-			text: `/${command}`,
-			mentionedBot: true,
-			isBot: query.from.is_bot ?? false,
-		});
-	};
-
 	const processUpdate = async (update: TelegramUpdate): Promise<void> => {
 		cursor = Math.max(cursor ?? 0, update.update_id);
-		if (update.callback_query) {
-			await processCallbackQuery(update.callback_query);
-			await writeTelegramCursor(accountId, cursor);
-			return;
-		}
 		const message = update.message || update.edited_message;
 		if (!message) {
 			await writeTelegramCursor(accountId, cursor);
@@ -567,7 +528,7 @@ async function startTelegramAccountAdapter(
 	const initialUpdates = await callTelegram<TelegramUpdate[]>(account.botToken, "getUpdates", {
 		offset: offset > 0 ? offset : undefined,
 		timeout: 0,
-		allowed_updates: ["message", "edited_message", "callback_query"],
+		allowed_updates: ["message", "edited_message"],
 	});
 	for (const update of initialUpdates) {
 		offset = update.update_id + 1;
@@ -583,7 +544,7 @@ async function startTelegramAccountAdapter(
 				const updates = await callTelegram<TelegramUpdate[]>(
 					account.botToken,
 					"getUpdates",
-					{ offset: offset > 0 ? offset : undefined, timeout: 30, allowed_updates: ["message", "edited_message", "callback_query"] },
+					{ offset: offset > 0 ? offset : undefined, timeout: 30, allowed_updates: ["message", "edited_message"] },
 					{ signal: pollController.signal },
 				);
 				for (const update of updates) {
