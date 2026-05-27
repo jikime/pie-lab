@@ -22,6 +22,7 @@ import {
 	readConversationLog,
 	releaseConversationLock,
 } from "./log.js";
+import { buildGatewaySessionKey, buildGatewaySessionSource } from "../session.js";
 
 function isDMConversation(conversation: ResolvedConversation): boolean {
 	return conversation.channel.dm ?? false;
@@ -134,7 +135,7 @@ export class ConversationRuntime {
 		return this.isAllowedInput(message);
 	}
 
-	parseControlCommand(input: InboundMessageInput): "stop" | "new" | "compact" | "status" | undefined {
+	parseControlCommand(input: InboundMessageInput): "stop" | "new" | "compact" | "status" | "help" | undefined {
 		const normalized = normalizeInboundMessage(input, this.conversation.botName);
 		if (!this.isAllowedInput(normalized)) return undefined;
 		const account = this.conversation.account;
@@ -150,6 +151,7 @@ export class ConversationRuntime {
 		if (command === "new" || command === "/new") return "new";
 		if (command === "compact" || command === "/compact") return "compact";
 		if (command === "status" || command === "/status") return "status";
+		if (command === "help" || command === "/help") return "help";
 		return undefined;
 	}
 
@@ -195,10 +197,12 @@ export class ConversationRuntime {
 	): Promise<{ record: InboundMessageRecord; jobQueued: boolean }> {
 		const normalized = normalizeInboundMessage(input, this.conversation.botName);
 		const messageId = normalized.messageId || nextMessageId(this.conversation.service);
+		const sessionSource = normalized.sessionSource || buildGatewaySessionSource(this.conversation, normalized);
+		const sessionKey = normalized.sessionKey || buildGatewaySessionKey(sessionSource);
 		const attachments = await materializeAttachments(this.conversation, messageId, normalized.attachments);
 		const record: InboundMessageRecord = {
 			type: "inbound",
-			...buildBaseRecordFields(this.conversation, this.nextRecordId),
+			...buildBaseRecordFields(this.conversation, this.nextRecordId, { sessionKey, sessionSource }),
 			messageId,
 			userId: normalized.userId,
 			userName: normalized.userName,
@@ -214,7 +218,7 @@ export class ConversationRuntime {
 		if (!trigger || !this.shouldQueueTrigger(record.recordId)) return { record, jobQueued: false };
 		const queuedRecord: JobQueuedRecord = {
 			type: "job_queued",
-			...buildBaseRecordFields(this.conversation, this.nextRecordId),
+			...buildBaseRecordFields(this.conversation, this.nextRecordId, { sessionKey, sessionSource }),
 			jobId: randomUUID(),
 			trigger,
 			triggerRecordId: record.recordId,
@@ -225,6 +229,8 @@ export class ConversationRuntime {
 			trigger: queuedRecord.trigger,
 			triggerRecordId: queuedRecord.triggerRecordId,
 			queuedRecordId: queuedRecord.recordId,
+			sessionKey,
+			sessionSource,
 		});
 		return { record, jobQueued: true };
 	}
@@ -235,7 +241,13 @@ export class ConversationRuntime {
 		if (!job) return undefined;
 		this.activeJob = job;
 		const triggerRecord = getLatestTriggerRecord(this.records, job);
-		return { job, prompt: this.buildPrompt(job), triggerMessageId: triggerRecord?.messageId };
+		return {
+			job,
+			prompt: this.buildPrompt(job),
+			triggerMessageId: triggerRecord?.messageId,
+			sessionKey: job.sessionKey || triggerRecord?.sessionKey,
+			sessionSource: job.sessionSource || triggerRecord?.sessionSource,
+		};
 	}
 
 	private buildPrompt(job: PendingJob): string {
@@ -258,7 +270,10 @@ export class ConversationRuntime {
 			const triggerRecord = getLatestTriggerRecord(this.records, job);
 			const outbound = {
 				type: "outbound",
-				...buildBaseRecordFields(this.conversation, this.nextRecordId),
+				...buildBaseRecordFields(this.conversation, this.nextRecordId, {
+					sessionKey: job.sessionKey || triggerRecord?.sessionKey,
+					sessionSource: job.sessionSource || triggerRecord?.sessionSource,
+				}),
 				messageId: remoteMessageId || nextMessageId(this.conversation.service),
 				text: trimmed,
 				replyToMessageId: triggerRecord?.messageId,
@@ -270,7 +285,10 @@ export class ConversationRuntime {
 		}
 		await this.appendRecord({
 			type: "job_completed",
-			...buildBaseRecordFields(this.conversation, this.nextRecordId),
+			...buildBaseRecordFields(this.conversation, this.nextRecordId, {
+				sessionKey: job.sessionKey,
+				sessionSource: job.sessionSource,
+			}),
 			jobId: job.jobId,
 			triggerRecordId: job.triggerRecordId,
 			outboundRecordId,
@@ -283,7 +301,10 @@ export class ConversationRuntime {
 		if (!job) return;
 		await this.appendRecord({
 			type: "job_failed",
-			...buildBaseRecordFields(this.conversation, this.nextRecordId),
+			...buildBaseRecordFields(this.conversation, this.nextRecordId, {
+				sessionKey: job.sessionKey,
+				sessionSource: job.sessionSource,
+			}),
 			jobId: job.jobId,
 			triggerRecordId: job.triggerRecordId,
 			error,
@@ -321,6 +342,7 @@ export class ConversationRuntime {
 			hasActiveJob: this.activeJob !== undefined,
 			recordCount: this.records.length,
 			lastRecordId: this.records.at(-1)?.recordId ?? 0,
+			lastSessionKey: [...this.records].reverse().find((record) => record.sessionKey)?.sessionKey,
 		};
 	}
 }

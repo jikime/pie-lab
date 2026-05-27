@@ -1,4 +1,4 @@
-export type ChatService = "telegram" | "discord";
+export type ChatService = "telegram" | "discord" | (string & {});
 
 export type TriggerMode = "mention" | "message";
 
@@ -22,6 +22,7 @@ export interface ConfiguredChannel {
 	id: string;
 	name?: string;
 	dm?: boolean;
+	autoDiscovered?: boolean;
 	access?: AccessPolicy;
 	gondolin?: GondolinConfig;
 }
@@ -44,14 +45,19 @@ export interface TelegramAccountConfig extends BaseAccountConfig {
 export interface DiscordAccountConfig extends BaseAccountConfig {
 	service: "discord";
 	botToken: string;
-	applicationId: string;
-	serverId: string;
-	serverName: string;
+	applicationId?: string;
+	serverId?: string;
+	serverName?: string;
 	botUserId?: string;
 	botUsername?: string;
+	homeChannelId?: string;
+	homeChannelName?: string;
+	allowedChannelIds?: string[];
+	ignoredChannelIds?: string[];
+	freeResponseChannelIds?: string[];
 }
 
-export type ChatAccountConfig = TelegramAccountConfig | DiscordAccountConfig;
+export type ChatAccountConfig = TelegramAccountConfig | DiscordAccountConfig | BaseAccountConfig;
 
 export interface ChatConfig {
 	botName?: string;

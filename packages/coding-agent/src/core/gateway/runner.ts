@@ -1,18 +1,31 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import type { UsageStore } from "@pie-lab/storage";
+import { createJsonlUsageStore, type UsageStore } from "@pie-lab/storage";
 import { getAgentDir } from "../../config.ts";
-import { createAgentSessionFromServices, createAgentSessionServices, type AgentSessionServices } from "../agent-session-services.ts";
+import {
+	createAgentSessionFromServices,
+	createAgentSessionServices,
+	getDefaultAgentUsageFilePath,
+	type AgentSessionServices,
+} from "../agent-session-services.ts";
 import type { AgentSession } from "../agent-session.ts";
 import { CronJobStore, tickCronScheduler } from "../scheduler/index.ts";
 import { SessionManager } from "../session-manager.ts";
 import { SettingsManager } from "../settings-manager.ts";
-import { startGatewayChatAdapters, type GatewayAdapter, type GatewayCheckpoint, type GatewayConversationEndpoint, type GatewayTransport } from "./adapters.ts";
-import { ensureChatHome, listConfiguredConversations, loadChatConfig } from "./chat/config.js";
-import type { InboundMessageInput, ResolvedConversation } from "./chat/types.js";
+import {
+	startGatewayChatAdapters,
+	type GatewayAdapter,
+	type GatewayAdapterHealth,
+	type GatewayCheckpoint,
+	type GatewayConversationEndpoint,
+	type GatewayTransport,
+} from "./adapters.ts";
+import { buildResolvedConversation, ensureChatHome, listConfiguredConversations, loadChatConfig, saveChatConfig } from "./chat/config.js";
+import type { ChatAccountConfig, ConfiguredChannel, InboundMessageInput, ResolvedConversation } from "./chat/types.js";
 import { ConversationRuntime } from "./chat/runtime.js";
 import { buildGatewaySystemPrompt } from "./prompt.ts";
+import { buildGatewaySessionKey, buildGatewaySessionSource } from "./session.ts";
 import { createGatewayChatTools } from "./tools.ts";
 
 export interface GatewayLogger {
@@ -31,8 +44,31 @@ export interface GatewayStatus {
 	pid?: number;
 	running: boolean;
 	pidPath: string;
+	statusPath: string;
 	configuredConversations: number;
 	conversations: Array<{ id: string; name: string; service: string }>;
+	health?: GatewayHealthSnapshot;
+}
+
+export interface GatewayConversationHealth {
+	id: string;
+	name: string;
+	service: string;
+	queueLength: number;
+	hasActiveJob: boolean;
+	recordCount: number;
+	sessionCount: number;
+	activeSessionKey?: string;
+	lastSessionKey?: string;
+}
+
+export interface GatewayHealthSnapshot {
+	pid: number;
+	startedAt: string;
+	updatedAt: string;
+	cwd: string;
+	conversations: GatewayConversationHealth[];
+	adapters: GatewayAdapterHealth[];
 }
 
 const GATEWAY_DIR_NAME = "gateway";
@@ -55,6 +91,10 @@ export function getGatewayDir(agentDir = getAgentDir()): string {
 
 export function getGatewayPidPath(agentDir = getAgentDir()): string {
 	return join(getGatewayDir(agentDir), "pid");
+}
+
+export function getGatewayStatusPath(agentDir = getAgentDir()): string {
+	return join(getGatewayDir(agentDir), "status.json");
 }
 
 function isPidAlive(pid: number): boolean {
@@ -81,6 +121,12 @@ export async function readGatewayPid(agentDir = getAgentDir()): Promise<number |
 export async function readGatewayStatus(options: { agentDir?: string } = {}): Promise<GatewayStatus> {
 	const agentDir = options.agentDir ?? getAgentDir();
 	const pid = await readGatewayPid(agentDir);
+	let health: GatewayHealthSnapshot | undefined;
+	try {
+		health = JSON.parse(await readFile(getGatewayStatusPath(agentDir), "utf8")) as GatewayHealthSnapshot;
+	} catch {
+		health = undefined;
+	}
 	const config = await loadChatConfig();
 	const conversations = listConfiguredConversations(config).map((conversation) => ({
 		id: conversation.conversationId,
@@ -91,8 +137,10 @@ export async function readGatewayStatus(options: { agentDir?: string } = {}): Pr
 		pid,
 		running: pid !== undefined && isPidAlive(pid),
 		pidPath: getGatewayPidPath(agentDir),
+		statusPath: getGatewayStatusPath(agentDir),
 		configuredConversations: conversations.length,
 		conversations,
+		health,
 	};
 }
 
@@ -106,6 +154,11 @@ async function removeGatewayPid(agentDir: string): Promise<void> {
 	if (pid === process.pid) {
 		await rm(getGatewayPidPath(agentDir), { force: true });
 	}
+}
+
+async function writeGatewayHealth(agentDir: string, snapshot: GatewayHealthSnapshot): Promise<void> {
+	await mkdir(getGatewayDir(agentDir), { recursive: true });
+	await writeFile(getGatewayStatusPath(agentDir), `${JSON.stringify(snapshot, null, "\t")}\n`, "utf8");
 }
 
 function extractAssistantSummary(messages: unknown[]): { text?: string; stopReason?: string; errorMessage?: string } {
@@ -142,6 +195,14 @@ function createGatewayUsageStore(base: UsageStore, conversation: ResolvedConvers
 	};
 }
 
+interface GatewayAgentSessionState {
+	sessionKey: string;
+	sessionDir: string;
+	sessionManager: SessionManager;
+	services?: AgentSessionServices;
+	session?: AgentSession;
+}
+
 function waitForAbort(signal?: AbortSignal): Promise<never> {
 	if (!signal) return new Promise(() => undefined);
 	if (signal.aborted) return Promise.reject(Object.assign(new Error("aborted"), { name: "AbortError" }));
@@ -159,25 +220,32 @@ class GatewayConversationWorker implements GatewayConversationEndpoint {
 	private readonly cwd: string;
 	private readonly agentDir: string;
 	private readonly logger: GatewayLogger;
+	private readonly usageStore: UsageStore;
 	private readonly ownerId: string;
-	private sessionDir: string;
+	private readonly defaultSessionKey: string;
 	private runtimeValue?: ConversationRuntime;
 	private transport?: GatewayTransport;
-	private services?: AgentSessionServices;
-	private sessionManager?: SessionManager;
-	private session?: AgentSession;
+	private readonly sessions = new Map<string, GatewayAgentSessionState>();
 	private inFlight = false;
 	private typingInterval?: ReturnType<typeof setInterval>;
 	private queuedAttachments: string[] = [];
 	private activeAbort?: AbortController;
+	private activeSessionKey?: string;
 
-	constructor(options: { conversation: ResolvedConversation; cwd: string; agentDir: string; logger: GatewayLogger }) {
+	constructor(options: {
+		conversation: ResolvedConversation;
+		cwd: string;
+		agentDir: string;
+		logger: GatewayLogger;
+		usageStore: UsageStore;
+	}) {
 		this.conversation = options.conversation;
 		this.cwd = options.cwd;
 		this.agentDir = options.agentDir;
 		this.logger = options.logger;
+		this.usageStore = options.usageStore;
 		this.ownerId = `pie-gateway-${process.pid}-${randomUUID()}`;
-		this.sessionDir = join(this.agentDir, "gateway", "sessions", sanitize(this.conversation.conversationId));
+		this.defaultSessionKey = buildGatewaySessionKey(buildGatewaySessionSource(this.conversation));
 	}
 
 	get runtime(): ConversationRuntime | undefined {
@@ -212,13 +280,28 @@ class GatewayConversationWorker implements GatewayConversationEndpoint {
 		await this.onError(new Error("Gateway chat adapter disconnected."));
 	}
 
+	getHealth(): GatewayConversationHealth {
+		const status = this.runtimeValue?.getStatus();
+		return {
+			id: this.conversation.conversationId,
+			name: this.conversation.conversationName,
+			service: this.conversation.service,
+			queueLength: status?.queueLength ?? 0,
+			hasActiveJob: this.inFlight || (status?.hasActiveJob ?? false),
+			recordCount: status?.recordCount ?? 0,
+			sessionCount: this.sessions.size,
+			activeSessionKey: this.activeSessionKey,
+			lastSessionKey: status?.lastSessionKey,
+		};
+	}
+
 	async onMessage(input: InboundMessageInput, checkpoint?: GatewayCheckpoint): Promise<void> {
 		const runtime = this.runtimeValue;
 		if (!runtime) return;
 		if (runtime.isArmed()) {
 			const control = runtime.parseControlCommand(input);
 			if (control) {
-				await this.handleControl(control);
+				await this.handleControl(control, input);
 				if (checkpoint) await runtime.noteCheckpoint(checkpoint);
 				return;
 			}
@@ -227,60 +310,103 @@ class GatewayConversationWorker implements GatewayConversationEndpoint {
 		await this.tryDispatch();
 	}
 
-	private async handleControl(control: "stop" | "new" | "compact" | "status"): Promise<void> {
+	private sessionKeyForInput(input?: InboundMessageInput): string {
+		if (!input) return this.activeSessionKey || this.defaultSessionKey;
+		return input.sessionKey || buildGatewaySessionKey(input.sessionSource || buildGatewaySessionSource(this.conversation, input));
+	}
+
+	private getActiveSessionState(sessionKey?: string): GatewayAgentSessionState | undefined {
+		return this.sessions.get(sessionKey || this.activeSessionKey || this.defaultSessionKey);
+	}
+
+	private async handleControl(control: "stop" | "new" | "compact" | "status" | "help", input?: InboundMessageInput): Promise<void> {
+		const sessionKey = this.sessionKeyForInput(input);
+		if (control === "help") {
+			await this.transport?.sendImmediate(this.formatHelp());
+			return;
+		}
 		if (control === "status") {
-			await this.transport?.sendImmediate(this.formatStatus());
+			await this.transport?.sendImmediate(this.formatStatus(sessionKey));
 			return;
 		}
 		if (control === "stop") {
-			if (!this.inFlight || !this.session) {
+			if (!this.inFlight) {
 				await this.transport?.sendImmediate("No active turn.");
 				return;
 			}
 			this.activeAbort?.abort();
-			this.session.agent.abort();
+			this.getActiveSessionState()?.session?.agent.abort();
 			await this.transport?.sendImmediate("Aborted current turn.");
 			return;
 		}
 		if (control === "compact") {
-			if (!this.session) {
+			const state = this.sessions.get(sessionKey);
+			if (!state?.session) {
 				await this.transport?.sendImmediate("No session to compact yet.");
 				return;
 			}
 			try {
-				await this.session.compact();
+				await state.session.compact();
 				await this.transport?.sendImmediate("Compaction completed.");
 			} catch (error) {
 				await this.transport?.sendImmediate(`Compaction failed: ${error instanceof Error ? error.message : String(error)}`);
 			}
 			return;
 		}
-		await this.resetSession();
+		await this.resetSession(sessionKey);
 		await this.transport?.sendImmediate("Started a new Pie gateway session.");
 	}
 
-	private formatStatus(): string {
+	private formatHelp(): string {
+		return [
+			"Pie gateway commands:",
+			"- /status: show gateway session status",
+			"- /new: start a new Pie session for this chat context",
+			"- /compact: compact the current Pie session",
+			"- /stop: abort the active turn",
+			"- /help: show this help",
+		].join("\n");
+	}
+
+	private formatStatus(sessionKey?: string): string {
 		const status = this.runtimeValue?.getStatus();
-		const model = this.session?.model ? `${this.session.model.provider}/${this.session.model.id}` : "not initialized";
+		const state = this.getActiveSessionState(sessionKey);
+		const model = state?.session?.model ? `${state.session.model.provider}/${state.session.model.id}` : "not initialized";
+		const source = state?.sessionKey === status?.lastSessionKey ? state?.sessionKey : sessionKey || status?.lastSessionKey;
 		return [
 			`Gateway: ${this.conversation.conversationName}`,
 			`Model: ${model}`,
 			`Queue: ${status?.queueLength ?? 0}${this.inFlight ? " active" : ""}`,
 			`Records: ${status?.recordCount ?? 0}`,
-			`Session: ${this.session?.sessionFile ?? "not initialized"}`,
+			`Sessions: ${this.sessions.size}`,
+			`Session key: ${source ?? this.defaultSessionKey}`,
+			`Session: ${state?.session?.sessionFile ?? "not initialized"}`,
 		].join("\n");
 	}
 
-	private async ensureSession(): Promise<AgentSession> {
-		if (this.session) return this.session;
-		this.sessionManager = SessionManager.continueRecent(this.cwd, this.sessionDir);
-		if (this.sessionManager.getBranch().length <= 1) {
-			this.sessionManager.appendSessionInfo(`pie gateway ${this.conversation.conversationName}`);
+	private sessionDirForKey(sessionKey: string): string {
+		return join(this.agentDir, "gateway", "sessions", sanitize(sessionKey));
+	}
+
+	private async ensureSession(sessionKey = this.defaultSessionKey, options: { newSession?: boolean } = {}): Promise<AgentSession> {
+		const existing = this.sessions.get(sessionKey);
+		if (existing?.session && !options.newSession) return existing.session;
+		if (existing?.session) {
+			existing.session.agent.abort();
+			existing.session.dispose();
 		}
-		this.services = await createAgentSessionServices({
-			cwd: this.cwd,
-			agentDir: this.agentDir,
-			resourceLoaderOptions: {
+		const sessionDir = existing?.sessionDir ?? this.sessionDirForKey(sessionKey);
+		const sessionManager = options.newSession
+			? SessionManager.create(this.cwd, sessionDir)
+			: SessionManager.continueRecent(this.cwd, sessionDir);
+		if (sessionManager.getBranch().length <= 1) {
+			sessionManager.appendSessionInfo(`pie gateway ${this.conversation.conversationName} ${sessionKey}`);
+		}
+			const services = await createAgentSessionServices({
+				cwd: this.cwd,
+				agentDir: this.agentDir,
+				usageStore: this.usageStore,
+				resourceLoaderOptions: {
 				noExtensions: true,
 				additionalSkillPaths: [
 					join(this.conversation.sharedDir, "skills"),
@@ -289,32 +415,37 @@ class GatewayConversationWorker implements GatewayConversationEndpoint {
 				appendSystemPromptOverride: (base) => [...base, buildGatewaySystemPrompt(this.conversation, this.cwd)],
 			},
 		});
-		this.services.usageStore = createGatewayUsageStore(this.services.usageStore, this.conversation);
+		services.usageStore = createGatewayUsageStore(services.usageStore, this.conversation);
 		const created = await createAgentSessionFromServices({
-			services: this.services,
-			sessionManager: this.sessionManager,
+			services,
+			sessionManager,
 			sessionStartEvent: { type: "session_start", reason: "startup" },
-			customTools: createGatewayChatTools({
-				cwd: this.cwd,
-				runtime: () => this.runtimeValue,
+				customTools: createGatewayChatTools({
+					cwd: this.cwd,
+					usageStore: services.usageStore,
+					runtime: () => this.runtimeValue,
 				isTurnActive: () => this.inFlight,
 				queueAttachment: (path) => this.queuedAttachments.push(path),
 			}),
 			chatOrigin: this.conversation.conversationId,
 		});
-		this.session = created.session;
-		return this.session;
+		this.sessions.set(sessionKey, {
+			sessionKey,
+			sessionDir,
+			sessionManager,
+			services,
+			session: created.session,
+		});
+		return created.session;
 	}
 
-	private async resetSession(): Promise<void> {
+	private async resetSession(sessionKey = this.defaultSessionKey): Promise<void> {
 		this.activeAbort?.abort();
-		this.session?.agent.abort();
-		this.session?.dispose();
-		this.session = undefined;
-		this.services = undefined;
-		this.sessionManager = SessionManager.create(this.cwd, this.sessionDir);
-		this.sessionManager.appendSessionInfo(`pie gateway ${this.conversation.conversationName}`);
-		await this.ensureSession();
+		const state = this.sessions.get(sessionKey);
+		state?.session?.agent.abort();
+		state?.session?.dispose();
+		this.sessions.delete(sessionKey);
+		await this.ensureSession(sessionKey, { newSession: true });
 	}
 
 	private startTypingLoop(): void {
@@ -343,8 +474,10 @@ class GatewayConversationWorker implements GatewayConversationEndpoint {
 		const abortController = new AbortController();
 		this.activeAbort = abortController;
 		this.startTypingLoop();
+		const sessionKey = next.sessionKey || this.defaultSessionKey;
+		this.activeSessionKey = sessionKey;
 		try {
-			const session = await this.ensureSession();
+			const session = await this.ensureSession(sessionKey);
 			await session.reload();
 			await session.prompt(next.prompt, {
 				expandPromptTemplates: false,
@@ -381,6 +514,7 @@ class GatewayConversationWorker implements GatewayConversationEndpoint {
 		} finally {
 			this.stopTypingLoop();
 			this.activeAbort = undefined;
+			this.activeSessionKey = undefined;
 			this.inFlight = false;
 			this.queuedAttachments = [];
 			await this.tryDispatch();
@@ -389,10 +523,12 @@ class GatewayConversationWorker implements GatewayConversationEndpoint {
 
 	async disconnect(): Promise<void> {
 		this.activeAbort?.abort();
-		this.session?.agent.abort();
 		this.stopTypingLoop();
-		this.session?.dispose();
-		this.session = undefined;
+		for (const state of this.sessions.values()) {
+			state.session?.agent.abort();
+			state.session?.dispose();
+		}
+		this.sessions.clear();
 		if (this.runtimeValue) {
 			await this.runtimeValue.disconnect().catch(() => undefined);
 			this.runtimeValue = undefined;
@@ -451,35 +587,102 @@ export async function runGateway(options: RunGatewayOptions = {}): Promise<void>
 	const cwd = resolve(options.cwd ?? process.cwd());
 	const agentDir = options.agentDir ?? getAgentDir();
 	const logger = options.logger ?? defaultLogger();
+	const usageStore = createJsonlUsageStore(getDefaultAgentUsageFilePath(agentDir));
 	await ensureChatHome();
 	await writeGatewayPid(agentDir);
+	const startedAt = new Date().toISOString();
 	const config = await loadChatConfig();
 	const conversations = listConfiguredConversations(config);
-	if (conversations.length === 0) {
-		logger.warn("No configured Telegram or Discord channels. Run `pie gateway setup` or use /chat-config first.");
+	const configuredAccounts = Object.keys(config.accounts ?? {}).length;
+	if (conversations.length === 0 && configuredAccounts === 0) {
+		logger.warn("No configured Telegram or Discord accounts. Run `pie gateway setup` or use /chat-config first.");
+	} else if (conversations.length === 0) {
+		logger.info("No static gateway channels configured. Discord accounts can auto-discover channels at runtime.");
 	}
 	const workers: GatewayConversationWorker[] = [];
+	const workerByConversationId = new Map<string, GatewayConversationWorker>();
+	const workerCreatePromises = new Map<string, Promise<GatewayConversationWorker>>();
 	for (const conversation of conversations) {
-		const worker = new GatewayConversationWorker({ conversation, cwd, agentDir, logger });
+		const worker = new GatewayConversationWorker({ conversation, cwd, agentDir, logger, usageStore });
 		try {
 			await worker.start();
 			workers.push(worker);
+			workerByConversationId.set(conversation.conversationId, worker);
 		} catch (error) {
 			logger.error(`[${conversation.conversationId}] ${error instanceof Error ? error.message : String(error)}`);
 		}
 	}
+	const getOrCreateEndpoint = async (
+		accountId: string,
+		account: ChatAccountConfig,
+		channelKey: string,
+		channel: ConfiguredChannel,
+	): Promise<GatewayConversationEndpoint> => {
+		const conversationId = `${accountId}/${channelKey}`;
+		const existing = workerByConversationId.get(conversationId);
+		if (existing) return existing;
+		const pending = workerCreatePromises.get(conversationId);
+		if (pending) return pending;
+		const promise = (async () => {
+			const configuredAccount = config.accounts[accountId] ?? account;
+			config.accounts[accountId] = configuredAccount;
+			configuredAccount.channels ??= {};
+			if (!configuredAccount.channels[channelKey]) {
+				configuredAccount.channels[channelKey] = channel;
+				await saveChatConfig(config).catch((error) => {
+					logger.warn(`[${conversationId}] failed to persist auto-discovered channel: ${error instanceof Error ? error.message : String(error)}`);
+				});
+			}
+			const conversation = buildResolvedConversation(config, accountId, channelKey, configuredAccount.channels[channelKey] ?? channel);
+				const worker = new GatewayConversationWorker({ conversation, cwd, agentDir, logger, usageStore });
+			await worker.start();
+			workers.push(worker);
+			workerByConversationId.set(conversationId, worker);
+			logger.info(`[${conversationId}] auto-discovered ${conversation.service} channel ${conversation.channel.name ?? conversation.channel.id}`);
+			return worker;
+		})();
+		workerCreatePromises.set(conversationId, promise);
+		try {
+			return await promise;
+		} finally {
+			workerCreatePromises.delete(conversationId);
+		}
+	};
 	let adapters: GatewayAdapter[] = [];
 	const stopScheduler = startSchedulerLoop({ cwd, agentDir, logger });
+	const buildHealth = (): GatewayHealthSnapshot => ({
+		pid: process.pid,
+		startedAt,
+		updatedAt: new Date().toISOString(),
+		cwd,
+		conversations: workers.map((worker) => worker.getHealth()),
+		adapters: adapters.map((adapter) =>
+			adapter.getHealth?.() ?? {
+				accountId: adapter.accountId,
+				service: adapter.service,
+				connected: true,
+				startedAt,
+				errorCount: 0,
+			},
+		),
+	});
+	await writeGatewayHealth(agentDir, buildHealth()).catch(() => undefined);
+	const healthTimer = setInterval(() => {
+		void writeGatewayHealth(agentDir, buildHealth()).catch(() => undefined);
+	}, 15000);
 	try {
-		adapters = await startGatewayChatAdapters(workers);
+			adapters = await startGatewayChatAdapters(config, workers, { getOrCreateEndpoint, usageStore });
+		await writeGatewayHealth(agentDir, buildHealth()).catch(() => undefined);
 		logger.info(
 			`Pie gateway running. conversations=${workers.length} adapters=${adapters.length} cwd=${cwd} pid=${process.pid}`,
 		);
 		await waitForShutdown();
 	} finally {
+		clearInterval(healthTimer);
 		stopScheduler();
 		await Promise.allSettled(adapters.map((adapter) => adapter.disconnect()));
 		await Promise.allSettled(workers.map((worker) => worker.disconnect()));
+		await writeGatewayHealth(agentDir, buildHealth()).catch(() => undefined);
 		await removeGatewayPid(agentDir);
 		logger.info("Pie gateway stopped.");
 	}

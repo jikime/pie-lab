@@ -9,6 +9,7 @@ import type {
 	ResolvedConversation,
 	StoredAttachment,
 } from "./types.js";
+import type { GatewaySessionSource } from "../session.js";
 
 function guessAttachmentKind(path: string): AttachmentKind {
 	const ext = extname(path).toLowerCase();
@@ -170,7 +171,11 @@ export async function materializeAttachments(
 	return stored;
 }
 
-export function buildBaseRecordFields(conversation: ResolvedConversation, recordId: number) {
+export function buildBaseRecordFields(
+	conversation: ResolvedConversation,
+	recordId: number,
+	session?: { sessionKey?: string; sessionSource?: GatewaySessionSource },
+) {
 	return {
 		recordId,
 		timestamp: new Date().toISOString(),
@@ -179,6 +184,8 @@ export function buildBaseRecordFields(conversation: ResolvedConversation, record
 		channelKey: conversation.channelKey,
 		channelId: conversation.channel.id,
 		scope: "channel" as const,
+		...(session?.sessionKey ? { sessionKey: session.sessionKey } : {}),
+		...(session?.sessionSource ? { sessionSource: session.sessionSource } : {}),
 	};
 }
 

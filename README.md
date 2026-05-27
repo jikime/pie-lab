@@ -413,6 +413,14 @@ pie gateway status
 pie gateway stop
 ```
 
+Configure OpenAI audio for gateway STT/TTS without exporting keys every time:
+
+```bash
+pie gateway audio set
+pie gateway audio status
+pie gateway audio remove
+```
+
 Install it as a user service:
 
 ```bash
@@ -571,6 +579,9 @@ Add at least one provider credential using `/login`, dashboard `Providers`, or e
 - [docs/current-decisions.md](./docs/current-decisions.md): current architecture and decisions
 - [docs/learning-loop.md](./docs/learning-loop.md): memory, skills, Honcho, curator
 - [docs/chat-usage.md](./docs/chat-usage.md): Pie Chat and bridge guide
+- [docs/gateway.md](./docs/gateway.md): long-running Telegram/Discord gateway and scheduler delivery
+- [docs/gateway-audio.md](./docs/gateway-audio.md): Hermes-scoped gateway STT/TTS, OpenAI audio key setup, and Discord voice
+- [docs/discord-gateway-setup.md](./docs/discord-gateway-setup.md): Discord bot setup through gateway connection
 - [docs/chat-e2e-checklist.md](./docs/chat-e2e-checklist.md): Telegram/Discord verification checklist
 - [docs/usage-accounting.md](./docs/usage-accounting.md): usage and cost records
 - [docs/deployment.md](./docs/deployment.md): npm and GitHub Pages deployment

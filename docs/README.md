@@ -15,6 +15,9 @@
 - [Claude Agent SDK provider](./claude-agent-sdk-provider.md): Claude Code 로컬 구독/로그인 흐름을 router 후보로 쓰는 방법을 정리합니다.
 - [채팅 사용법](./chat-usage.md): 웹 채팅과 Telegram/Discord bridge 설정, 연결, 문제 해결 방법을 정리합니다.
 - [Pie Gateway](./gateway.md): TUI 없이 장시간 Telegram/Discord 메시지와 cron scheduled automation을 처리하는 gateway 운영 방식을 정리합니다.
+- [Pie Gateway Audio](./gateway-audio.md): Hermes 기준 gateway STT/TTS, OpenAI audio key 저장, Discord voice, 남은 오디오 parity 작업을 정리합니다.
+- [Discord Gateway 설정](./discord-gateway-setup.md): Discord bot 생성, 권한, token 저장, gateway 실행, 연결 검증 순서를 정리합니다.
+- [Pie Gateway 구현 요약](./gateway-implementation-summary.md): Hermes-style gateway 구현 범위, 검증 상태, 현재 한계와 다음 작업을 정리합니다.
 - [pie-chat E2E 검증 체크리스트](./chat-e2e-checklist.md): 실제 Telegram/Discord 채널에서 bridge를 검증하는 기준을 정리합니다.
 - [배포](./deployment.md): GitHub Pages `install.sh`와 npm package 배포 흐름을 정리합니다.
 - [npm 릴리스 플레이북](./npm-release-playbook.md): 실제 npm 배포 명령, 검증 순서, 2FA/token 주의사항, `web-ui` 제외 기준을 정리합니다.

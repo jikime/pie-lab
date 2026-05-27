@@ -50,7 +50,7 @@ function mergeGondolinSecrets(...configs: Array<GondolinConfig | undefined>): Re
 	return merged;
 }
 
-function buildResolvedConversation(
+export function buildResolvedConversation(
 	config: ChatConfig,
 	accountId: string,
 	channelKey: string,

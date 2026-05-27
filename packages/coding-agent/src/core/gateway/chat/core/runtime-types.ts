@@ -1,4 +1,5 @@
 import type { ChatService } from "./config-types.js";
+import type { GatewayChatType, GatewaySessionSource } from "../../session.js";
 
 export type AttachmentKind = "image" | "file" | "audio" | "video";
 
@@ -22,6 +23,13 @@ export interface StoredAttachment {
 
 export interface InboundMessageInput {
 	messageId?: string;
+	chatId?: string;
+	chatName?: string;
+	chatType?: GatewayChatType;
+	threadId?: string;
+	parentChatId?: string;
+	sessionSource?: GatewaySessionSource;
+	sessionKey?: string;
 	userId: string;
 	userName?: string;
 	roleIds?: string[];
@@ -39,6 +47,8 @@ export interface ChatRecordBase {
 	channelKey: string;
 	channelId: string;
 	scope: "channel";
+	sessionKey?: string;
+	sessionSource?: GatewaySessionSource;
 }
 
 export interface InboundMessageRecord extends ChatRecordBase {
@@ -102,12 +112,16 @@ export interface PendingJob {
 	trigger: "mention" | "dm";
 	triggerRecordId: number;
 	queuedRecordId: number;
+	sessionKey?: string;
+	sessionSource?: GatewaySessionSource;
 }
 
 export interface DispatchableJob {
 	job: PendingJob;
 	prompt: string;
 	triggerMessageId?: string;
+	sessionKey?: string;
+	sessionSource?: GatewaySessionSource;
 }
 
 export interface ChatHistoryQuery {
@@ -125,4 +139,5 @@ export interface ConversationStatus {
 	hasActiveJob: boolean;
 	recordCount: number;
 	lastRecordId: number;
+	lastSessionKey?: string;
 }

@@ -49,6 +49,20 @@ export interface UsageCost {
 	pricingSource: UsagePricingSource;
 }
 
+export interface UsageMedia {
+	kind: "stt" | "tts" | "embedding" | "webSearch" | "webFetch" | "image" | (string & {});
+	inputBytes?: number;
+	outputBytes?: number;
+	inputChars?: number;
+	audioSeconds?: number;
+	billableSeconds?: number;
+	billableTokens?: number;
+	billingUnit?: "audio-minute" | "input-token" | "request" | "byte" | (string & {});
+	cached?: boolean;
+	estimated?: boolean;
+	pricingVersion?: string;
+}
+
 export interface UsageTokenSaver {
 	provider: "rtk" | (string & {});
 	bytesBefore: number;
@@ -88,6 +102,7 @@ export interface UsageRecord {
 	agentRunId?: string;
 	usage?: UsageTokens;
 	cost?: UsageCost;
+	media?: UsageMedia;
 	tokenSaver?: UsageTokenSaver;
 	inputTokens?: number;
 	outputTokens?: number;
