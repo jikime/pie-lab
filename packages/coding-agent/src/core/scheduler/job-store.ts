@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { chmod, mkdir, readFile, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
 import { isAbsolute, join, normalize, relative, resolve, sep } from "node:path";
 import lockfile from "proper-lockfile";
-import { computeNextRun, parseSchedule, type ScheduleKind } from "./schedule.ts";
+import { computeGraceWindowSeconds, computeNextRun, parseSchedule, type ScheduleKind, validateTimezone } from "./schedule.ts";
 
 export type CronJobStatus = "pending" | "running" | "success" | "failed" | "silent" | "paused" | "completed";
 
@@ -39,6 +39,7 @@ export interface CronJob {
 	tools?: string[];
 	workdir?: string;
 	model?: CronJobModelRef;
+	timezone?: string;
 }
 
 export interface CreateCronJobInput {
@@ -54,6 +55,7 @@ export interface CreateCronJobInput {
 	tools?: string[];
 	workdir?: string;
 	model?: CronJobModelRef;
+	timezone?: string;
 }
 
 export interface UpdateCronJobInput {
@@ -70,6 +72,7 @@ export interface UpdateCronJobInput {
 	workdir?: string | null;
 	model?: CronJobModelRef | null;
 	enabled?: boolean;
+	timezone?: string | null;
 }
 
 interface JobsFile {
@@ -211,7 +214,8 @@ export class CronJobStore {
 			}
 			const prompt = normalizePrompt(input.prompt);
 			scanCronPrompt(prompt);
-			const parsed = parseSchedule(input.schedule, { forceRepeat: input.repeat });
+			const timezone = input.timezone ? validateTimezone(input.timezone) : undefined;
+			const parsed = parseSchedule(input.schedule, { forceRepeat: input.repeat, timezone });
 			const now = new Date().toISOString();
 			if (input.script) assertRelativeSafePath(input.script, "script");
 			if (input.noAgent && !input.script) {
@@ -240,6 +244,7 @@ export class CronJobStore {
 				tools: normalizeStringList(input.tools),
 				workdir: normalizeWorkdir(input.workdir, this.cwd),
 				model: input.model,
+				timezone,
 			};
 			file.jobs.push(job);
 			await this.writeJobsFile(file);
@@ -265,9 +270,13 @@ export class CronJobStore {
 				next.prompt = normalizePrompt(input.prompt);
 				scanCronPrompt(next.prompt);
 			}
-			if (input.schedule !== undefined || input.repeat !== undefined) {
+			if (input.timezone !== undefined) {
+				next.timezone = input.timezone === null ? undefined : validateTimezone(input.timezone);
+			}
+			if (input.schedule !== undefined || input.repeat !== undefined || input.timezone !== undefined) {
 				const parsed = parseSchedule(input.schedule ?? current.schedule, {
 					forceRepeat: input.repeat ?? current.repeat,
+					timezone: next.timezone,
 				});
 				next.schedule = parsed.schedule;
 				next.scheduleDisplay = parsed.scheduleDisplay;
@@ -341,12 +350,33 @@ export class CronJobStore {
 
 	async getDueJobs(now = new Date()): Promise<CronJob[]> {
 		const time = now.getTime();
-		return this.withLock(async () =>
-			(await this.readJobsFile()).jobs.filter((job) => {
-				if (!job.enabled || job.state === "running" || !job.nextRunAt) return false;
-				return new Date(job.nextRunAt).getTime() <= time;
-			}),
-		);
+		return this.withLock(async () => {
+			const file = await this.readJobsFile();
+			const due: CronJob[] = [];
+			let mutated = false;
+			for (let i = 0; i < file.jobs.length; i++) {
+				const job = file.jobs[i];
+				if (!job.enabled || job.state === "running" || !job.nextRunAt) continue;
+				const scheduledAt = new Date(job.nextRunAt).getTime();
+				if (scheduledAt > time) continue;
+
+				// Grace window — if we're too late, fast-forward instead of running
+				const graceMs = computeGraceWindowSeconds(job) * 1000;
+				if (time - scheduledAt > graceMs) {
+					if (job.repeat) {
+						const nextRunAt = computeNextRun(job, now);
+						file.jobs[i] = { ...job, nextRunAt, updatedAt: now.toISOString() };
+						mutated = true;
+					}
+					// One-shot missed: leave as pending (will never become due again — caller should reap)
+					continue;
+				}
+
+				due.push(job);
+			}
+			if (mutated) await this.writeJobsFile(file);
+			return due;
+		});
 	}
 
 	async claimDueJob(id: string, now = new Date()): Promise<CronJob | undefined> {
@@ -356,7 +386,20 @@ export class CronJobStore {
 			if (index < 0) return undefined;
 			const current = file.jobs[index];
 			if (!current.enabled || current.state === "running" || !current.nextRunAt) return undefined;
-			if (new Date(current.nextRunAt).getTime() > now.getTime()) return undefined;
+			const scheduledAt = new Date(current.nextRunAt).getTime();
+			if (scheduledAt > now.getTime()) return undefined;
+
+			// Grace window double-check (may have elapsed between getDueJobs and claimDueJob)
+			const graceMs = computeGraceWindowSeconds(current) * 1000;
+			if (now.getTime() - scheduledAt > graceMs) {
+				if (current.repeat) {
+					const nextRunAt = computeNextRun(current, now);
+					file.jobs[index] = { ...current, nextRunAt, updatedAt: now.toISOString() };
+					await this.writeJobsFile(file);
+				}
+				return undefined;
+			}
+
 			const nextRunAt = computeNextRun(current, now);
 			const claimed: CronJob = {
 				...current,
@@ -407,6 +450,36 @@ export class CronJobStore {
 			file.jobs[index] = job;
 			await this.writeJobsFile(file);
 			return job;
+		});
+	}
+
+	/**
+	 * Reset jobs stuck in "running" state whose `updatedAt` is older than `timeoutMs`.
+	 * Called at scheduler startup to recover from crashed runs.
+	 */
+	async resetStaleRunning(timeoutMs: number, now = new Date()): Promise<number> {
+		return this.withLock(async () => {
+			const file = await this.readJobsFile();
+			let count = 0;
+			const time = now.getTime();
+			for (let i = 0; i < file.jobs.length; i++) {
+				const job = file.jobs[i];
+				if (job.state !== "running") continue;
+				const updatedAt = new Date(job.updatedAt).getTime();
+				if (time - updatedAt < timeoutMs) continue;
+				// Stale — reset to pending or failed
+				const nextRunAt = job.repeat ? computeNextRun(job, now) : undefined;
+				file.jobs[i] = {
+					...job,
+					state: job.repeat && job.enabled ? "pending" : "failed",
+					nextRunAt,
+					lastError: `Job was reset after stale running state (>${Math.round(timeoutMs / 1000)}s).`,
+					updatedAt: now.toISOString(),
+				};
+				count++;
+			}
+			if (count > 0) await this.writeJobsFile(file);
+			return count;
 		});
 	}
 
@@ -481,9 +554,14 @@ export class CronJobStore {
 	private async readJobsFile(): Promise<JobsFile> {
 		await this.ensureFileOnly();
 		const content = await readFile(this.jobsFile, "utf-8");
-		const parsed = JSON.parse(content) as Partial<JobsFile>;
-		const jobs = Array.isArray(parsed.jobs) ? parsed.jobs.filter(isCronJobLike) : [];
-		return { version: 1, jobs };
+		try {
+			const parsed = JSON.parse(content) as Partial<JobsFile>;
+			const jobs = Array.isArray(parsed.jobs) ? parsed.jobs.filter(isCronJobLike) : [];
+			return { version: 1, jobs };
+		} catch {
+			// Corruption recovery: return empty job list to avoid crashing the scheduler
+			return { version: 1, jobs: [] };
+		}
 	}
 
 	private async ensureFileOnly(): Promise<void> {

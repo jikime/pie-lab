@@ -2,6 +2,7 @@ export interface SchedulerSettings {
 	enabled: boolean;
 	tickIntervalSeconds: number;
 	timeoutSeconds: number;
+	scriptTimeoutSeconds: number;
 	maxParallelJobs: number;
 	scriptsEnabled: boolean;
 	noAgentEnabled: boolean;
@@ -16,6 +17,7 @@ export const DEFAULT_SCHEDULER_SETTINGS: SchedulerSettings = {
 	enabled: true,
 	tickIntervalSeconds: 60,
 	timeoutSeconds: 600,
+	scriptTimeoutSeconds: 120,
 	maxParallelJobs: 2,
 	scriptsEnabled: true,
 	noAgentEnabled: true,
@@ -49,6 +51,7 @@ export function normalizeSchedulerSettings(input: unknown): SchedulerSettings {
 		enabled: asBoolean(root.enabled, DEFAULT_SCHEDULER_SETTINGS.enabled),
 		tickIntervalSeconds: asPositiveInteger(root.tickIntervalSeconds, DEFAULT_SCHEDULER_SETTINGS.tickIntervalSeconds),
 		timeoutSeconds: asPositiveInteger(root.timeoutSeconds, DEFAULT_SCHEDULER_SETTINGS.timeoutSeconds),
+		scriptTimeoutSeconds: asPositiveInteger(root.scriptTimeoutSeconds, DEFAULT_SCHEDULER_SETTINGS.scriptTimeoutSeconds),
 		maxParallelJobs: asPositiveInteger(root.maxParallelJobs, DEFAULT_SCHEDULER_SETTINGS.maxParallelJobs),
 		scriptsEnabled: asBoolean(root.scriptsEnabled, DEFAULT_SCHEDULER_SETTINGS.scriptsEnabled),
 		noAgentEnabled: asBoolean(root.noAgentEnabled, DEFAULT_SCHEDULER_SETTINGS.noAgentEnabled),

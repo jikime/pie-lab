@@ -77,10 +77,39 @@ function createSchedulerUsageStore(base: UsageStore, job: CronJob): UsageStore {
 	};
 }
 
+/**
+ * Wake-gate: parse the last non-empty stdout line as JSON.
+ * If it contains `{ "wakeAgent": false }`, the agent LLM call is skipped.
+ * Returns the clean stdout (with the JSON gate line stripped) and the wakeAgent flag.
+ */
+function parseWakeGate(stdout: string): { wakeAgent: boolean; cleanStdout: string } {
+	const lines = stdout.split("\n");
+	// Find the last non-empty line
+	let gateLineIndex = -1;
+	for (let i = lines.length - 1; i >= 0; i--) {
+		if (lines[i].trim()) {
+			gateLineIndex = i;
+			break;
+		}
+	}
+	if (gateLineIndex < 0) return { wakeAgent: true, cleanStdout: stdout };
+	try {
+		const parsed = JSON.parse(lines[gateLineIndex].trim()) as unknown;
+		if (typeof parsed === "object" && parsed !== null && "wakeAgent" in parsed) {
+			const wakeAgent = (parsed as Record<string, unknown>).wakeAgent !== false;
+			const cleanLines = [...lines.slice(0, gateLineIndex), ...lines.slice(gateLineIndex + 1)];
+			return { wakeAgent, cleanStdout: cleanLines.join("\n") };
+		}
+	} catch {
+		// Not JSON — not a gate line
+	}
+	return { wakeAgent: true, cleanStdout: stdout };
+}
+
 async function runScript(
 	job: CronJob,
 	store: CronJobStore,
-	timeoutMs: number,
+	scriptTimeoutMs: number,
 ): Promise<{
 	success: boolean;
 	stdout: string;
@@ -114,11 +143,11 @@ async function runScript(
 	const timer = setTimeout(() => {
 		timedOut = true;
 		child.kill("SIGTERM");
-	}, timeoutMs);
+	}, scriptTimeoutMs);
 	try {
 		const code = await waitForChildProcess(child);
 		if (timedOut) {
-			return { success: false, stdout, stderr, error: `Script timed out after ${timeoutMs / 1000}s.` };
+			return { success: false, stdout, stderr, error: `Script timed out after ${scriptTimeoutMs / 1000}s.` };
 		}
 		if (code !== 0) {
 			return { success: false, stdout, stderr, error: `Script exited with code ${code ?? "unknown"}.` };
@@ -209,15 +238,19 @@ async function finalizeRun(
 		finalResponse: string;
 		error?: string;
 		ranAt: Date;
+		skipDelivery?: boolean;
 	},
 ): Promise<CronRunResult> {
 	const outputPath = await store.saveOutput(job.id, result.output, result.ranAt);
-	const delivery = await deliverCronResult({
-		agentDir: options.agentDir,
-		deliver: job.deliver,
-		origin: job.origin,
-		content: result.finalResponse || result.error || result.output,
-	});
+	const delivery =
+		result.skipDelivery
+			? { delivered: 0, targets: [] as string[], errors: [] as string[] }
+			: await deliverCronResult({
+					agentDir: options.agentDir,
+					deliver: job.deliver,
+					origin: job.origin,
+					content: result.finalResponse || result.error || result.output,
+				});
 	const deliveryError = delivery.errors.length > 0 ? delivery.errors.join("; ") : undefined;
 	return {
 		jobId: job.id,
@@ -236,7 +269,9 @@ async function finalizeRun(
 export async function runCronJob(job: CronJob, options: SchedulerRunnerOptions): Promise<CronRunResult> {
 	const store = options.store ?? new CronJobStore({ agentDir: options.agentDir, cwd: options.cwd });
 	const ranAt = new Date();
-	const timeoutMs = options.settings.timeoutSeconds * 1000;
+	// Agent timeout (LLM call) and script timeout are separate
+	const agentTimeoutMs = options.settings.timeoutSeconds * 1000;
+	const scriptTimeoutMs = options.settings.scriptTimeoutSeconds * 1000;
 
 	if (job.noAgent && !options.settings.noAgentEnabled) {
 		const error = "noAgent scheduled jobs are disabled by scheduler settings.";
@@ -263,10 +298,14 @@ export async function runCronJob(job: CronJob, options: SchedulerRunnerOptions):
 		});
 	}
 
-	const scriptResult = await runScript(job, store, timeoutMs);
-	const scriptCombined = [scriptResult.stdout, scriptResult.stderr ? `stderr:\n${scriptResult.stderr}` : ""]
+	const scriptResult = await runScript(job, store, scriptTimeoutMs);
+
+	// Wake-gate: parse last stdout line — {"wakeAgent": false} skips the LLM entirely
+	const { wakeAgent, cleanStdout } = parseWakeGate(scriptResult.stdout);
+	const scriptCombined = [cleanStdout, scriptResult.stderr ? `stderr:\n${scriptResult.stderr}` : ""]
 		.filter(Boolean)
 		.join("\n\n");
+
 	if (!scriptResult.success) {
 		const output = buildOutputDocument(job, {
 			status: "failed",
@@ -286,9 +325,11 @@ export async function runCronJob(job: CronJob, options: SchedulerRunnerOptions):
 		});
 	}
 
-	if (job.noAgent) {
-		const finalResponse = scriptResult.stdout.trim();
-		const status: CronJobStatus = finalResponse ? "success" : "silent";
+	// noAgent jobs deliver script stdout directly; wake-gate skip also goes here
+	if (job.noAgent || !wakeAgent) {
+		const finalResponse = cleanStdout.trim();
+		// Empty stdout is a soft failure — nothing was produced
+		const status: CronJobStatus = finalResponse ? "success" : "failed";
 		const output = buildOutputDocument(job, {
 			status,
 			finalResponse,
@@ -296,7 +337,7 @@ export async function runCronJob(job: CronJob, options: SchedulerRunnerOptions):
 			ranAt,
 		});
 		return finalizeRun(job, options, store, {
-			success: true,
+			success: status !== "failed",
 			status,
 			output,
 			finalResponse,
@@ -335,7 +376,7 @@ export async function runCronJob(job: CronJob, options: SchedulerRunnerOptions):
 		});
 		const timer = setTimeout(() => {
 			session.agent.abort();
-		}, timeoutMs);
+		}, agentTimeoutMs);
 		try {
 			await session.prompt(await buildPrompt(job, store, scriptCombined), {
 				expandPromptTemplates: false,
@@ -345,10 +386,16 @@ export async function runCronJob(job: CronJob, options: SchedulerRunnerOptions):
 			clearTimeout(timer);
 		}
 		const { text, error } = extractAssistantText(session.state);
-		const status: CronJobStatus = error ? "failed" : text.trim() ? "success" : "silent";
+
+		// [SILENT] marker at the start of response → skip delivery, strip marker
+		const isSilent = text.trimStart().startsWith("[SILENT]");
+		const finalText = isSilent ? text.replace(/^\[SILENT\]\s*/i, "") : text;
+
+		// Empty response (after stripping [SILENT]) is a soft failure — agent produced nothing
+		const status: CronJobStatus = error ? "failed" : !finalText.trim() ? "failed" : "success";
 		output = buildOutputDocument(job, {
 			status,
-			finalResponse: text,
+			finalResponse: finalText,
 			error,
 			scriptOutput: scriptCombined,
 			ranAt,
@@ -358,9 +405,10 @@ export async function runCronJob(job: CronJob, options: SchedulerRunnerOptions):
 			success: status !== "failed",
 			status,
 			output,
-			finalResponse: text,
+			finalResponse: finalText,
 			error,
 			ranAt,
+			skipDelivery: isSilent,
 		});
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error);
@@ -384,6 +432,10 @@ export async function runCronJob(job: CronJob, options: SchedulerRunnerOptions):
 
 export async function tickCronScheduler(options: SchedulerRunnerOptions): Promise<CronRunResult[]> {
 	const store = options.store ?? new CronJobStore({ agentDir: options.agentDir, cwd: options.cwd });
+	// Reset jobs stuck in "running" from a previous crashed run
+	// Use agent timeout + a buffer as the stale detection threshold
+	const staleThresholdMs = (options.settings.timeoutSeconds + 60) * 1000;
+	await store.resetStaleRunning(staleThresholdMs).catch(() => undefined);
 	const due = await store.getDueJobs();
 	const results: CronRunResult[] = [];
 	const parallel = Math.max(1, options.settings.maxParallelJobs);
