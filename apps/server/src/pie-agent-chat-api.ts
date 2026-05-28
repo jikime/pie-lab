@@ -354,7 +354,12 @@ function createGatewayIPCSession(
 			} as unknown as AgentSessionEvent);
 		}
 		if (event.type === "done") {
-			const fullText = event.text ?? assistantBuffer;
+			// Use || (not ??) so an empty event.text falls back to assistantBuffer.
+			// This covers the auto-close case in WebIPCTransport where close() sends
+			// { type: "done", text: "" } when send() was never called (LLM error,
+			// aborted run, empty response) — in those cases assistantBuffer may hold
+			// an error delta that should still be surfaced as the response.
+			const fullText = event.text || assistantBuffer;
 			// Gateway sends the full response as a single "done" (no prior streaming deltas).
 			// Emit a synthetic text_delta so streaming SSE consumers (handleStreamingAgentChat)
 			// receive content via the message_update path and write it to the SSE stream.

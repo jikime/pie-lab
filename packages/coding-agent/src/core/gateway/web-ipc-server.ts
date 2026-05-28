@@ -73,14 +73,30 @@ export function buildWebConversation(agentDir: string, conversationId: string): 
 
 class WebIPCTransport implements GatewayTransport {
 	private closed: boolean;
+	/** True once send() has written a {"type":"done"} frame. */
+	private doneSent: boolean;
 	private readonly writeLine: (line: string) => void;
 
 	constructor(writeLine: (line: string) => void) {
 		this.closed = false;
+		this.doneSent = false;
 		this.writeLine = writeLine;
 	}
 
+	/**
+	 * Close the transport.  If send() was never called (empty LLM response,
+	 * aborted turn, or error caught in tryDispatch) the IPC client would hang
+	 * forever waiting for a "done" frame.  Send one now with empty text so the
+	 * client can always resolve its sendMessage() promise.
+	 */
 	close(): void {
+		if (!this.doneSent) {
+			try {
+				this.writeLine(JSON.stringify({ type: "done", text: "" }));
+			} catch {
+				// socket may have already closed
+			}
+		}
 		this.closed = true;
 	}
 
@@ -107,6 +123,7 @@ class WebIPCTransport implements GatewayTransport {
 	}
 
 	async send(text: string, _attachmentPaths?: string[], _signal?: AbortSignal, _replyToMessageId?: string): Promise<string> {
+		this.doneSent = true;
 		this.write({ type: "done", text });
 		return "";
 	}
