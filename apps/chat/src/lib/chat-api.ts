@@ -64,6 +64,17 @@ export async function listConversations(
   }
 }
 
+export async function deleteConversation(conversationId: string): Promise<boolean> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/v1/pie/chat/conversations/${encodeURIComponent(conversationId)}`, {
+      method: "DELETE",
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
 export async function fetchSessionHistory(
   conversationId: string,
   signal?: AbortSignal,

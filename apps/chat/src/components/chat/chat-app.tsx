@@ -1,6 +1,6 @@
 "use client";
 
-import { Bot, CircleStop, MessageSquarePlus, RefreshCw, Send, UserRound, Wifi, WifiOff } from "lucide-react";
+import { Bot, CircleStop, MessageSquarePlus, MoreVertical, RefreshCw, Send, Trash2, UserRound, Wifi, WifiOff } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkBreaks from "remark-breaks";
@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   API_BASE_URL,
   checkServerHealth,
+  deleteConversation,
   fetchSessionHistory,
   listConversations,
   listModels,
@@ -56,6 +57,7 @@ export function ChatApp() {
   const [isSending, setIsSending] = useState(false);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
 
@@ -120,6 +122,18 @@ export function ChatApp() {
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages, isSending]);
+
+  // Close menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('[class*="relative"]')) {
+        setOpenMenuId(null);
+      }
+    };
+    document.addEventListener("click", handleClickOutside);
+    return () => document.removeEventListener("click", handleClickOutside);
+  }, []);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -221,6 +235,18 @@ export function ChatApp() {
     setIsLoadingHistory(false);
   }
 
+  async function handleDeleteConversation(id: string) {
+    setOpenMenuId(null);
+    const deleted = await deleteConversation(id);
+    if (deleted) {
+      await refreshConversations();
+      // If we deleted the current conversation, switch to a new one
+      if (id === conversationId) {
+        resetChat();
+      }
+    }
+  }
+
   return (
     <main className="flex min-h-screen bg-background text-foreground">
       <aside className="hidden w-72 shrink-0 border-r bg-card lg:flex lg:flex-col">
@@ -248,25 +274,54 @@ export function ChatApp() {
                 const time = conv.lastMessageAt
                   ? new Date(conv.lastMessageAt).toLocaleDateString("ko-KR", { month: "numeric", day: "numeric" })
                   : "";
+                const isMenuOpen = openMenuId === conv.id;
                 return (
-                  <li key={conv.id}>
-                    <button
-                      type="button"
-                      onClick={() => void switchConversation(conv.id)}
-                      className={cn(
-                        "w-full rounded-md px-3 py-2 text-left transition-colors hover:bg-muted/60",
-                        isActive && "bg-muted",
-                      )}
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="truncate text-xs font-medium leading-5">{conv.title}</span>
-                        <span className="shrink-0 text-xs text-muted-foreground">{time}</span>
+                  <li key={conv.id} className="relative">
+                    <div className={cn(
+                      "group flex items-center gap-1 rounded-md transition-colors",
+                      isActive && "bg-muted",
+                    )}>
+                      <button
+                        type="button"
+                        onClick={() => void switchConversation(conv.id)}
+                        className={cn(
+                          "flex-1 px-3 py-2 text-left transition-colors hover:bg-muted/60 rounded-md",
+                          isActive && "bg-muted hover:bg-muted",
+                        )}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="truncate text-xs font-medium leading-5">{conv.title}</span>
+                          <span className="shrink-0 text-xs text-muted-foreground">{time}</span>
+                        </div>
+                        <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                          {conv.lastMessageRole === "assistant" ? "AI: " : ""}
+                          {conv.lastMessage}
+                        </p>
+                      </button>
+                      <div className="relative">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
+                          onClick={() => setOpenMenuId(isMenuOpen ? null : conv.id)}
+                        >
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                        {isMenuOpen && (
+                          <div className="absolute right-0 top-8 z-50 w-40 rounded-md border bg-popover p-1 shadow-md">
+                            <button
+                              type="button"
+                              onClick={() => void handleDeleteConversation(conv.id)}
+                              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs text-destructive hover:bg-destructive/10"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                              삭제
+                            </button>
+                          </div>
+                        )}
                       </div>
-                      <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                        {conv.lastMessageRole === "assistant" ? "AI: " : ""}
-                        {conv.lastMessage}
-                      </p>
-                    </button>
+                    </div>
                   </li>
                 );
               })}

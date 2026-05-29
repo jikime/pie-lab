@@ -10,7 +10,7 @@ import {
 	type SessionMessageEntry,
 } from "@pie-lab/coding-agent";
 import { WebIPCClient, type WebIPCEvent } from "@pie-lab/coding-agent";
-import { readdirSync, readFileSync } from "node:fs";
+import { readdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { PIE_LAB_ROUTER_PROVIDER } from "@pie-lab/router";
 import { randomUUID } from "node:crypto";
@@ -140,6 +140,26 @@ async function handlePieAgentChatRequest(
 		const agentDir = options.agentDir ?? getAgentDir();
 		const conversations = loadWebConversationList(agentDir);
 		writeJson(response, 200, { conversations });
+		return;
+	}
+
+	// DELETE /v1/pie/chat/conversations/{id} — delete a conversation
+	if (url.pathname.startsWith(CONVERSATIONS_ENDPOINT + "/") && request.method === "DELETE") {
+		const conversationId = url.pathname.slice(CONVERSATIONS_ENDPOINT.length + 1).slice(0, 160);
+		if (!conversationId) {
+			writeJson(response, 400, { error: { message: "conversation_id required" } });
+			return;
+		}
+		const agentDir = options.agentDir ?? getAgentDir();
+		const channelDir = join(agentDir, "chat", "accounts", "web", "channels", conversationId);
+		try {
+			rmSync(channelDir, { recursive: true, force: true });
+			writeJson(response, 200, { deleted: true });
+		} catch (error) {
+			writeJson(response, 500, {
+				error: { message: error instanceof Error ? error.message : "Failed to delete conversation" },
+			});
+		}
 		return;
 	}
 

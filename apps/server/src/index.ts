@@ -236,7 +236,8 @@ function isPieAgentChatPath(pathname: string): boolean {
 	return (
 		pathname === "/v1/pie/chat/completions" ||
 		pathname === "/v1/pie/chat/sessions" ||
-		pathname === "/v1/pie/chat/conversations"
+		pathname === "/v1/pie/chat/conversations" ||
+		pathname.startsWith("/v1/pie/chat/conversations/")
 	);
 }
 
