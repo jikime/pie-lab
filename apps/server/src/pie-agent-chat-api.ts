@@ -145,7 +145,7 @@ async function handlePieAgentChatRequest(
 
 	// DELETE /v1/pie/chat/conversations/{id} — delete a conversation
 	if (url.pathname.startsWith(CONVERSATIONS_ENDPOINT + "/") && request.method === "DELETE") {
-		const conversationId = url.pathname.slice(CONVERSATIONS_ENDPOINT.length + 1).slice(0, 160);
+		const conversationId = decodeURIComponent(url.pathname.slice(CONVERSATIONS_ENDPOINT.length + 1)).slice(0, 160);
 		if (!conversationId) {
 			writeJson(response, 400, { error: { message: "conversation_id required" } });
 			return;
