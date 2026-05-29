@@ -1,8 +1,8 @@
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { ChatAccountConfig, ChatConfig, DiscordAccountConfig } from "./chat/core/config-types.js";
 import { registerBuiltInGatewayPlatforms } from "./adapters.js";
+import type { ChatAccountConfig, ChatConfig, DiscordAccountConfig } from "./chat/core/config-types.js";
 import { defaultGatewayPlatformRegistry, type GatewayPlatformRegistry } from "./platform-registry.js";
 
 export interface GatewayDeliveryResult {
@@ -152,7 +152,8 @@ export async function deliverGatewayMessage(options: {
 			const account = config.accounts?.[destination.accountId];
 			if (!account) throw new Error(`account not found: ${destination.accountId}`);
 			const platform = registry.require(destination.service);
-			if (!platform.sendMessage) throw new Error(`gateway platform cannot send standalone messages: ${destination.service}`);
+			if (!platform.sendMessage)
+				throw new Error(`gateway platform cannot send standalone messages: ${destination.service}`);
 			await platform.sendMessage(account, destination.channelId, options.content);
 			delivered++;
 		} catch (error) {

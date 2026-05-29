@@ -31,9 +31,9 @@ import { ModelRegistry } from "./model-registry.ts";
 import { findInitialModel } from "./model-resolver.ts";
 import type { ResourceLoader } from "./resource-loader.ts";
 import { DefaultResourceLoader } from "./resource-loader.ts";
-import { createSchedulerToolDefinitions, CronJobStore } from "./scheduler/index.ts";
-import { createSessionSearchToolDefinition } from "./session-search-tool.js";
+import { CronJobStore, createSchedulerToolDefinitions } from "./scheduler/index.ts";
 import { getDefaultSessionDir, SessionManager } from "./session-manager.ts";
+import { createSessionSearchToolDefinition } from "./session-search-tool.js";
 import { SettingsManager } from "./settings-manager.ts";
 import { isInstallTelemetryEnabled } from "./telemetry.ts";
 import { time } from "./timings.ts";
@@ -389,10 +389,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	const allowedToolNames = options.tools ?? (options.noTools === "all" ? [] : undefined);
 	// session_search and scheduler tools are custom tools — they are registered in
 	// _toolRegistry but NOT added to active tools automatically unless we list them here.
-	const extraDefaultTools: string[] = [
-		...sessionSearchTool.map((t) => t.name),
-		...schedulerTools.map((t) => t.name),
-	];
+	const extraDefaultTools: string[] = [...sessionSearchTool.map((t) => t.name), ...schedulerTools.map((t) => t.name)];
 	const initialActiveToolNames: string[] = options.tools
 		? [...options.tools]
 		: options.noTools

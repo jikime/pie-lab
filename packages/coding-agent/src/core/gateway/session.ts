@@ -52,10 +52,7 @@ export function buildGatewaySessionSource(
 	};
 }
 
-export function buildGatewaySessionKey(
-	source: GatewaySessionSource,
-	options: GatewaySessionKeyOptions = {},
-): string {
+export function buildGatewaySessionKey(source: GatewaySessionSource, options: GatewaySessionKeyOptions = {}): string {
 	const parts = ["gateway", source.service, sanitizeKeyPart(source.accountId)];
 	if (source.chatType === "dm") {
 		parts.push("dm", sanitizeKeyPart(source.chatId));

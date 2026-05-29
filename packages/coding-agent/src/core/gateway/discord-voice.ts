@@ -1,26 +1,26 @@
 import { once } from "node:events";
 import { mkdir, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
-import { Readable } from "node:stream";
+import type { Readable } from "node:stream";
 import {
+	type AudioPlayer,
 	AudioPlayerStatus,
 	createAudioPlayer,
 	createAudioResource,
 	EndBehaviorType,
 	entersState,
 	joinVoiceChannel,
-	VoiceConnectionStatus,
-	type AudioPlayer,
 	type VoiceConnection,
+	VoiceConnectionStatus,
 } from "@discordjs/voice";
 import type { Client, GuildMember, Message, VoiceBasedChannel } from "discord.js";
 import { opus } from "prism-media";
-import type { DiscordAccountConfig, ResolvedConversation } from "./chat/core/config-types.js";
+import type { GatewayConversationEndpoint } from "./adapters.js";
+import type { DiscordAccountConfig } from "./chat/core/config-types.js";
 import type { InboundMessageInput } from "./chat/core/runtime-types.js";
 import { guessAttachmentKind } from "./chat/live/common.js";
 import { synthesizeGatewaySpeech } from "./speech.js";
 import { transcribeGatewayAudio } from "./transcription.js";
-import type { GatewayConversationEndpoint } from "./adapters.js";
 
 export type DiscordVoiceCommand = "join" | "leave" | "status";
 
@@ -76,13 +76,22 @@ export function parseDiscordVoiceCommandText(
 	options: { account?: DiscordAccountConfig; botName?: string } = {},
 ): DiscordVoiceCommand | undefined {
 	const stripped =
-		options.account && options.botName ? stripDiscordAddress(text, options.account, options.botName) : text.replace(/\s+/g, " ").trim();
+		options.account && options.botName
+			? stripDiscordAddress(text, options.account, options.botName)
+			: text.replace(/\s+/g, " ").trim();
 	const command = stripped.toLowerCase();
-	if (command === "/voice" || command === "voice" || command === "/voice status" || command === "voice status") return "status";
-	if (command === "/voice join" || command === "voice join" || command === "/voice channel" || command === "voice channel") {
+	if (command === "/voice" || command === "voice" || command === "/voice status" || command === "voice status")
+		return "status";
+	if (
+		command === "/voice join" ||
+		command === "voice join" ||
+		command === "/voice channel" ||
+		command === "voice channel"
+	) {
 		return "join";
 	}
-	if (command === "/voice leave" || command === "voice leave" || command === "/voice off" || command === "voice off") return "leave";
+	if (command === "/voice leave" || command === "voice leave" || command === "/voice off" || command === "voice off")
+		return "leave";
 	return undefined;
 }
 
@@ -188,14 +197,20 @@ export class DiscordVoiceController {
 		});
 		if (!command) return false;
 		const member = message.member;
-		const speaker = member ? memberToSpeaker(member) : { userId: message.author.id, userName: message.author.username, isBot: message.author.bot };
+		const speaker = member
+			? memberToSpeaker(member)
+			: { userId: message.author.id, userName: message.author.username, isBot: message.author.bot };
 		if (!isAllowed(endpoint, speaker)) return true;
 		const response = await this.executeCommand(command, endpoint, member?.voice.channel ?? undefined);
 		await this.sendText(message.channelId, response);
 		return true;
 	}
 
-	async executeCommand(command: DiscordVoiceCommand, endpoint: GatewayConversationEndpoint, voiceChannel?: VoiceBasedChannel): Promise<string> {
+	async executeCommand(
+		command: DiscordVoiceCommand,
+		endpoint: GatewayConversationEndpoint,
+		voiceChannel?: VoiceBasedChannel,
+	): Promise<string> {
 		if (command === "leave") return this.leave(endpoint.conversation.channel.id);
 		if (command === "status") return this.status(endpoint.conversation.channel.id);
 		if (!voiceChannel) return "Join a Discord voice channel first, then run `/voice join` again.";
@@ -248,7 +263,11 @@ export class DiscordVoiceController {
 				]);
 				// Successfully entered a reconnecting state — wait for Ready (20 s).
 				try {
-					await entersState(connection, VoiceConnectionStatus.Ready, envInt("PIE_GATEWAY_VOICE_JOIN_TIMEOUT_MS", 20_000));
+					await entersState(
+						connection,
+						VoiceConnectionStatus.Ready,
+						envInt("PIE_GATEWAY_VOICE_JOIN_TIMEOUT_MS", 20_000),
+					);
 				} catch {
 					// Still not ready — give up and clean up.
 					if (connection.state.status !== VoiceConnectionStatus.Destroyed) connection.destroy();
@@ -272,7 +291,11 @@ export class DiscordVoiceController {
 
 		// Guard against a connection stuck indefinitely in Connecting.
 		connection.on(VoiceConnectionStatus.Connecting, () => {
-			entersState(connection, VoiceConnectionStatus.Ready, envInt("PIE_GATEWAY_VOICE_JOIN_TIMEOUT_MS", 20_000)).catch(() => {
+			entersState(
+				connection,
+				VoiceConnectionStatus.Ready,
+				envInt("PIE_GATEWAY_VOICE_JOIN_TIMEOUT_MS", 20_000),
+			).catch(() => {
 				if (connection.state.status !== VoiceConnectionStatus.Destroyed) {
 					connection.destroy();
 					this.sessions.delete(textChannelId);
@@ -323,7 +346,13 @@ export class DiscordVoiceController {
 	}
 
 	private async handleSpeakingStart(session: DiscordVoiceSession, userId: string): Promise<void> {
-		if (session.playing || userId === this.account.botUserId || userId === this.client.user.id || session.activeRecordings.has(userId)) return;
+		if (
+			session.playing ||
+			userId === this.account.botUserId ||
+			userId === this.client.user.id ||
+			session.activeRecordings.has(userId)
+		)
+			return;
 		const guild = await this.client.guilds.fetch(session.guildId);
 		const member = await guild.members.fetch(userId).catch(() => undefined);
 		if (!member) return;
@@ -347,7 +376,8 @@ export class DiscordVoiceController {
 			await writeFile(filePath, wav);
 			const transcription = await transcribeGatewayAudio({ filePath, mimeType: "audio/wav" });
 			if (!transcription.text?.trim()) {
-				if (transcription.error) await this.sendText(session.textChannelId, `[Voice transcript unavailable] ${transcription.error}`);
+				if (transcription.error)
+					await this.sendText(session.textChannelId, `[Voice transcript unavailable] ${transcription.error}`);
 				return;
 			}
 			const text = `[Voice] ${speaker.userName ?? userId}: ${transcription.text.trim()}`;
@@ -377,7 +407,11 @@ export class DiscordVoiceController {
 		try {
 			const resource = createAudioResource(path);
 			session.player.play(resource);
-			await entersState(session.player, AudioPlayerStatus.Playing, envInt("PIE_GATEWAY_VOICE_PLAY_TIMEOUT_MS", 10000)).catch(() => undefined);
+			await entersState(
+				session.player,
+				AudioPlayerStatus.Playing,
+				envInt("PIE_GATEWAY_VOICE_PLAY_TIMEOUT_MS", 10000),
+			).catch(() => undefined);
 			await once(session.player, AudioPlayerStatus.Idle).catch(() => undefined);
 		} finally {
 			session.playing = false;

@@ -74,11 +74,20 @@ export {
 	type TurnStartEvent,
 	type WorkingIndicatorOptions,
 } from "./extensions/index.ts";
-export { createSyntheticSourceInfo } from "./source-info.ts";
 export {
-	CronJobStore,
+	type GatewayLogger,
+	type GatewayStatus,
+	getGatewayDir,
+	getGatewayPidPath,
+	type RunGatewayOptions,
+	readGatewayPid,
+	readGatewayStatus,
+	runGateway,
+} from "./gateway/runner.ts";
+export {
 	type CronJob,
 	type CronJobStatus,
+	CronJobStore,
 	type CronRunResult,
 	DEFAULT_SCHEDULER_SETTINGS,
 	normalizeSchedulerSettings,
@@ -86,13 +95,4 @@ export {
 	type SchedulerSettings,
 	tickCronScheduler,
 } from "./scheduler/index.ts";
-export {
-	getGatewayDir,
-	getGatewayPidPath,
-	readGatewayPid,
-	readGatewayStatus,
-	runGateway,
-	type GatewayLogger,
-	type GatewayStatus,
-	type RunGatewayOptions,
-} from "./gateway/runner.ts";
+export { createSyntheticSourceInfo } from "./source-info.ts";

@@ -1,6 +1,10 @@
-import { selectProviderConnection } from "@pie-lab/router";
-import { createJsonProviderConnectionStore, type ProviderConnection, type ProviderConnectionStore } from "@pie-lab/storage";
 import { join } from "node:path";
+import { selectProviderConnection } from "@pie-lab/router";
+import {
+	createJsonProviderConnectionStore,
+	type ProviderConnection,
+	type ProviderConnectionStore,
+} from "@pie-lab/storage";
 import { getAgentDir } from "../../config.js";
 import { AuthStorage } from "../auth-storage.js";
 import { resolveConfigValue } from "../resolve-config-value.js";
@@ -76,7 +80,10 @@ function resolveCredentialValue(rawCredential: string, env: NodeJS.ProcessEnv): 
 	return resolveConfigValue(rawCredential);
 }
 
-function resolveRawProviderConnectionApiKey(connection: ProviderConnection, env: NodeJS.ProcessEnv): string | undefined {
+function resolveRawProviderConnectionApiKey(
+	connection: ProviderConnection,
+	env: NodeJS.ProcessEnv,
+): string | undefined {
 	const rawCredential =
 		typeof connection.apiKey === "string" && connection.apiKey.length > 0
 			? connection.apiKey
@@ -90,7 +97,9 @@ async function resolveProviderConnectionCredentials(
 	options: Required<Pick<ResolveGatewayOpenAiAudioCredentialsOptions, "env" | "agentDir">> &
 		Pick<ResolveGatewayOpenAiAudioCredentialsOptions, "providerConnectionStore" | "authStorage">,
 ): Promise<GatewayOpenAiAudioCredentials | undefined> {
-	const store = options.providerConnectionStore ?? createJsonProviderConnectionStore(join(options.agentDir, "provider-connections.json"));
+	const store =
+		options.providerConnectionStore ??
+		createJsonProviderConnectionStore(join(options.agentDir, "provider-connections.json"));
 	const authStorage = options.authStorage ?? AuthStorage.create(join(options.agentDir, "auth.json"));
 	const connections = await store.getProviderConnections({ provider: OPENAI_AUTH_PROVIDER, isActive: true });
 	if (connections.length === 0) return undefined;
@@ -113,7 +122,9 @@ async function resolveAuthStorageCredentials(
 	provider: string,
 	source: GatewayOpenAiAudioKeySource,
 ): Promise<GatewayOpenAiAudioCredentials | undefined> {
-	const apiKey = await (authStorage ?? AuthStorage.create(join(agentDir, "auth.json"))).getApiKey(provider, { includeFallback: false });
+	const apiKey = await (authStorage ?? AuthStorage.create(join(agentDir, "auth.json"))).getApiKey(provider, {
+		includeFallback: false,
+	});
 	return apiKey ? { apiKey, source } : undefined;
 }
 

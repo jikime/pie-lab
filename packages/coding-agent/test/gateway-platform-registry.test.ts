@@ -1,17 +1,17 @@
 import { describe, expect, it, vi } from "vitest";
 import {
-	registerBuiltInGatewayPlatforms,
-	startGatewayChatAdapters,
 	type GatewayConversationEndpoint,
 	type GatewayTransport,
+	registerBuiltInGatewayPlatforms,
+	startGatewayChatAdapters,
 } from "../src/core/gateway/adapters.ts";
-import { GatewayPlatformRegistry, defaultGatewayPlatformRegistry } from "../src/core/gateway/platform-registry.ts";
 import type {
 	ChatConfig,
 	DiscordAccountConfig,
 	ResolvedConversation,
 	TelegramAccountConfig,
 } from "../src/core/gateway/chat/core/config-types.ts";
+import { defaultGatewayPlatformRegistry, GatewayPlatformRegistry } from "../src/core/gateway/platform-registry.ts";
 
 function telegramConversation(accountId = "telegram"): ResolvedConversation {
 	const account: TelegramAccountConfig = {

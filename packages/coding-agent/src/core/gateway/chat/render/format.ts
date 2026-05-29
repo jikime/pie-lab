@@ -3,10 +3,10 @@
 // - packages/adapter-telegram/src/markdown.ts
 // - packages/adapter-discord/src/markdown.ts
 
-import type { ChatService } from "../core/config-types.js";
 import remarkGfm from "remark-gfm";
 import remarkParse from "remark-parse";
 import { unified } from "unified";
+import type { ChatService } from "../core/config-types.js";
 
 export interface RenderedChunkPayload {
 	text: string;
@@ -154,7 +154,9 @@ function renderTelegramBlockNode(node: MarkdownNode): string {
 		case "code": {
 			const code = escapeHtml(node.value ?? "");
 			const language = sanitizeCodeLanguage(node.lang ?? undefined);
-			return language ? `<pre><code class="language-${escapeHtmlAttribute(language)}">${code}</code></pre>` : `<pre>${code}</pre>`;
+			return language
+				? `<pre><code class="language-${escapeHtmlAttribute(language)}">${code}</code></pre>`
+				: `<pre>${code}</pre>`;
 		}
 		case "blockquote": {
 			const body = renderBlockChildren(node.children).replace(/\n{3,}/g, "\n\n");

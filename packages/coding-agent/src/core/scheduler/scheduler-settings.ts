@@ -51,7 +51,10 @@ export function normalizeSchedulerSettings(input: unknown): SchedulerSettings {
 		enabled: asBoolean(root.enabled, DEFAULT_SCHEDULER_SETTINGS.enabled),
 		tickIntervalSeconds: asPositiveInteger(root.tickIntervalSeconds, DEFAULT_SCHEDULER_SETTINGS.tickIntervalSeconds),
 		timeoutSeconds: asPositiveInteger(root.timeoutSeconds, DEFAULT_SCHEDULER_SETTINGS.timeoutSeconds),
-		scriptTimeoutSeconds: asPositiveInteger(root.scriptTimeoutSeconds, DEFAULT_SCHEDULER_SETTINGS.scriptTimeoutSeconds),
+		scriptTimeoutSeconds: asPositiveInteger(
+			root.scriptTimeoutSeconds,
+			DEFAULT_SCHEDULER_SETTINGS.scriptTimeoutSeconds,
+		),
 		maxParallelJobs: asPositiveInteger(root.maxParallelJobs, DEFAULT_SCHEDULER_SETTINGS.maxParallelJobs),
 		scriptsEnabled: asBoolean(root.scriptsEnabled, DEFAULT_SCHEDULER_SETTINGS.scriptsEnabled),
 		noAgentEnabled: asBoolean(root.noAgentEnabled, DEFAULT_SCHEDULER_SETTINGS.noAgentEnabled),

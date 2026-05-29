@@ -15,7 +15,7 @@
 
 import chalk from "chalk";
 import { getAgentDir } from "./config.ts";
-import { getSessionDB, ensureSessionDBIndexed } from "./core/session-db.ts";
+import { ensureSessionDBIndexed, getSessionDB } from "./core/session-db.ts";
 
 // ─── Entry point ────────────────────────────────────────────────────────────
 
@@ -62,7 +62,9 @@ export async function handleSessionCommand(args: string[]): Promise<boolean> {
 		case "search": {
 			const query = args.slice(2).find((a) => !a.startsWith("-"));
 			if (!query) {
-				console.error(chalk.red("Usage: pie session search <query> [--source tui|gateway-reasoning|gateway-chat] [--limit N]"));
+				console.error(
+					chalk.red("Usage: pie session search <query> [--source tui|gateway-reasoning|gateway-chat] [--limit N]"),
+				);
 				process.exit(1);
 			}
 			const hits = db.search(query, { limit, sources });
@@ -84,7 +86,7 @@ export async function handleSessionCommand(args: string[]): Promise<boolean> {
 // ─── Formatters ─────────────────────────────────────────────────────────────
 
 type BrowseItem = ReturnType<ReturnType<typeof getSessionDB>["browse"]>[number];
-type SearchHit  = ReturnType<ReturnType<typeof getSessionDB>["search"]>[number];
+type SearchHit = ReturnType<ReturnType<typeof getSessionDB>["search"]>[number];
 
 function sourceBadge(item: { source: string; service?: string }): string {
 	if (item.source === "gateway-chat") {
@@ -109,8 +111,8 @@ function printList(items: BrowseItem[]): void {
 
 	// Column widths
 	const badgeW = 14;
-	const dateW  = 10;
-	const msgsW  = 6;
+	const dateW = 10;
+	const msgsW = 6;
 
 	const header = [
 		chalk.bold("Source".padEnd(badgeW)),
@@ -125,8 +127,8 @@ function printList(items: BrowseItem[]): void {
 	for (const item of items) {
 		const badge = sourceBadge(item).padEnd(badgeW + 10); // +10 for ANSI codes
 		const label = (item.name ?? item.channelKey ?? item.sessionId.slice(0, 16)).slice(0, 36).padEnd(36);
-		const date  = fmtDate(item.modifiedAt).padEnd(dateW);
-		const msgs  = String(item.messageCount).padStart(msgsW);
+		const date = fmtDate(item.modifiedAt).padEnd(dateW);
+		const msgs = String(item.messageCount).padStart(msgsW);
 		const preview = item.preview ? chalk.dim(`  ${item.preview.slice(0, 60)}`) : "";
 		console.log(`${badge}  ${label}  ${date}  ${msgs}${preview}`);
 	}
@@ -169,7 +171,7 @@ function parseLimit(args: string[]): number | undefined {
 	const idx = args.findIndex((a) => a === "--limit" || a === "-n");
 	if (idx === -1) return undefined;
 	const val = parseInt(args[idx + 1] ?? "", 10);
-	return isNaN(val) ? undefined : val;
+	return Number.isNaN(val) ? undefined : val;
 }
 
 function parseSources(args: string[]): Array<"tui" | "gateway-reasoning" | "gateway-chat"> | undefined {

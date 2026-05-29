@@ -1,11 +1,11 @@
 import { lstat } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { UsageStore } from "@pie-lab/storage";
-import { Type, type Static } from "typebox";
+import { type Static, Type } from "typebox";
 import type { ToolDefinition } from "../extensions/types.ts";
+import { createSessionSearchToolDefinition } from "../session-search-tool.js";
 import type { ConversationRuntime } from "./chat/runtime.js";
 import { synthesizeGatewaySpeech } from "./speech.js";
-import { createSessionSearchToolDefinition } from "../session-search-tool.js";
 
 const chatHistorySchema = Type.Object({
 	query: Type.Optional(Type.String({ description: "Case-insensitive text to search for" })),
@@ -96,11 +96,11 @@ export function createGatewayChatTools(state: GatewayToolState): ToolDefinition[
 				signal?.throwIfAborted?.();
 				const result = await synthesizeGatewaySpeech({
 					text: params.text,
-						model: params.model,
-						voice: params.voice,
-						format: params.format,
-						usageStore: state.usageStore,
-					});
+					model: params.model,
+					voice: params.voice,
+					format: params.format,
+					usageStore: state.usageStore,
+				});
 				signal?.throwIfAborted?.();
 				if (result.path) {
 					state.queueAttachment(result.path);
@@ -111,7 +111,9 @@ export function createGatewayChatTools(state: GatewayToolState): ToolDefinition[
 				}
 				if (result.skipped) {
 					return {
-						content: [{ type: "text", text: `Voice reply was skipped: ${result.skippedReason || "TTS is disabled"}.` }],
+						content: [
+							{ type: "text", text: `Voice reply was skipped: ${result.skippedReason || "TTS is disabled"}.` },
+						],
 						details: result,
 					};
 				}

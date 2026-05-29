@@ -142,7 +142,8 @@ function estimateOpenAiAudioUsage(input: GatewayAudioUsageInput): {
 		return {
 			media,
 			usage,
-			cost: perMillionTokenRate === undefined ? undefined : cost(roundCost((tokens / 1_000_000) * perMillionTokenRate)),
+			cost:
+				perMillionTokenRate === undefined ? undefined : cost(roundCost((tokens / 1_000_000) * perMillionTokenRate)),
 		};
 	}
 

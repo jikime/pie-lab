@@ -12,7 +12,7 @@
  *   }
  */
 
-import { createConnection, Socket } from "node:net";
+import { createConnection, type Socket } from "node:net";
 import { getWebIpcSocketPath } from "./web-ipc-server.js";
 
 export type WebIPCEvent =
@@ -56,7 +56,7 @@ export class WebIPCClient {
 			socket.once("connect", () => {
 				clearTimeout(timer);
 				// Send a ping and wait for pong
-				socket.write(JSON.stringify({ type: "ping" }) + "\n");
+				socket.write(`${JSON.stringify({ type: "ping" })}\n`);
 				let buf = "";
 				socket.on("data", (chunk: Buffer) => {
 					buf += chunk.toString("utf-8");
@@ -114,7 +114,7 @@ export class WebIPCClient {
 
 			opts.signal?.addEventListener("abort", () => {
 				if (!settled) {
-					socket.write(JSON.stringify({ type: "abort", conversationId: opts.conversationId }) + "\n");
+					socket.write(`${JSON.stringify({ type: "abort", conversationId: opts.conversationId })}\n`);
 					settle(() => resolve());
 				}
 			});
@@ -125,13 +125,13 @@ export class WebIPCClient {
 
 				// Send the chat request
 				socket.write(
-					JSON.stringify({
+					`${JSON.stringify({
 						type: "chat",
 						conversationId: opts.conversationId,
 						text: opts.text,
 						userId: opts.userId ?? "web-user",
 						model: opts.model,
-					}) + "\n",
+					})}\n`,
 				);
 			});
 

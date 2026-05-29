@@ -3,8 +3,8 @@ import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { basename, extname, join } from "node:path";
 import type { UsageStore } from "@pie-lab/storage";
 import { getAgentDir } from "../../config.js";
-import { detectWavDurationSeconds, recordGatewayAudioUsage, type GatewayAudioUsageContext } from "./audio-usage.js";
 import { resolveGatewayOpenAiAudioCredentials } from "./audio-credentials.js";
+import { detectWavDurationSeconds, type GatewayAudioUsageContext, recordGatewayAudioUsage } from "./audio-usage.js";
 
 export type GatewayTranscriptionProvider = "local" | "openai" | "custom";
 
@@ -52,7 +52,10 @@ function boolDisabled(value: string | undefined): boolean {
 
 function parseBytes(value: string | undefined, fallback: number): number {
 	if (!value?.trim()) return fallback;
-	const match = value.trim().toLowerCase().match(/^(\d+(?:\.\d+)?)\s*(b|kb|k|mb|m|gb|g)?$/);
+	const match = value
+		.trim()
+		.toLowerCase()
+		.match(/^(\d+(?:\.\d+)?)\s*(b|kb|k|mb|m|gb|g)?$/);
 	if (!match) return fallback;
 	const amount = Number(match[1]);
 	if (!Number.isFinite(amount)) return fallback;
@@ -150,7 +153,9 @@ function cacheKeyFor(request: GatewayTranscriptionRequest, fileHash: string): st
 
 async function readCache(cacheDir: string, cacheKey: string): Promise<GatewayTranscriptionCacheEntry | undefined> {
 	try {
-		const parsed = JSON.parse(await readFile(join(cacheDir, `${cacheKey}.json`), "utf8")) as GatewayTranscriptionCacheEntry;
+		const parsed = JSON.parse(
+			await readFile(join(cacheDir, `${cacheKey}.json`), "utf8"),
+		) as GatewayTranscriptionCacheEntry;
 		return parsed.version === 1 && typeof parsed.text === "string" ? parsed : undefined;
 	} catch {
 		return undefined;
@@ -187,7 +192,11 @@ async function postTranscriptionForm(options: {
 	for (let attempt = 0; attempt <= maxRetries; attempt++) {
 		const form = new FormData();
 		form.set("model", options.model);
-		form.set("file", new Blob([Buffer.from(data)], { type: audioContentType(options.filePath, options.mimeType) }), basename(options.filePath));
+		form.set(
+			"file",
+			new Blob([Buffer.from(data)], { type: audioContentType(options.filePath, options.mimeType) }),
+			basename(options.filePath),
+		);
 		if (options.language) form.set("language", options.language);
 		if (options.prompt) form.set("prompt", options.prompt);
 		const response = await options.fetchImpl(options.endpoint, {
@@ -212,7 +221,8 @@ async function postTranscriptionForm(options: {
 		const shouldParseJson = contentType.includes("application/json") || raw.trim().startsWith("{");
 		if (shouldParseJson) {
 			const body = JSON.parse(raw || "{}") as { text?: string; error?: { message?: string }; message?: string };
-			if (!response.ok) throw new Error(body.error?.message || body.message || `STT failed with HTTP ${response.status}`);
+			if (!response.ok)
+				throw new Error(body.error?.message || body.message || `STT failed with HTTP ${response.status}`);
 			return body.text?.trim() || "";
 		}
 		if (!response.ok) throw new Error(raw || `STT failed with HTTP ${response.status}`);
@@ -240,7 +250,9 @@ export async function transcribeGatewayAudio(options: {
 	let request: GatewayTranscriptionRequest | undefined;
 	let fileSizeBytes: number | undefined;
 	let audioDurationSeconds =
-		typeof options.audioDurationSeconds === "number" && Number.isFinite(options.audioDurationSeconds) && options.audioDurationSeconds > 0
+		typeof options.audioDurationSeconds === "number" &&
+		Number.isFinite(options.audioDurationSeconds) &&
+		options.audioDurationSeconds > 0
 			? options.audioDurationSeconds
 			: undefined;
 
@@ -347,6 +359,12 @@ export async function transcribeGatewayAudio(options: {
 				audioSeconds: audioDurationSeconds,
 			});
 		}
-		return { error: errorMessage, fileSizeBytes, maxSizeBytes, audioDurationSeconds, durationMs: Date.now() - startedAt };
+		return {
+			error: errorMessage,
+			fileSizeBytes,
+			maxSizeBytes,
+			audioDurationSeconds,
+			durationMs: Date.now() - startedAt,
+		};
 	}
 }

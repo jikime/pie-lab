@@ -1,17 +1,8 @@
-import {
-	cpSync,
-	existsSync,
-	mkdirSync,
-	readdirSync,
-	readFileSync,
-	rmSync,
-	statSync,
-	writeFileSync,
-} from "node:fs";
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
-import { parse as parseYaml } from "yaml";
 import type { AssistantMessage, Message, Model, ToolCall, ToolResultMessage } from "@pie-lab/ai";
 import { PIE_LAB_ROUTER_PROVIDER } from "@pie-lab/router";
+import { parse as parseYaml } from "yaml";
 import type { SkillManager, SkillUsageRecord } from "./skill-manager.ts";
 import { createLearningToolDefinitions } from "./tools.ts";
 
@@ -226,11 +217,7 @@ export const DEFAULT_CURATOR_POLICY: SkillCuratorPolicy = {
 };
 
 // Type alias for streamFn (same as BackgroundLearningReview uses)
-type StreamFn = (
-	model: Model<any>,
-	context: { systemPrompt?: string; messages: Message[] },
-	options?: any,
-) => any;
+type StreamFn = (model: Model<any>, context: { systemPrompt?: string; messages: Message[] }, options?: any) => any;
 
 export class SkillCurator {
 	private readonly manager: SkillManager;
@@ -477,7 +464,11 @@ export class SkillCurator {
 				const definition = toolsByName.get(toolCall.name);
 				if (!definition) {
 					messages.push(
-						createToolResult(toolCall, `Unknown tool: ${toolCall.name}. Only skills_list, skill_view, and skill_manage are available.`, true),
+						createToolResult(
+							toolCall,
+							`Unknown tool: ${toolCall.name}. Only skills_list, skill_view, and skill_manage are available.`,
+							true,
+						),
 					);
 					continue;
 				}
@@ -486,7 +477,10 @@ export class SkillCurator {
 				if (dryRun && isMutatingSkillCall(toolCall)) {
 					const action = (toolCall.arguments as any)?.action ?? "?";
 					messages.push(
-						createToolResult(toolCall, `DRY-RUN: Would execute skill_manage action=${action} on '${(toolCall.arguments as any)?.name}'.`),
+						createToolResult(
+							toolCall,
+							`DRY-RUN: Would execute skill_manage action=${action} on '${(toolCall.arguments as any)?.name}'.`,
+						),
 					);
 					log(`  [dry-run] would ${action} '${(toolCall.arguments as any)?.name}'`);
 					continue;

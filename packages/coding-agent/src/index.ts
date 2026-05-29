@@ -148,6 +148,18 @@ export {
 // Footer data provider (git branch + extension statuses - data not otherwise available to extensions)
 export type { ReadonlyFooterDataProvider } from "./core/footer-data-provider.ts";
 export {
+	type GatewayLogger,
+	type GatewayStatus,
+	getGatewayDir,
+	getGatewayPidPath,
+	type RunGatewayOptions,
+	readGatewayPid,
+	readGatewayStatus,
+	runGateway,
+} from "./core/gateway/runner.ts";
+export { WebIPCClient, type WebIPCEvent, type WebIPCSessionOptions } from "./core/gateway/web-ipc-client.ts";
+export { getWebIpcSocketPath } from "./core/gateway/web-ipc-server.ts";
+export {
 	BackgroundLearningReview,
 	type ConsolidationEntry,
 	type CuratedSkillStatus,
@@ -168,29 +180,6 @@ export {
 } from "./core/learning/index.ts";
 export { convertToLlm } from "./core/messages.ts";
 export { ModelRegistry } from "./core/model-registry.ts";
-export {
-	CronJobStore,
-	type CronJob,
-	type CronJobStatus,
-	type CronRunResult,
-	DEFAULT_SCHEDULER_SETTINGS,
-	normalizeSchedulerSettings,
-	runCronJob,
-	type SchedulerSettings,
-	tickCronScheduler,
-} from "./core/scheduler/index.ts";
-export {
-	getGatewayDir,
-	getGatewayPidPath,
-	readGatewayPid,
-	readGatewayStatus,
-	runGateway,
-	type GatewayLogger,
-	type GatewayStatus,
-	type RunGatewayOptions,
-} from "./core/gateway/runner.ts";
-export { WebIPCClient, type WebIPCEvent, type WebIPCSessionOptions } from "./core/gateway/web-ipc-client.ts";
-export { getWebIpcSocketPath } from "./core/gateway/web-ipc-server.ts";
 export type {
 	PackageManager,
 	PathMetadata,
@@ -202,6 +191,17 @@ export type {
 export { DefaultPackageManager } from "./core/package-manager.ts";
 export type { ResourceCollision, ResourceDiagnostic, ResourceLoader } from "./core/resource-loader.ts";
 export { DefaultResourceLoader, loadProjectContextFiles } from "./core/resource-loader.ts";
+export {
+	type CronJob,
+	type CronJobStatus,
+	CronJobStore,
+	type CronRunResult,
+	DEFAULT_SCHEDULER_SETTINGS,
+	normalizeSchedulerSettings,
+	runCronJob,
+	type SchedulerSettings,
+	tickCronScheduler,
+} from "./core/scheduler/index.ts";
 // SDK for programmatic usage
 export {
 	AgentSessionRuntime,
@@ -239,6 +239,7 @@ export {
 	type CustomMessageEntry,
 	type FileEntry,
 	getLatestCompactionEntry,
+	loadEntriesFromFile,
 	type ModelChangeEntry,
 	migrateSessionEntries,
 	type NewSessionOptions,
@@ -249,7 +250,6 @@ export {
 	type SessionHeader,
 	type SessionInfo,
 	type SessionInfoEntry,
-	loadEntriesFromFile,
 	SessionManager,
 	type SessionMessageEntry,
 	type ThinkingLevelChangeEntry,

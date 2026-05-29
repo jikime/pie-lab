@@ -4,9 +4,9 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
 	CronJobStore,
-	DEFAULT_SCHEDULER_SETTINGS,
 	computeGraceWindowSeconds,
 	createSchedulerToolDefinitions,
+	DEFAULT_SCHEDULER_SETTINGS,
 	deliverCronResult,
 	parseSchedule,
 	tickCronScheduler,
@@ -170,7 +170,7 @@ describe("scheduler missed-run and stale recovery", () => {
 		await store.trigger(job.id);
 		// Patch the file directly to simulate a stuck running job
 		const { readFileSync: rf, writeFileSync: wf } = await import("node:fs");
-		const fileData = JSON.parse(rf(store.jobsFile, "utf-8")) as { version: 1; jobs: typeof job[] };
+		const fileData = JSON.parse(rf(store.jobsFile, "utf-8")) as { version: 1; jobs: (typeof job)[] };
 		const idx = fileData.jobs.findIndex((j) => j.id === job.id);
 		fileData.jobs[idx] = { ...fileData.jobs[idx], state: "running", updatedAt: oldTime };
 		wf(store.jobsFile, JSON.stringify(fileData, null, 2), "utf-8");

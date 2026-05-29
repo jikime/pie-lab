@@ -14,17 +14,18 @@
  */
 
 // Suppress the Node 22 experimental sqlite warning in production.
-process.emitWarning = ((orig) =>
-	function (msg: string, ...rest: unknown[]) {
+process.emitWarning = (
+	(orig) =>
+	(msg: string, ...rest: unknown[]) => {
 		if (typeof msg === "string" && msg.includes("SQLite is an experimental")) return;
 		return (orig as (...args: unknown[]) => void)(msg, ...rest);
-	})(process.emitWarning);
+	}
+)(process.emitWarning);
 
-import { DatabaseSync, type StatementSync } from "node:sqlite"; // eslint-disable-line import/no-unresolved
-import { readdirSync, statSync, existsSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
-import { readFileSync } from "node:fs";
-import { join, basename } from "node:path";
+import { join } from "node:path";
+import { DatabaseSync, type StatementSync } from "node:sqlite"; // eslint-disable-line import/no-unresolved
 import { getAgentDir, getSessionsDir } from "../config.js";
 
 // ---------------------------------------------------------------------------
@@ -195,7 +196,11 @@ export class SessionDB {
 		return files;
 	}
 
-	private discoverGatewayReasoningFiles(): Array<{ path: string; source: SessionSource; meta: Record<string, string | null> }> {
+	private discoverGatewayReasoningFiles(): Array<{
+		path: string;
+		source: SessionSource;
+		meta: Record<string, string | null>;
+	}> {
 		const root = join(this.agentDir, "gateway", "sessions");
 		if (!existsSync(root)) return [];
 		const files: Array<{ path: string; source: SessionSource; meta: Record<string, string | null> }> = [];
@@ -210,7 +215,11 @@ export class SessionDB {
 		return files;
 	}
 
-	private discoverGatewayChatFiles(): Array<{ path: string; source: SessionSource; meta: Record<string, string | null> }> {
+	private discoverGatewayChatFiles(): Array<{
+		path: string;
+		source: SessionSource;
+		meta: Record<string, string | null>;
+	}> {
 		const root = join(this.agentDir, "chat", "accounts");
 		if (!existsSync(root)) return [];
 		const files: Array<{ path: string; source: SessionSource; meta: Record<string, string | null> }> = [];
@@ -244,12 +253,7 @@ export class SessionDB {
 		return files;
 	}
 
-	private indexFile(
-		path: string,
-		source: SessionSource,
-		meta: Record<string, string | null>,
-		mtime: number,
-	): void {
+	private indexFile(path: string, source: SessionSource, meta: Record<string, string | null>, mtime: number): void {
 		const content = readFileSync(path, "utf-8");
 		const lines = content.trim().split("\n").filter(Boolean);
 
@@ -273,7 +277,7 @@ export class SessionDB {
 
 		const sessionId = header.id;
 		let name: string | null = null;
-		let createdAt: string | null = header.timestamp ?? null;
+		const createdAt: string | null = header.timestamp ?? null;
 		let messageCount = 0;
 		const messages: Array<{ entryId: string; role: string; speaker: string; text: string; timestamp: string }> = [];
 
@@ -499,10 +503,7 @@ export class SessionDB {
 
 		const rowids = [...seenRowids];
 		const placeholders = rowids.map(() => "?").join(",");
-		const sourceFilter =
-			sources && sources.length > 0
-				? `AND source IN (${sources.map(() => "?").join(",")})`
-				: "";
+		const sourceFilter = sources && sources.length > 0 ? `AND source IN (${sources.map(() => "?").join(",")})` : "";
 
 		const sessionSQL = `
 			SELECT id, source, service, channel_key, name, created_at, modified_at, rowid
@@ -523,12 +524,16 @@ export class SessionDB {
 		};
 
 		const sessionRows = (this.db.prepare(sessionSQL) as StatementSync).all(
-			...rowids, ...(sources ?? []), limit
+			...rowids,
+			...(sources ?? []),
+			limit,
 		) as SessionRow2[];
 
 		// Restore rank order from FTS step.
 		const rowidOrder = new Map<number, number>();
-		rowids.forEach((rid, i) => rowidOrder.set(rid, i));
+		rowids.forEach((rid, i) => {
+			rowidOrder.set(rid, i);
+		});
 		sessionRows.sort((a, b) => (rowidOrder.get(a.rowid) ?? 999) - (rowidOrder.get(b.rowid) ?? 999));
 
 		return sessionRows.map((session) => {
@@ -610,7 +615,9 @@ export class SessionDB {
 		return all.slice(start, end);
 	}
 
-	private getSessionMessages(sessionRowid: number): Array<{ role: string; speaker: string; text: string; timestamp: string }> {
+	private getSessionMessages(
+		sessionRowid: number,
+	): Array<{ role: string; speaker: string; text: string; timestamp: string }> {
 		return (
 			this.db
 				.prepare("SELECT role, speaker, text, timestamp FROM messages_fts WHERE session_rowid = ? ORDER BY rowid")
@@ -650,7 +657,9 @@ export class SessionDB {
 	}
 
 	private getSessionRowid(sessionId: string): number | undefined {
-		const row = this.db.prepare("SELECT rowid FROM sessions WHERE id = ?").get(sessionId) as { rowid: number } | undefined;
+		const row = this.db.prepare("SELECT rowid FROM sessions WHERE id = ?").get(sessionId) as
+			| { rowid: number }
+			| undefined;
 		return row?.rowid;
 	}
 }
@@ -673,7 +682,7 @@ function makeTextSnippet(text: string, term: string, maxLen: number): string {
 
 	if (idx === -1) {
 		// Term not found in this text — return start of text
-		return text.length > maxLen ? text.slice(0, maxLen) + "…" : text;
+		return text.length > maxLen ? `${text.slice(0, maxLen)}…` : text;
 	}
 
 	// Center snippet around the match
@@ -691,8 +700,8 @@ function makeTextSnippet(text: string, term: string, maxLen: number): string {
 		"]" +
 		snippet.slice(relIdx + termLower.length);
 
-	if (start > 0) snippet = "…" + snippet;
-	if (end < text.length) snippet = snippet + "…";
+	if (start > 0) snippet = `…${snippet}`;
+	if (end < text.length) snippet = `${snippet}…`;
 	return snippet;
 }
 

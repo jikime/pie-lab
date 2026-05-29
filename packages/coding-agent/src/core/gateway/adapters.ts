@@ -2,7 +2,16 @@ import { once } from "node:events";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { UsageStore } from "@pie-lab/storage";
-import { Client, Events, GatewayIntentBits, type Interaction, type Message, Partials, type VoiceBasedChannel } from "discord.js";
+import {
+	Client,
+	Events,
+	GatewayIntentBits,
+	type Interaction,
+	type Message,
+	Partials,
+	type VoiceBasedChannel,
+} from "discord.js";
+import { CHAT_HOME } from "./chat/config.js";
 import type {
 	ChatAccountConfig,
 	ChatConfig,
@@ -12,13 +21,18 @@ import type {
 	TelegramAccountConfig,
 } from "./chat/core/config-types.js";
 import type { InboundMessageInput } from "./chat/core/runtime-types.js";
-import { CHAT_HOME } from "./chat/config.js";
-import { fetchBinary, guessAttachmentKind, readLocalAttachment, storeDownloadedAttachment, textMentionsBot } from "./chat/live/common.js";
+import {
+	fetchBinary,
+	guessAttachmentKind,
+	readLocalAttachment,
+	storeDownloadedAttachment,
+	textMentionsBot,
+} from "./chat/live/common.js";
 import { chunkText } from "./chat/render/chunking.js";
 import { formatMarkdownForService, maxMessageLength, telegramHtmlToPlainText } from "./chat/render/format.js";
-import { DiscordVoiceController, parseDiscordVoiceCommandText, type DiscordVoiceCommand } from "./discord-voice.js";
+import { type DiscordVoiceCommand, DiscordVoiceController, parseDiscordVoiceCommandText } from "./discord-voice.js";
 import { defaultGatewayPlatformRegistry, type GatewayPlatformRegistry } from "./platform-registry.js";
-import { transcribeGatewayAudio, type GatewayTranscriptionResult } from "./transcription.js";
+import { type GatewayTranscriptionResult, transcribeGatewayAudio } from "./transcription.js";
 
 export interface GatewayCheckpoint {
 	cursor?: string;
@@ -135,7 +149,7 @@ function sanitize(value: string): string {
 const GATEWAY_CONTROL_COMMANDS = ["status", "new", "compact", "stop", "help"] as const;
 type GatewayControlCommand = (typeof GATEWAY_CONTROL_COMMANDS)[number];
 
-function parseGatewayControlData(data: string | undefined): GatewayControlCommand | undefined {
+function _parseGatewayControlData(data: string | undefined): GatewayControlCommand | undefined {
 	const value = data?.trim().toLowerCase();
 	if (!value?.startsWith("pie:")) return undefined;
 	const command = value.slice("pie:".length);
@@ -307,13 +321,22 @@ async function telegramMessageToInput(
 		);
 		attachments.push(...voiceAttachments);
 		for (const attachment of voiceAttachments) {
-			const transcription = await transcribeGatewayAudio({ filePath: attachment.path, mimeType: attachment.mimeType });
+			const transcription = await transcribeGatewayAudio({
+				filePath: attachment.path,
+				mimeType: attachment.mimeType,
+			});
 			if (transcription.text) {
-				transcriptBlocks.push(`${formatTranscriptionHeader("Voice transcript", transcription)}\n${transcription.text}`);
+				transcriptBlocks.push(
+					`${formatTranscriptionHeader("Voice transcript", transcription)}\n${transcription.text}`,
+				);
 			} else if (transcription.skipped && transcription.skippedReason) {
-				transcriptBlocks.push(`${formatTranscriptionHeader("Voice transcript skipped", transcription)} ${transcription.skippedReason}`);
+				transcriptBlocks.push(
+					`${formatTranscriptionHeader("Voice transcript skipped", transcription)} ${transcription.skippedReason}`,
+				);
 			} else if (transcription.error && !transcription.skipped) {
-				transcriptBlocks.push(`${formatTranscriptionHeader("Voice transcript unavailable", transcription)} ${transcription.error}`);
+				transcriptBlocks.push(
+					`${formatTranscriptionHeader("Voice transcript unavailable", transcription)} ${transcription.error}`,
+				);
 			}
 		}
 	}
@@ -343,7 +366,6 @@ async function telegramMessageToInput(
 function telegramChatId(channelId: string): string | number {
 	return Number.isFinite(Number(channelId)) ? Number(channelId) : channelId;
 }
-
 
 function telegramAttachmentUpload(kind: "image" | "file" | "audio" | "video"): { method: string; field: string } {
 	if (kind === "image") return { method: "sendPhoto", field: "photo" };
@@ -458,7 +480,14 @@ class TelegramTransport implements GatewayTransport {
 		signal?: AbortSignal,
 		replyToMessageId?: string,
 	): Promise<string> {
-		return sendTelegramMessage(this.account, this.conversation.channel.id, text, attachmentPaths, signal, replyToMessageId);
+		return sendTelegramMessage(
+			this.account,
+			this.conversation.channel.id,
+			text,
+			attachmentPaths,
+			signal,
+			replyToMessageId,
+		);
 	}
 
 	async startTyping(): Promise<void> {
@@ -473,11 +502,11 @@ class TelegramTransport implements GatewayTransport {
 
 /** Telegram bot commands registered in the "/" command menu. */
 const TELEGRAM_BOT_COMMANDS = [
-	{ command: "status",  description: "Show gateway session status" },
-	{ command: "new",     description: "Start a new session" },
+	{ command: "status", description: "Show gateway session status" },
+	{ command: "new", description: "Start a new session" },
 	{ command: "compact", description: "Compact the current session" },
-	{ command: "stop",    description: "Abort the active turn" },
-	{ command: "help",    description: "Show available commands" },
+	{ command: "stop", description: "Abort the active turn" },
+	{ command: "help", description: "Show available commands" },
 ] as const;
 
 async function startTelegramAccountAdapter(
@@ -604,7 +633,9 @@ async function withReadyDiscordClient(token: string): Promise<Client<true>> {
 	if (!client.isReady()) {
 		await Promise.race([
 			readyPromise,
-			new Promise((_, reject) => setTimeout(() => reject(new Error("Discord client failed to become ready")), 10000)),
+			new Promise((_, reject) =>
+				setTimeout(() => reject(new Error("Discord client failed to become ready")), 10000),
+			),
 		]);
 	}
 	if (!client.isReady()) throw new Error("Discord client failed to become ready");
@@ -688,10 +719,7 @@ function discordParentChannelId(channel: Message["channel"] | Interaction["chann
 	return parentId || undefined;
 }
 
-function discordChannelDisplayName(
-	channel: Message["channel"] | Interaction["channel"],
-	fallback: string,
-): string {
+function discordChannelDisplayName(channel: Message["channel"] | Interaction["channel"], fallback: string): string {
 	const name = (channel as { name?: unknown } | null)?.name;
 	return typeof name === "string" && name.trim() ? name : fallback;
 }
@@ -700,18 +728,32 @@ function discordChannelKey(prefix: "dm" | "channel" | "thread", channelId: strin
 	return `${prefix}-${channelId.replace(/[^a-zA-Z0-9._-]+/g, "_")}`;
 }
 
-function shouldAllowDiscordChannel(account: DiscordAccountConfig, channelId: string, parentChannelId?: string): boolean {
+function shouldAllowDiscordChannel(
+	account: DiscordAccountConfig,
+	channelId: string,
+	parentChannelId?: string,
+): boolean {
 	if (includesDiscordChannel(account.ignoredChannelIds, channelId, parentChannelId)) return false;
-	if (account.allowedChannelIds?.length && !includesDiscordChannel(account.allowedChannelIds, channelId, parentChannelId)) return false;
+	if (
+		account.allowedChannelIds?.length &&
+		!includesDiscordChannel(account.allowedChannelIds, channelId, parentChannelId)
+	)
+		return false;
 	return true;
 }
 
-function discordChannelAccess(account: DiscordAccountConfig, channelId: string, isDm: boolean, parentChannelId?: string) {
+function discordChannelAccess(
+	account: DiscordAccountConfig,
+	channelId: string,
+	isDm: boolean,
+	parentChannelId?: string,
+) {
 	const freeResponse = includesDiscordChannel(account.freeResponseChannelIds, channelId, parentChannelId);
 	return {
 		...(account.access ?? {}),
 		ignoreBots: account.access?.ignoreBots ?? true,
-		trigger: isDm || freeResponse || account.access?.trigger === "message" ? ("message" as const) : ("mention" as const),
+		trigger:
+			isDm || freeResponse || account.access?.trigger === "message" ? ("message" as const) : ("mention" as const),
 	};
 }
 
@@ -739,7 +781,10 @@ export function discordMessageMentionsBot(account: DiscordAccountConfig, message
 	);
 }
 
-function discordMessageChannelConfig(account: DiscordAccountConfig, message: Message): { channelKey: string; channel: ConfiguredChannel } {
+function discordMessageChannelConfig(
+	account: DiscordAccountConfig,
+	message: Message,
+): { channelKey: string; channel: ConfiguredChannel } {
 	const isDm = !message.guildId;
 	const isThread = isDiscordThreadChannel(message.channel);
 	const parentChannelId = discordParentChannelId(message.channel);
@@ -898,13 +943,17 @@ async function discordMessageToInput(
 		if (guessAttachmentKind(storedName, stored.mimeType) === "audio") {
 			const transcription = await transcribeGatewayAudio({ filePath: stored.path, mimeType: stored.mimeType });
 			if (transcription.text) {
-				transcriptBlocks.push(`${formatTranscriptionHeader(`Audio transcript:${storedName}`, transcription)}\n${transcription.text}`);
+				transcriptBlocks.push(
+					`${formatTranscriptionHeader(`Audio transcript:${storedName}`, transcription)}\n${transcription.text}`,
+				);
 			} else if (transcription.skipped && transcription.skippedReason) {
 				transcriptBlocks.push(
 					`${formatTranscriptionHeader(`Audio transcript skipped:${storedName}`, transcription)} ${transcription.skippedReason}`,
 				);
 			} else if (transcription.error && !transcription.skipped) {
-				transcriptBlocks.push(`${formatTranscriptionHeader(`Audio transcript unavailable:${storedName}`, transcription)} ${transcription.error}`);
+				transcriptBlocks.push(
+					`${formatTranscriptionHeader(`Audio transcript unavailable:${storedName}`, transcription)} ${transcription.error}`,
+				);
 			}
 		}
 	}
@@ -1003,7 +1052,14 @@ class DiscordTransport implements GatewayTransport {
 	}
 
 	async sendImmediate(text: string, replyToMessageId?: string): Promise<string> {
-		return sendDiscordMessage(this.account.botToken, this.conversation.channel.id, text, [], undefined, replyToMessageId);
+		return sendDiscordMessage(
+			this.account.botToken,
+			this.conversation.channel.id,
+			text,
+			[],
+			undefined,
+			replyToMessageId,
+		);
 	}
 
 	async send(
@@ -1012,7 +1068,14 @@ class DiscordTransport implements GatewayTransport {
 		signal?: AbortSignal,
 		replyToMessageId?: string,
 	): Promise<string> {
-		const id = await sendDiscordMessage(this.account.botToken, this.conversation.channel.id, text, attachmentPaths, signal, replyToMessageId);
+		const id = await sendDiscordMessage(
+			this.account.botToken,
+			this.conversation.channel.id,
+			text,
+			attachmentPaths,
+			signal,
+			replyToMessageId,
+		);
 		void this.voiceController?.speakReply(this.conversation.channel.id, text, attachmentPaths).catch(() => undefined);
 		return id;
 	}
@@ -1099,7 +1162,9 @@ async function startDiscordAccountAdapter(
 		await endpoint.onCaughtUp();
 		return endpoint;
 	};
-	const resolveInteractionEndpoint = async (interaction: Interaction): Promise<GatewayConversationEndpoint | undefined> => {
+	const resolveInteractionEndpoint = async (
+		interaction: Interaction,
+	): Promise<GatewayConversationEndpoint | undefined> => {
 		if (!interaction.channelId) return undefined;
 		const configured = byChannelId.get(interaction.channelId);
 		if (configured) return configured;
@@ -1190,7 +1255,10 @@ async function startDiscordAccountAdapter(
 				chatName: endpoint.conversation.channel.name,
 				chatType: "channel",
 				userId: interaction.user.id,
-				userName: interaction.member && "displayName" in interaction.member ? interaction.member.displayName : interaction.user.username,
+				userName:
+					interaction.member && "displayName" in interaction.member
+						? interaction.member.displayName
+						: interaction.user.username,
 				roleIds: getDiscordInteractionRoleIds(interaction),
 				text: `/${command}`,
 				mentionedBot: true,
@@ -1207,7 +1275,8 @@ async function startDiscordAccountAdapter(
 	client.on(Events.Error, (error) => {
 		health.errorCount++;
 		health.lastError = error instanceof Error ? error.message : String(error);
-		for (const endpoint of activeEndpoints) void endpoint.onError(error instanceof Error ? error : new Error(String(error)));
+		for (const endpoint of activeEndpoints)
+			void endpoint.onError(error instanceof Error ? error : new Error(String(error)));
 	});
 	client.on(Events.Invalidated, () => {
 		health.connected = false;
@@ -1238,7 +1307,11 @@ function groupEndpointsByAccount(endpoints: GatewayConversationEndpoint[]): Map<
 	return grouped;
 }
 
-function assertSameAccount(accountId: string, account: ChatAccountConfig, endpoints: GatewayConversationEndpoint[]): void {
+function assertSameAccount(
+	accountId: string,
+	account: ChatAccountConfig,
+	endpoints: GatewayConversationEndpoint[],
+): void {
 	for (const endpoint of endpoints) {
 		if (endpoint.conversation.account !== account) {
 			throw new Error(`Gateway account grouping mismatch for ${accountId}`);
@@ -1273,7 +1346,14 @@ export function registerBuiltInGatewayPlatforms(
 			},
 			sendMessage: async (account, channelId, text, options) => {
 				assertTelegramAccount(account);
-				return sendTelegramMessage(account, channelId, text, options?.attachmentPaths, options?.signal, options?.replyToMessageId);
+				return sendTelegramMessage(
+					account,
+					channelId,
+					text,
+					options?.attachmentPaths,
+					options?.signal,
+					options?.replyToMessageId,
+				);
 			},
 		});
 	}
@@ -1296,7 +1376,14 @@ export function registerBuiltInGatewayPlatforms(
 			},
 			sendMessage: async (account, channelId, text, options) => {
 				assertDiscordAccount(account);
-				return sendDiscordMessage(account.botToken, channelId, text, options?.attachmentPaths, options?.signal, options?.replyToMessageId);
+				return sendDiscordMessage(
+					account.botToken,
+					channelId,
+					text,
+					options?.attachmentPaths,
+					options?.signal,
+					options?.replyToMessageId,
+				);
 			},
 		});
 	}

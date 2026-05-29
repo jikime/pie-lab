@@ -122,7 +122,9 @@ export async function loadChatConfig(): Promise<ChatConfig> {
 export function listConfiguredConversations(config: ChatConfig): ResolvedConversation[] {
 	const conversations: ResolvedConversation[] = [];
 	for (const [accountId, account] of Object.entries(config.accounts) as Array<[string, ChatAccountConfig]>) {
-		for (const [channelKey, channel] of Object.entries(account.channels ?? {}) as Array<[string, ConfiguredChannel]>) {
+		for (const [channelKey, channel] of Object.entries(account.channels ?? {}) as Array<
+			[string, ConfiguredChannel]
+		>) {
 			conversations.push(buildResolvedConversation(config, accountId, channelKey, channel));
 		}
 	}

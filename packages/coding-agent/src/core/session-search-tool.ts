@@ -7,9 +7,9 @@
  *   3. Source filter — { query, sources } → limit to tui / gateway-reasoning / gateway-chat
  */
 
-import type { ToolDefinition } from "./extensions/types.js";
-import { getSessionDB, ensureSessionDBIndexed } from "./session-db.js";
 import { getAgentDir } from "../config.js";
+import type { ToolDefinition } from "./extensions/types.js";
+import { ensureSessionDBIndexed, getSessionDB } from "./session-db.js";
 
 const TOOL_NAME = "session_search";
 
@@ -18,17 +18,22 @@ function formatHits(hits: ReturnType<ReturnType<typeof getSessionDB>["search"]>)
 	return hits
 		.map((h, i) => {
 			const label = h.name ?? h.channelKey ?? h.sessionId.slice(0, 16);
-			const sourceBadge = h.source === "gateway-chat" ? `[${h.service ?? "chat"}]` : h.source === "gateway-reasoning" ? "[reasoning]" : "[tui]";
+			const sourceBadge =
+				h.source === "gateway-chat"
+					? `[${h.service ?? "chat"}]`
+					: h.source === "gateway-reasoning"
+						? "[reasoning]"
+						: "[tui]";
 			const lines: string[] = [
 				`### ${i + 1}. ${sourceBadge} ${label}  (${h.modifiedAt?.slice(0, 10) ?? "?"})`,
 				`> …${h.snippet}…`,
 			];
-			if (h.bookendStart.length > 0) lines.push("**Start:**\n" + h.bookendStart.map((s) => `  ${s}`).join("\n"));
+			if (h.bookendStart.length > 0) lines.push(`**Start:**\n${h.bookendStart.map((s) => `  ${s}`).join("\n")}`);
 			if (h.window.length > 0) {
 				lines.push("**Context window:**");
 				for (const m of h.window) lines.push(`  [${m.role}] ${m.speaker}: ${m.text.slice(0, 200)}`);
 			}
-			if (h.bookendEnd.length > 0) lines.push("**End:**\n" + h.bookendEnd.map((s) => `  ${s}`).join("\n"));
+			if (h.bookendEnd.length > 0) lines.push(`**End:**\n${h.bookendEnd.map((s) => `  ${s}`).join("\n")}`);
 			lines.push(`sessionId: \`${h.sessionId}\``);
 			return lines.join("\n");
 		})
@@ -41,7 +46,11 @@ function formatBrowse(items: ReturnType<ReturnType<typeof getSessionDB>["browse"
 		.map((item) => {
 			const label = item.name ?? item.channelKey ?? item.sessionId.slice(0, 16);
 			const badge =
-				item.source === "gateway-chat" ? `[${item.service ?? "chat"}]` : item.source === "gateway-reasoning" ? "[reasoning]" : "[tui]";
+				item.source === "gateway-chat"
+					? `[${item.service ?? "chat"}]`
+					: item.source === "gateway-reasoning"
+						? "[reasoning]"
+						: "[tui]";
 			return `${badge} **${label}** (${item.modifiedAt?.slice(0, 10) ?? "?"}, ${item.messageCount} msgs)\n  ${item.preview}`;
 		})
 		.join("\n\n");

@@ -19,14 +19,14 @@
  *   Server → Client: {"type":"error","message":"..."}
  */
 
-import { createServer } from "node:net";
-import type { Server } from "node:net";
-import { mkdir, unlink } from "node:fs/promises";
 import { existsSync } from "node:fs";
+import { mkdir, unlink } from "node:fs/promises";
+import type { Server } from "node:net";
+import { createServer } from "node:net";
 import { join } from "node:path";
-import type { GatewayTransport, GatewayConversationEndpoint } from "./adapters.js";
+import type { GatewayConversationEndpoint, GatewayTransport } from "./adapters.js";
+import type { ChatAccountConfig, ConfiguredChannel } from "./chat/core/config-types.js";
 import type { InboundMessageInput, ResolvedConversation } from "./chat/types.js";
-import type { ConfiguredChannel, ChatAccountConfig } from "./chat/core/config-types.js";
 
 export const WEB_IPC_SOCKET_NAME = "gateway-web.sock";
 
@@ -122,7 +122,12 @@ class WebIPCTransport implements GatewayTransport {
 		return "";
 	}
 
-	async send(text: string, _attachmentPaths?: string[], _signal?: AbortSignal, _replyToMessageId?: string): Promise<string> {
+	async send(
+		text: string,
+		_attachmentPaths?: string[],
+		_signal?: AbortSignal,
+		_replyToMessageId?: string,
+	): Promise<string> {
 		this.doneSent = true;
 		this.write({ type: "done", text });
 		return "";
@@ -141,7 +146,9 @@ export interface WebIPCLogger {
  * Factory provided by runner.ts to create per-conversation workers without
  * introducing a circular dependency (web-ipc-server ↔ runner).
  */
-export type WebWorkerFactory = (conversationId: string) => Promise<GatewayConversationEndpoint & { disconnect(): Promise<void> }>;
+export type WebWorkerFactory = (
+	conversationId: string,
+) => Promise<GatewayConversationEndpoint & { disconnect(): Promise<void> }>;
 
 export interface WebIPCServerOptions {
 	agentDir: string;
@@ -187,7 +194,7 @@ export class WebIPCServer {
 			const writeLine = (line: string) => {
 				if (!socket.writable) return;
 				try {
-					socket.write(line + "\n");
+					socket.write(`${line}\n`);
 				} catch {
 					// ignore
 				}

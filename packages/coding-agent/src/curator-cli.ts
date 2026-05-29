@@ -1,12 +1,8 @@
 import chalk from "chalk";
 import { APP_NAME, getAgentDir } from "./config.ts";
-import {
-	type CuratorConsolidateResult,
-	SkillCurator,
-	SkillManager,
-} from "./core/learning/index.ts";
-import { SettingsManager } from "./core/settings-manager.ts";
+import { type CuratorConsolidateResult, SkillCurator, SkillManager } from "./core/learning/index.ts";
 import { createAgentSession } from "./core/sdk.ts";
+import { SettingsManager } from "./core/settings-manager.ts";
 
 export async function handleCuratorCommand(args: string[]): Promise<boolean> {
 	if (args[0] !== "curator") return false;
@@ -40,7 +36,9 @@ export async function handleCuratorCommand(args: string[]): Promise<boolean> {
 				printResult({ status, state }, json, ({ status, state }) => {
 					const lines = [formatStatus(status)];
 					if (state.lastConsolidatedAt) {
-						lines.push(`\nLast consolidation: ${new Date(state.lastConsolidatedAt).toLocaleString()} (run #${state.consolidationCount})`);
+						lines.push(
+							`\nLast consolidation: ${new Date(state.lastConsolidatedAt).toLocaleString()} (run #${state.consolidationCount})`,
+						);
 						if (state.lastConsolidationSummary) {
 							lines.push(`Summary: ${state.lastConsolidationSummary}`);
 						}

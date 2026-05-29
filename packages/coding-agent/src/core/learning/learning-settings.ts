@@ -85,7 +85,9 @@ export function normalizeLearningSettings(input: unknown): LearningSettings {
 				DEFAULT_LEARNING_SETTINGS.memory.reviewIntervalTurns,
 			),
 			reviewIntervalMinutes:
-				typeof memory.reviewIntervalMinutes === "number" && Number.isFinite(memory.reviewIntervalMinutes) && memory.reviewIntervalMinutes >= 0
+				typeof memory.reviewIntervalMinutes === "number" &&
+				Number.isFinite(memory.reviewIntervalMinutes) &&
+				memory.reviewIntervalMinutes >= 0
 					? Math.floor(memory.reviewIntervalMinutes)
 					: DEFAULT_LEARNING_SETTINGS.memory.reviewIntervalMinutes,
 		},

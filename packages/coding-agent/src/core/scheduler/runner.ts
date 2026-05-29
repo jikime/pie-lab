@@ -242,15 +242,14 @@ async function finalizeRun(
 	},
 ): Promise<CronRunResult> {
 	const outputPath = await store.saveOutput(job.id, result.output, result.ranAt);
-	const delivery =
-		result.skipDelivery
-			? { delivered: 0, targets: [] as string[], errors: [] as string[] }
-			: await deliverCronResult({
-					agentDir: options.agentDir,
-					deliver: job.deliver,
-					origin: job.origin,
-					content: result.finalResponse || result.error || result.output,
-				});
+	const delivery = result.skipDelivery
+		? { delivered: 0, targets: [] as string[], errors: [] as string[] }
+		: await deliverCronResult({
+				agentDir: options.agentDir,
+				deliver: job.deliver,
+				origin: job.origin,
+				content: result.finalResponse || result.error || result.output,
+			});
 	const deliveryError = delivery.errors.length > 0 ? delivery.errors.join("; ") : undefined;
 	return {
 		jobId: job.id,

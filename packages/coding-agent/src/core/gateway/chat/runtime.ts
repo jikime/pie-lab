@@ -1,16 +1,5 @@
 import { randomUUID } from "node:crypto";
-
-import type {
-	ChatLogRecord,
-	CheckpointRecord,
-	ConversationStatus,
-	DispatchableJob,
-	InboundMessageInput,
-	InboundMessageRecord,
-	JobQueuedRecord,
-	PendingJob,
-	ResolvedConversation,
-} from "./types.js";
+import { buildGatewaySessionKey, buildGatewaySessionSource } from "../session.js";
 import {
 	acquireConversationLock,
 	appendConversationRecord,
@@ -22,7 +11,17 @@ import {
 	readConversationLog,
 	releaseConversationLock,
 } from "./log.js";
-import { buildGatewaySessionKey, buildGatewaySessionSource } from "../session.js";
+import type {
+	ChatLogRecord,
+	CheckpointRecord,
+	ConversationStatus,
+	DispatchableJob,
+	InboundMessageInput,
+	InboundMessageRecord,
+	JobQueuedRecord,
+	PendingJob,
+	ResolvedConversation,
+} from "./types.js";
 
 function isDMConversation(conversation: ResolvedConversation): boolean {
 	return conversation.channel.dm ?? false;
@@ -337,7 +336,11 @@ export class ConversationRuntime {
 	}
 
 	async appendError(message: string): Promise<void> {
-		await this.appendRecord({ type: "error", ...buildBaseRecordFields(this.conversation, this.nextRecordId), message });
+		await this.appendRecord({
+			type: "error",
+			...buildBaseRecordFields(this.conversation, this.nextRecordId),
+			message,
+		});
 	}
 
 	findHistory(options: { query?: string; after?: string; before?: string; limit?: number }): Array<ChatLogRecord> {

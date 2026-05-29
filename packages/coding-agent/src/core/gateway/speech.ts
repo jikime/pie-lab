@@ -3,13 +3,13 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { UsageStore } from "@pie-lab/storage";
 import { getAgentDir } from "../../config.js";
+import { resolveGatewayOpenAiAudioCredentials } from "./audio-credentials.js";
 import {
 	detectWavDurationSeconds,
+	type GatewayAudioUsageContext,
 	recordGatewayAudioUsage,
 	textLengthForAudioUsage,
-	type GatewayAudioUsageContext,
 } from "./audio-usage.js";
-import { resolveGatewayOpenAiAudioCredentials } from "./audio-credentials.js";
 
 export type GatewaySpeechProvider = "local" | "openai" | "custom";
 
@@ -143,7 +143,8 @@ async function readSpeechResponse(
 			error?: { message?: string };
 			message?: string;
 		};
-		if (!response.ok) throw new Error(body.error?.message || body.message || `TTS failed with HTTP ${response.status}`);
+		if (!response.ok)
+			throw new Error(body.error?.message || body.message || `TTS failed with HTTP ${response.status}`);
 		const audio = body.audio || body.data || body.b64_json;
 		if (!audio) throw new Error("TTS response did not include base64 audio.");
 		return { data: new Uint8Array(Buffer.from(audio, "base64")), format: body.format || fallbackFormat };

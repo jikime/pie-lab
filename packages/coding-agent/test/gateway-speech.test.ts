@@ -114,7 +114,9 @@ describe("gateway speech synthesis", () => {
 	it("stores raw audio bytes returned by a TTS endpoint", async () => {
 		const audio = Buffer.from("raw-audio");
 		const outputDir = tempDir();
-		const fetchMock = vi.fn(async () => new Response(audio, { status: 200, headers: { "content-type": "audio/wav" } }));
+		const fetchMock = vi.fn(
+			async () => new Response(audio, { status: 200, headers: { "content-type": "audio/wav" } }),
+		);
 
 		const result = await synthesizeGatewaySpeech({
 			text: "hello",

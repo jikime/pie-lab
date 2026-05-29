@@ -561,9 +561,7 @@ export class AgentSession {
 			// Periodic LLM-driven consolidation (checks interval internally — usually no-op)
 			const streamFn = this.agent.streamFn?.bind(this.agent);
 			if (streamFn && this._skillCurator) {
-				void this._skillCurator
-					.maybeConsolidate(streamFn, { onLog: () => undefined })
-					.catch(() => undefined);
+				void this._skillCurator.maybeConsolidate(streamFn, { onLog: () => undefined }).catch(() => undefined);
 			}
 		}
 	};

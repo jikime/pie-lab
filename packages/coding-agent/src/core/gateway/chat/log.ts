@@ -1,6 +1,6 @@
 import { appendFile, copyFile, lstat, mkdir, open, readFile, unlink, writeFile } from "node:fs/promises";
 import { basename, dirname, extname, join, relative, resolve } from "node:path";
-
+import type { GatewaySessionSource } from "../session.js";
 import type {
 	AttachmentInput,
 	AttachmentKind,
@@ -9,7 +9,6 @@ import type {
 	ResolvedConversation,
 	StoredAttachment,
 } from "./types.js";
-import type { GatewaySessionSource } from "../session.js";
 
 function guessAttachmentKind(path: string): AttachmentKind {
 	const ext = extname(path).toLowerCase();
@@ -196,5 +195,10 @@ export function nextMessageId(service: string): string {
 export function normalizeInboundMessage(input: InboundMessageInput, botName: string): InboundMessageInput {
 	const text = input.text.trim();
 	const mentionPattern = new RegExp(`@${botName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
-	return { ...input, text, mentionedBot: input.mentionedBot ?? mentionPattern.test(text), isBot: input.isBot ?? false };
+	return {
+		...input,
+		text,
+		mentionedBot: input.mentionedBot ?? mentionPattern.test(text),
+		isBot: input.isBot ?? false,
+	};
 }

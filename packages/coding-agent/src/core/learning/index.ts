@@ -18,8 +18,8 @@ export {
 	type CuratorConsolidateOptions,
 	type CuratorConsolidateResult,
 	type CuratorRunResult,
-	type PruningEntry,
 	DEFAULT_CURATOR_POLICY,
+	type PruningEntry,
 	SkillCurator,
 } from "./skill-curator.ts";
 export { SkillManager, type SkillSummary } from "./skill-manager.ts";

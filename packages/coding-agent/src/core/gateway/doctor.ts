@@ -1,12 +1,12 @@
+import { spawnSync } from "node:child_process";
 import { access, readFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import { spawnSync } from "node:child_process";
 import { getAgentDir } from "../../config.js";
 import { SettingsManager } from "../settings-manager.js";
 import { describeGatewayOpenAiAudioCredentials, resolveGatewayOpenAiAudioCredentials } from "./audio-credentials.js";
 import { CHAT_CONFIG_PATH, listConfiguredConversations, loadChatConfig } from "./chat/config.js";
 import type { ChatAccountConfig, DiscordAccountConfig, TelegramAccountConfig } from "./chat/core/config-types.js";
-import { readGatewayStatus, type GatewayStatus } from "./runner.js";
+import { type GatewayStatus, readGatewayStatus } from "./runner.js";
 import { getGatewayTtsMaxChars, getGatewayTtsOutputDir } from "./speech.js";
 import { getGatewaySttCacheDir, getGatewaySttMaxBytes } from "./transcription.js";
 
@@ -87,10 +87,17 @@ async function checkTelegramAccount(accountId: string, account: TelegramAccountC
 			checks.push(
 				response.ok && data.ok
 					? check("ok", `telegram:${accountId}/${channelKey}`, "Telegram chat is reachable.")
-					: check("fail", `telegram:${accountId}/${channelKey}`, "Telegram chat is not reachable.", data.description),
+					: check(
+							"fail",
+							`telegram:${accountId}/${channelKey}`,
+							"Telegram chat is not reachable.",
+							data.description,
+						),
 			);
 		} catch (error) {
-			checks.push(check("fail", `telegram:${accountId}/${channelKey}`, "Could not check Telegram chat.", String(error)));
+			checks.push(
+				check("fail", `telegram:${accountId}/${channelKey}`, "Could not check Telegram chat.", String(error)),
+			);
 		}
 	}
 	return checks;
@@ -108,16 +115,27 @@ async function checkDiscordAccount(accountId: string, account: DiscordAccountCon
 		if (!response.ok || !data.id) {
 			checks.push(check("fail", `discord:${accountId}`, "Discord bot token is not valid.", data.message));
 		} else {
-			checks.push(check("ok", `discord:${accountId}`, `Discord bot token is valid for ${data.username ?? data.id}.`));
+			checks.push(
+				check("ok", `discord:${accountId}`, `Discord bot token is valid for ${data.username ?? data.id}.`),
+			);
 		}
 	} catch (error) {
 		checks.push(check("fail", `discord:${accountId}`, "Could not reach Discord API.", String(error)));
 	}
 
 	const applicationId = account.applicationId || account.botUserId;
-	if (!applicationId?.trim()) checks.push(check("warn", `discord:${accountId}`, "Missing Discord application id; slash command sync will be skipped."));
+	if (!applicationId?.trim())
+		checks.push(
+			check("warn", `discord:${accountId}`, "Missing Discord application id; slash command sync will be skipped."),
+		);
 	if (!account.serverId?.trim()) {
-		checks.push(check("ok", `discord:${accountId}`, "No Discord server id configured; the bot will listen in accessible guilds/DMs and use global slash command sync when possible."));
+		checks.push(
+			check(
+				"ok",
+				`discord:${accountId}`,
+				"No Discord server id configured; the bot will listen in accessible guilds/DMs and use global slash command sync when possible.",
+			),
+		);
 	}
 
 	if (account.serverId?.trim()) {
@@ -152,7 +170,9 @@ async function checkDiscordAccount(accountId: string, account: DiscordAccountCon
 						),
 			);
 		} catch (error) {
-			checks.push(check("warn", `discord:${accountId}`, "Could not check Discord slash command access.", String(error)));
+			checks.push(
+				check("warn", `discord:${accountId}`, "Could not check Discord slash command access.", String(error)),
+			);
 		}
 	}
 
@@ -170,7 +190,9 @@ async function checkDiscordAccount(accountId: string, account: DiscordAccountCon
 					: check("fail", `discord:${accountId}/${channelKey}`, "Discord channel is not reachable.", data.message),
 			);
 		} catch (error) {
-			checks.push(check("fail", `discord:${accountId}/${channelKey}`, "Could not check Discord channel.", String(error)));
+			checks.push(
+				check("fail", `discord:${accountId}/${channelKey}`, "Could not check Discord channel.", String(error)),
+			);
 		}
 	}
 	if (account.homeChannelId?.trim()) {
@@ -183,7 +205,9 @@ async function checkDiscordAccount(accountId: string, account: DiscordAccountCon
 					: check("warn", `discord:${accountId}/home`, "Discord home channel is not reachable.", data.message),
 			);
 		} catch (error) {
-			checks.push(check("warn", `discord:${accountId}/home`, "Could not check Discord home channel.", String(error)));
+			checks.push(
+				check("warn", `discord:${accountId}/home`, "Could not check Discord home channel.", String(error)),
+			);
 		}
 	}
 	return checks;
@@ -206,7 +230,9 @@ async function checkStt(env: NodeJS.ProcessEnv = process.env): Promise<GatewayDo
 		check(
 			maxBytes > 0 ? "ok" : "warn",
 			"stt-limit",
-			maxBytes > 0 ? `Gateway STT max file size is ${maxBytes} bytes.` : "Gateway STT max file size guard is disabled.",
+			maxBytes > 0
+				? `Gateway STT max file size is ${maxBytes} bytes.`
+				: "Gateway STT max file size guard is disabled.",
 		),
 	);
 	if (env.PIE_GATEWAY_STT === "0" || env.PIE_GATEWAY_STT?.toLowerCase() === "false") {
@@ -219,7 +245,11 @@ async function checkStt(env: NodeJS.ProcessEnv = process.env): Promise<GatewayDo
 	if (openAiAudio) {
 		return [
 			...checks,
-			check("ok", "stt", `${describeGatewayOpenAiAudioCredentials(openAiAudio)} is present for direct OpenAI transcription fallback.`),
+			check(
+				"ok",
+				"stt",
+				`${describeGatewayOpenAiAudioCredentials(openAiAudio)} is present for direct OpenAI transcription fallback.`,
+			),
 		];
 	}
 	const host = env.PIE_LAB_SERVER_HOST || env.PIE_ADK_SERVER_HOST || "127.0.0.1";
@@ -228,7 +258,10 @@ async function checkStt(env: NodeJS.ProcessEnv = process.env): Promise<GatewayDo
 	try {
 		const response = await fetch(endpoint);
 		if (!response.ok) {
-			return [...checks, check("warn", "stt", "Local Pie server media routes are not reachable.", `HTTP ${response.status}`)];
+			return [
+				...checks,
+				check("warn", "stt", "Local Pie server media routes are not reachable.", `HTTP ${response.status}`),
+			];
 		}
 		return [...checks, check("ok", "stt", "Local Pie server is reachable for auto:stt routing.")];
 	} catch {
@@ -252,7 +285,9 @@ async function checkTts(env: NodeJS.ProcessEnv = process.env): Promise<GatewayDo
 		check(
 			maxChars > 0 ? "ok" : "warn",
 			"tts-limit",
-			maxChars > 0 ? `Gateway TTS max text length is ${maxChars} chars.` : "Gateway TTS text length guard is disabled.",
+			maxChars > 0
+				? `Gateway TTS max text length is ${maxChars} chars.`
+				: "Gateway TTS text length guard is disabled.",
 		),
 	);
 	if (env.PIE_GATEWAY_TTS === "0" || env.PIE_GATEWAY_TTS?.toLowerCase() === "false") {
@@ -265,7 +300,11 @@ async function checkTts(env: NodeJS.ProcessEnv = process.env): Promise<GatewayDo
 	if (openAiAudio) {
 		return [
 			...checks,
-			check("ok", "tts", `${describeGatewayOpenAiAudioCredentials(openAiAudio)} is present for direct OpenAI speech fallback.`),
+			check(
+				"ok",
+				"tts",
+				`${describeGatewayOpenAiAudioCredentials(openAiAudio)} is present for direct OpenAI speech fallback.`,
+			),
 		];
 	}
 	const host = env.PIE_LAB_SERVER_HOST || env.PIE_ADK_SERVER_HOST || "127.0.0.1";
@@ -274,7 +313,10 @@ async function checkTts(env: NodeJS.ProcessEnv = process.env): Promise<GatewayDo
 	try {
 		const response = await fetch(endpoint);
 		if (!response.ok) {
-			return [...checks, check("warn", "tts", "Local Pie server media routes are not reachable.", `HTTP ${response.status}`)];
+			return [
+				...checks,
+				check("warn", "tts", "Local Pie server media routes are not reachable.", `HTTP ${response.status}`),
+			];
 		}
 		return [...checks, check("ok", "tts", "Local Pie server is reachable for auto:tts routing.")];
 	} catch {
@@ -323,7 +365,9 @@ async function checkDiscordVoiceRuntime(): Promise<GatewayDoctorCheck[]> {
 	return checks;
 }
 
-export async function runGatewayDoctor(options: { agentDir?: string; cwd?: string } = {}): Promise<GatewayDoctorReport> {
+export async function runGatewayDoctor(
+	options: { agentDir?: string; cwd?: string } = {},
+): Promise<GatewayDoctorReport> {
 	const agentDir = options.agentDir ?? getAgentDir();
 	const cwd = options.cwd ?? process.cwd();
 	const checks: GatewayDoctorCheck[] = [];
@@ -354,8 +398,16 @@ export async function runGatewayDoctor(options: { agentDir?: string; cwd?: strin
 		const accountCount = Object.keys(config.accounts ?? {}).length;
 		checks.push(
 			accountCount > 0
-				? check("ok", "config", `${accountCount} gateway account(s) configured. Discord channels can be auto-discovered at runtime.`)
-				: check("warn", "config", "No gateway accounts or channels are configured. Run `pie gateway setup` or `/chat-config`."),
+				? check(
+						"ok",
+						"config",
+						`${accountCount} gateway account(s) configured. Discord channels can be auto-discovered at runtime.`,
+					)
+				: check(
+						"warn",
+						"config",
+						"No gateway accounts or channels are configured. Run `pie gateway setup` or `/chat-config`.",
+					),
 		);
 	} else {
 		checks.push(check("ok", "config", `${conversations.length} gateway channel(s) configured.`));
@@ -398,8 +450,10 @@ export async function runGatewayDoctor(options: { agentDir?: string; cwd?: strin
 		else if (isDiscordAccount(account)) {
 			checks.push(...(await checkDiscordAccount(accountId, account)));
 			checks.push(...(await checkDiscordVoiceRuntime()));
-		}
-		else checks.push(check("warn", `platform:${accountId}`, `Unsupported gateway platform in config: ${account.service}`));
+		} else
+			checks.push(
+				check("warn", `platform:${accountId}`, `Unsupported gateway platform in config: ${account.service}`),
+			);
 	}
 
 	checks.push(...(await checkStt()));

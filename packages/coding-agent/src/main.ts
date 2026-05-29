@@ -437,7 +437,8 @@ export interface MainOptions {
 
 export async function main(args: string[], options?: MainOptions) {
 	resetTimings();
-	const offlineMode = args.includes("--offline") || isTruthyEnvFlag(process.env[ENV_OFFLINE] ?? process.env.PI_OFFLINE);
+	const offlineMode =
+		args.includes("--offline") || isTruthyEnvFlag(process.env[ENV_OFFLINE] ?? process.env.PI_OFFLINE);
 	if (offlineMode) {
 		process.env[ENV_OFFLINE] = "1";
 		process.env[ENV_SKIP_VERSION_CHECK] = "1";

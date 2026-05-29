@@ -1,9 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { describe, expect, it } from "vitest";
+import { SkillCurator } from "../src/core/learning/skill-curator.ts";
 import { SkillManager } from "../src/core/learning/skill-manager.ts";
-import { SkillCurator, DEFAULT_CURATOR_POLICY } from "../src/core/learning/skill-curator.ts";
 
 function makeTempDir(prefix: string): string {
 	const dir = join(tmpdir(), `${prefix}-${Date.now()}`);
@@ -258,14 +258,21 @@ describe("SkillCurator.maybeConsolidate", () => {
 			skillManager.create(`skill-${i}`, `---\nname: skill-${i}\ndescription: Skill ${i}\n---\n# Skill ${i}`);
 		}
 
-		const curator = new SkillCurator({ skillManager, policy: { consolidateIntervalDays: 7, backupBeforeRun: false } });
+		const curator = new SkillCurator({
+			skillManager,
+			policy: { consolidateIntervalDays: 7, backupBeforeRun: false },
+		});
 
 		// Manually set state with recent consolidation (just now)
 		const stateFile = join(agentDir, "skills", ".curator_state");
 		mkdirSync(join(agentDir, "skills"), { recursive: true });
 		writeFileSync(
 			stateFile,
-			JSON.stringify({ lastConsolidatedAt: new Date().toISOString(), consolidationCount: 1, lastConsolidationSummary: "" }),
+			JSON.stringify({
+				lastConsolidatedAt: new Date().toISOString(),
+				consolidationCount: 1,
+				lastConsolidationSummary: "",
+			}),
 			"utf-8",
 		);
 

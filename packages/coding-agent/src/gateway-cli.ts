@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
-import { access, mkdir, readdir, rm, watch, writeFile } from "node:fs/promises";
 import { existsSync, statSync } from "node:fs";
+import { access, mkdir, readdir, rm, watch, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
@@ -13,8 +13,6 @@ import {
 	OPENAI_AUDIO_AUTH_PROVIDER,
 	resolveGatewayOpenAiAudioCredentials,
 } from "./core/gateway/audio-credentials.ts";
-import { runGatewayDoctor, type GatewayDoctorCheck } from "./core/gateway/doctor.ts";
-import { getGatewayDir, readGatewayPid, readGatewayStatus, runGateway } from "./core/gateway/runner.ts";
 import {
 	CHAT_CONFIG_PATH,
 	listConfiguredConversations,
@@ -22,7 +20,6 @@ import {
 	resolveConversation,
 	saveChatConfig,
 } from "./core/gateway/chat/config.js";
-import { readConversationLog } from "./core/gateway/chat/log.js";
 import type {
 	ChatConfig,
 	ConfiguredChannel,
@@ -30,6 +27,8 @@ import type {
 	TelegramAccountConfig,
 } from "./core/gateway/chat/core/config-types.js";
 import type { ChatLogRecord } from "./core/gateway/chat/core/runtime-types.js";
+import { type GatewayDoctorCheck, runGatewayDoctor } from "./core/gateway/doctor.ts";
+import { getGatewayDir, readGatewayPid, readGatewayStatus, runGateway } from "./core/gateway/runner.ts";
 
 const SERVICE_LABEL = "ai.pielab.gateway";
 
@@ -220,7 +219,10 @@ async function setupDiscord(config: ChatConfig): Promise<void> {
 	const token = await promptSecret("Discord bot token");
 	const me = await fetchDiscordMe(token);
 	const accountId = resolveDiscordAccountId(config, me);
-	const previous = config.accounts[accountId]?.service === "discord" ? (config.accounts[accountId] as DiscordAccountConfig) : undefined;
+	const previous =
+		config.accounts[accountId]?.service === "discord"
+			? (config.accounts[accountId] as DiscordAccountConfig)
+			: undefined;
 	const name = previous?.name || me.global_name || me.username || "discord";
 	const account: DiscordAccountConfig = {
 		service: "discord",
@@ -242,7 +244,9 @@ async function setupDiscord(config: ChatConfig): Promise<void> {
 	config.accounts[accountId] = account;
 	await saveChatConfig(config);
 	console.log(chalk.green(`Saved Discord account ${accountId} to ${CHAT_CONFIG_PATH}`));
-	console.log(chalk.gray("Discord channels will be auto-discovered when users mention the bot, DM it, or run /pie commands."));
+	console.log(
+		chalk.gray("Discord channels will be auto-discovered when users mention the bot, DM it, or run /pie commands."),
+	);
 	console.log(chalk.gray("Advanced access/channel limits can be edited later in the chat config if needed."));
 }
 
@@ -258,7 +262,9 @@ async function saveOpenAiAudioKey(): Promise<void> {
 	}
 	audioAuthStorage().set(OPENAI_AUDIO_AUTH_PROVIDER, { type: "api_key", key: apiKey });
 	console.log(chalk.green(`Saved gateway OpenAI audio key to ${join(getAgentDir(), "auth.json")}`));
-	console.log(chalk.gray("This key is used for STT/TTS before the general OPENAI_API_KEY or OpenAI provider connection."));
+	console.log(
+		chalk.gray("This key is used for STT/TTS before the general OPENAI_API_KEY or OpenAI provider connection."),
+	);
 }
 
 async function removeOpenAiAudioKey(): Promise<void> {
@@ -274,10 +280,14 @@ async function removeOpenAiAudioKey(): Promise<void> {
 async function printAudioStatus(): Promise<void> {
 	const credentials = await resolveGatewayOpenAiAudioCredentials({ agentDir: getAgentDir() });
 	if (credentials) {
-		console.log(chalk.green(`OpenAI audio credential configured via ${describeGatewayOpenAiAudioCredentials(credentials)}.`));
+		console.log(
+			chalk.green(`OpenAI audio credential configured via ${describeGatewayOpenAiAudioCredentials(credentials)}.`),
+		);
 	} else {
 		console.log(chalk.yellow("No OpenAI audio credential is configured."));
-		console.log(`Run ${chalk.cyan("pie gateway audio set")} or configure an OpenAI provider connection with ${chalk.cyan("/login")}.`);
+		console.log(
+			`Run ${chalk.cyan("pie gateway audio set")} or configure an OpenAI provider connection with ${chalk.cyan("/login")}.`,
+		);
 	}
 }
 
@@ -329,7 +339,9 @@ async function setupGateway(): Promise<void> {
 
 async function printStatus(): Promise<void> {
 	const status = await readGatewayStatus();
-	console.log(`${status.running ? chalk.green("running") : chalk.yellow("stopped")} ${status.pid ? `pid=${status.pid}` : ""}`);
+	console.log(
+		`${status.running ? chalk.green("running") : chalk.yellow("stopped")} ${status.pid ? `pid=${status.pid}` : ""}`,
+	);
 	console.log(`pid file: ${status.pidPath}`);
 	console.log(`status file: ${status.statusPath}`);
 	if (status.health) {
@@ -346,7 +358,9 @@ async function printStatus(): Promise<void> {
 		}
 	}
 	if (status.conversations.length === 0) {
-		console.log(`No static channels. Discord channels can be auto-discovered at runtime. Config: ${CHAT_CONFIG_PATH}`);
+		console.log(
+			`No static channels. Discord channels can be auto-discovered at runtime. Config: ${CHAT_CONFIG_PATH}`,
+		);
 		return;
 	}
 	for (const conversation of status.conversations) {
@@ -473,7 +487,9 @@ async function restartMacService(): Promise<void> {
 	const plistPath = macServicePlistPath();
 	if (!(await pathExists(plistPath))) {
 		console.log(chalk.yellow(`Pie gateway service is not installed yet: ${plistPath}`));
-		console.log(`Run ${chalk.cyan("pie gateway install")} first, or use ${chalk.cyan("pie gateway run")} for foreground testing.`);
+		console.log(
+			`Run ${chalk.cyan("pie gateway install")} first, or use ${chalk.cyan("pie gateway run")} for foreground testing.`,
+		);
 		return;
 	}
 	const domain = `gui/${process.getuid?.() ?? ""}`;
@@ -519,7 +535,9 @@ async function restartLinuxService(): Promise<void> {
 	const unitPath = linuxServiceUnitPath();
 	if (!(await pathExists(unitPath))) {
 		console.log(chalk.yellow(`Pie gateway service is not installed yet: ${unitPath}`));
-		console.log(`Run ${chalk.cyan("pie gateway install")} first, or use ${chalk.cyan("pie gateway run")} for foreground testing.`);
+		console.log(
+			`Run ${chalk.cyan("pie gateway install")} first, or use ${chalk.cyan("pie gateway run")} for foreground testing.`,
+		);
 		return;
 	}
 	runServiceCommand("systemctl", ["--user", "restart", "pie-gateway.service"]);
@@ -704,14 +722,16 @@ async function printHistory(args: string[]): Promise<void> {
 
 	// Parse args: [channelSpec] [--limit N] [--all]
 	const limitIdx = args.findIndex((a) => a === "--limit" || a === "-n");
-	const limit = limitIdx !== -1 ? (parseInt(args[limitIdx + 1] ?? "50", 10) || 50) : 50;
+	const limit = limitIdx !== -1 ? parseInt(args[limitIdx + 1] ?? "50", 10) || 50 : 50;
 	const showAll = args.includes("--all");
-	const channelSpec = args.find((a) => !a.startsWith("-") && isNaN(Number(a)));
+	const channelSpec = args.find((a) => !a.startsWith("-") && Number.isNaN(Number(a)));
 
 	const serviceBadge = (service: string) =>
-		service === "discord" ? chalk.blue(`[discord]`) :
-		service === "web"     ? chalk.magenta(`[web]`)   :
-		chalk.cyan(`[telegram]`);
+		service === "discord"
+			? chalk.blue(`[discord]`)
+			: service === "web"
+				? chalk.magenta(`[web]`)
+				: chalk.cyan(`[telegram]`);
 
 	// No channel specified → list available channels
 	if (!channelSpec) {
@@ -722,7 +742,9 @@ async function printHistory(args: string[]): Promise<void> {
 		}
 		console.log(chalk.bold("\n사용 가능한 채널:\n"));
 		for (const conv of conversations) {
-			console.log(`  ${serviceBadge(conv.service)} ${chalk.white(conv.conversationName)}  ${chalk.dim(conv.channelKey)}`);
+			console.log(
+				`  ${serviceBadge(conv.service)} ${chalk.white(conv.conversationName)}  ${chalk.dim(conv.channelKey)}`,
+			);
 		}
 		for (const wc of webConvs) {
 			console.log(`  ${serviceBadge("web")} ${chalk.white(wc.conversationName)}  ${chalk.dim(wc.channelKey)}`);
@@ -734,9 +756,10 @@ async function printHistory(args: string[]): Promise<void> {
 	}
 
 	// Resolve conversation — check Telegram/Discord first, then web
-	const conv = resolveConversation(config, channelSpec)
-		?? conversations.find((c) => c.conversationName.toLowerCase().includes(channelSpec.toLowerCase()))
-		?? conversations.find((c) => c.channelKey.includes(channelSpec));
+	const conv =
+		resolveConversation(config, channelSpec) ??
+		conversations.find((c) => c.conversationName.toLowerCase().includes(channelSpec.toLowerCase())) ??
+		conversations.find((c) => c.channelKey.includes(channelSpec));
 
 	// Helper: print records from a resolved logPath
 	const printRecords = async (name: string, service: string, logPath: string) => {
@@ -744,7 +767,10 @@ async function printHistory(args: string[]): Promise<void> {
 		try {
 			const { readFile } = await import("node:fs/promises");
 			const text = await readFile(logPath, "utf8");
-			rawRecords = text.split("\n").filter(Boolean).map((l) => JSON.parse(l) as ChatLogRecord);
+			rawRecords = text
+				.split("\n")
+				.filter(Boolean)
+				.map((l) => JSON.parse(l) as ChatLogRecord);
 		} catch {
 			rawRecords = [];
 		}
@@ -754,16 +780,23 @@ async function printHistory(args: string[]): Promise<void> {
 		}
 		const displayable = showAll
 			? rawRecords
-			: rawRecords.filter((r) => r.type === "inbound" || r.type === "outbound" || r.type === "job_failed" || r.type === "error");
+			: rawRecords.filter(
+					(r) => r.type === "inbound" || r.type === "outbound" || r.type === "job_failed" || r.type === "error",
+				);
 		const slice = displayable.slice(-limit);
-		console.log(chalk.bold(`\n${serviceBadge(service)} ${name}`) + chalk.dim(`  (최근 ${slice.length}/${displayable.length}개)`));
+		console.log(
+			chalk.bold(`\n${serviceBadge(service)} ${name}`) +
+				chalk.dim(`  (최근 ${slice.length}/${displayable.length}개)`),
+		);
 		console.log(chalk.dim("─".repeat(70)));
 		for (const record of slice) {
 			const line = renderRecord(record);
 			if (line) console.log(line);
 		}
 		if (displayable.length > limit) {
-			console.log(chalk.dim(`\n(${displayable.length - limit}개 더 있음. --limit ${displayable.length} 로 전체 조회)`));
+			console.log(
+				chalk.dim(`\n(${displayable.length - limit}개 더 있음. --limit ${displayable.length} 로 전체 조회)`),
+			);
 		}
 	};
 
@@ -774,7 +807,8 @@ async function printHistory(args: string[]): Promise<void> {
 
 	// Try web chat channels
 	const webMatch = webConvs.find(
-		(wc) => wc.channelKey === channelSpec ||
+		(wc) =>
+			wc.channelKey === channelSpec ||
 			wc.conversationName.toLowerCase().includes(channelSpec.toLowerCase()) ||
 			wc.channelKey.includes(channelSpec),
 	);
@@ -797,9 +831,11 @@ async function attachGateway(args: string[]): Promise<void> {
 	const channelSpec = args.find((a) => !a.startsWith("-"));
 
 	const serviceBadge = (service: string) =>
-		service === "discord" ? chalk.blue(`[discord]`) :
-		service === "web"     ? chalk.magenta(`[web]`)   :
-		chalk.cyan(`[telegram]`);
+		service === "discord"
+			? chalk.blue(`[discord]`)
+			: service === "web"
+				? chalk.magenta(`[web]`)
+				: chalk.cyan(`[telegram]`);
 
 	// Unified target list: { service, conversationName, logPath }
 	type AttachTarget = { service: string; conversationName: string; logPath: string };
@@ -808,15 +844,17 @@ async function attachGateway(args: string[]): Promise<void> {
 
 	if (channelSpec) {
 		// Match in Telegram/Discord first
-		const conv = resolveConversation(config, channelSpec)
-			?? conversations.find((c) => c.conversationName.toLowerCase().includes(channelSpec.toLowerCase()))
-			?? conversations.find((c) => c.channelKey.includes(channelSpec));
+		const conv =
+			resolveConversation(config, channelSpec) ??
+			conversations.find((c) => c.conversationName.toLowerCase().includes(channelSpec.toLowerCase())) ??
+			conversations.find((c) => c.channelKey.includes(channelSpec));
 		if (conv) {
 			targets = [{ service: conv.service, conversationName: conv.conversationName, logPath: conv.logPath }];
 		} else {
 			// Try web channels
 			const wc = webConvs.find(
-				(w) => w.channelKey === channelSpec ||
+				(w) =>
+					w.channelKey === channelSpec ||
 					w.conversationName.toLowerCase().includes(channelSpec.toLowerCase()) ||
 					w.channelKey.includes(channelSpec),
 			);
@@ -884,7 +922,10 @@ async function attachGateway(args: string[]): Promise<void> {
 		if (currentSize <= lastSize) return lastSize;
 
 		const newContent = content.slice(lastSize);
-		const lines = newContent.split("\n").map((l) => l.trim()).filter(Boolean);
+		const lines = newContent
+			.split("\n")
+			.map((l) => l.trim())
+			.filter(Boolean);
 		for (const line of lines) {
 			try {
 				const record = JSON.parse(line) as ChatLogRecord;

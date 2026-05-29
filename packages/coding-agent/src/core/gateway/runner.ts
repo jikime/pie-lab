@@ -3,27 +3,33 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { createJsonlUsageStore, type UsageStore } from "@pie-lab/storage";
 import { getAgentDir } from "../../config.ts";
+import type { AgentSession } from "../agent-session.ts";
 import {
+	type AgentSessionServices,
 	createAgentSessionFromServices,
 	createAgentSessionServices,
 	getDefaultAgentUsageFilePath,
-	type AgentSessionServices,
 } from "../agent-session-services.ts";
-import type { AgentSession } from "../agent-session.ts";
 import { CronJobStore, tickCronScheduler } from "../scheduler/index.ts";
 import { SessionManager } from "../session-manager.ts";
 import { SettingsManager } from "../settings-manager.ts";
 import {
-	startGatewayChatAdapters,
 	type GatewayAdapter,
 	type GatewayAdapterHealth,
 	type GatewayCheckpoint,
 	type GatewayConversationEndpoint,
 	type GatewayTransport,
+	startGatewayChatAdapters,
 } from "./adapters.ts";
-import { buildResolvedConversation, ensureChatHome, listConfiguredConversations, loadChatConfig, saveChatConfig } from "./chat/config.js";
-import type { ChatAccountConfig, ConfiguredChannel, InboundMessageInput, ResolvedConversation } from "./chat/types.js";
+import {
+	buildResolvedConversation,
+	ensureChatHome,
+	listConfiguredConversations,
+	loadChatConfig,
+	saveChatConfig,
+} from "./chat/config.js";
 import { ConversationRuntime } from "./chat/runtime.js";
+import type { ChatAccountConfig, ConfiguredChannel, InboundMessageInput, ResolvedConversation } from "./chat/types.js";
 import { buildGatewaySystemPrompt } from "./prompt.ts";
 import { buildGatewaySessionKey, buildGatewaySessionSource } from "./session.ts";
 import { createGatewayChatTools } from "./tools.ts";
@@ -208,11 +214,9 @@ function waitForAbort(signal?: AbortSignal): Promise<never> {
 	if (!signal) return new Promise(() => undefined);
 	if (signal.aborted) return Promise.reject(Object.assign(new Error("aborted"), { name: "AbortError" }));
 	return new Promise((_, reject) => {
-		signal.addEventListener(
-			"abort",
-			() => reject(Object.assign(new Error("aborted"), { name: "AbortError" })),
-			{ once: true },
-		);
+		signal.addEventListener("abort", () => reject(Object.assign(new Error("aborted"), { name: "AbortError" })), {
+			once: true,
+		});
 	});
 }
 
@@ -236,7 +240,7 @@ class GatewayConversationWorker implements GatewayConversationEndpoint {
 	private activeAbort?: AbortController;
 	private activeSessionKey?: string;
 	private nudgeTimer?: ReturnType<typeof setTimeout>;
-	private lastUserActivityAt = Date.now();
+	private lastUserActivityAt = 0;
 
 	constructor(options: {
 		conversation: ResolvedConversation;
@@ -337,7 +341,9 @@ class GatewayConversationWorker implements GatewayConversationEndpoint {
 		this.nudgeTimer = setTimeout(() => {
 			this.nudgeTimer = undefined;
 			void this.triggerNudge().catch((error) => {
-				this.logger.warn(`[${this.conversation.conversationId}] nudge error: ${error instanceof Error ? error.message : String(error)}`);
+				this.logger.warn(
+					`[${this.conversation.conversationId}] nudge error: ${error instanceof Error ? error.message : String(error)}`,
+				);
 			});
 		}, intervalMs);
 	}
@@ -348,21 +354,29 @@ class GatewayConversationWorker implements GatewayConversationEndpoint {
 		const prompt = this.conversation.channel.nudgePrompt || DEFAULT_NUDGE_PROMPT;
 		const queued = runtime.queueProactiveJob(prompt);
 		if (queued) {
-			this.logger.info(`[${this.conversation.conversationId}] nudge triggered after ${this.conversation.channel.nudgeIntervalMinutes}m inactivity`);
+			this.logger.info(
+				`[${this.conversation.conversationId}] nudge triggered after ${this.conversation.channel.nudgeIntervalMinutes}m inactivity`,
+			);
 			await this.tryDispatch();
 		}
 	}
 
 	private sessionKeyForInput(input?: InboundMessageInput): string {
 		if (!input) return this.activeSessionKey || this.defaultSessionKey;
-		return input.sessionKey || buildGatewaySessionKey(input.sessionSource || buildGatewaySessionSource(this.conversation, input));
+		return (
+			input.sessionKey ||
+			buildGatewaySessionKey(input.sessionSource || buildGatewaySessionSource(this.conversation, input))
+		);
 	}
 
 	private getActiveSessionState(sessionKey?: string): GatewayAgentSessionState | undefined {
 		return this.sessions.get(sessionKey || this.activeSessionKey || this.defaultSessionKey);
 	}
 
-	private async handleControl(control: "stop" | "new" | "compact" | "status" | "help", input?: InboundMessageInput): Promise<void> {
+	private async handleControl(
+		control: "stop" | "new" | "compact" | "status" | "help",
+		input?: InboundMessageInput,
+	): Promise<void> {
 		const sessionKey = this.sessionKeyForInput(input);
 		if (control === "help") {
 			await this.transport?.sendImmediate(this.formatHelp());
@@ -392,7 +406,9 @@ class GatewayConversationWorker implements GatewayConversationEndpoint {
 				await state.session.compact();
 				await this.transport?.sendImmediate("Compaction completed.");
 			} catch (error) {
-				await this.transport?.sendImmediate(`Compaction failed: ${error instanceof Error ? error.message : String(error)}`);
+				await this.transport?.sendImmediate(
+					`Compaction failed: ${error instanceof Error ? error.message : String(error)}`,
+				);
 			}
 			return;
 		}
@@ -414,8 +430,11 @@ class GatewayConversationWorker implements GatewayConversationEndpoint {
 	private formatStatus(sessionKey?: string): string {
 		const status = this.runtimeValue?.getStatus();
 		const state = this.getActiveSessionState(sessionKey);
-		const model = state?.session?.model ? `${state.session.model.provider}/${state.session.model.id}` : "not initialized";
-		const source = state?.sessionKey === status?.lastSessionKey ? state?.sessionKey : sessionKey || status?.lastSessionKey;
+		const model = state?.session?.model
+			? `${state.session.model.provider}/${state.session.model.id}`
+			: "not initialized";
+		const source =
+			state?.sessionKey === status?.lastSessionKey ? state?.sessionKey : sessionKey || status?.lastSessionKey;
 		return [
 			`Gateway: ${this.conversation.conversationName}`,
 			`Model: ${model}`,
@@ -431,7 +450,10 @@ class GatewayConversationWorker implements GatewayConversationEndpoint {
 		return join(this.agentDir, "gateway", "sessions", sanitize(sessionKey));
 	}
 
-	private async ensureSession(sessionKey = this.defaultSessionKey, options: { newSession?: boolean } = {}): Promise<AgentSession> {
+	private async ensureSession(
+		sessionKey = this.defaultSessionKey,
+		options: { newSession?: boolean } = {},
+	): Promise<AgentSession> {
 		const existing = this.sessions.get(sessionKey);
 		if (existing?.session && !options.newSession) return existing.session;
 		if (existing?.session) {
@@ -445,11 +467,11 @@ class GatewayConversationWorker implements GatewayConversationEndpoint {
 		if (sessionManager.getBranch().length <= 1) {
 			sessionManager.appendSessionInfo(`pie gateway ${this.conversation.conversationName} ${sessionKey}`);
 		}
-			const services = await createAgentSessionServices({
-				cwd: this.cwd,
-				agentDir: this.agentDir,
-				usageStore: this.usageStore,
-				resourceLoaderOptions: {
+		const services = await createAgentSessionServices({
+			cwd: this.cwd,
+			agentDir: this.agentDir,
+			usageStore: this.usageStore,
+			resourceLoaderOptions: {
 				noExtensions: true,
 				additionalSkillPaths: [
 					join(this.conversation.sharedDir, "skills"),
@@ -463,14 +485,14 @@ class GatewayConversationWorker implements GatewayConversationEndpoint {
 			services,
 			sessionManager,
 			sessionStartEvent: { type: "session_start", reason: "startup" },
-				customTools: createGatewayChatTools({
-					cwd: this.cwd,
-					agentDir: this.agentDir,
-					usageStore: services.usageStore,
-					runtime: () => this.runtimeValue,
-					isTurnActive: () => this.inFlight,
-					queueAttachment: (path) => this.queuedAttachments.push(path),
-				}),
+			customTools: createGatewayChatTools({
+				cwd: this.cwd,
+				agentDir: this.agentDir,
+				usageStore: services.usageStore,
+				runtime: () => this.runtimeValue,
+				isTurnActive: () => this.inFlight,
+				queueAttachment: (path) => this.queuedAttachments.push(path),
+			}),
 			chatOrigin: this.conversation.conversationId,
 		});
 		this.sessions.set(sessionKey, {
@@ -553,7 +575,9 @@ class GatewayConversationWorker implements GatewayConversationEndpoint {
 			const message = error instanceof Error ? error.message : String(error);
 			await runtime.failActiveJob(message);
 			await this.runtimeValue?.appendError(message);
-			await this.transport?.sendImmediate(`Pie gateway error: ${message}`, next.triggerMessageId).catch(() => undefined);
+			await this.transport
+				?.sendImmediate(`Pie gateway error: ${message}`, next.triggerMessageId)
+				.catch(() => undefined);
 			this.logger.error(`[${this.conversation.conversationId}] ${message}`);
 		} finally {
 			this.stopTypingLoop();
@@ -691,17 +715,26 @@ export async function runGateway(options: RunGatewayOptions = {}): Promise<void>
 				const save = configSaveChain
 					.then(() => saveChatConfig(config))
 					.catch((error) => {
-						logger.warn(`[${conversationId}] failed to persist auto-discovered channel: ${error instanceof Error ? error.message : String(error)}`);
+						logger.warn(
+							`[${conversationId}] failed to persist auto-discovered channel: ${error instanceof Error ? error.message : String(error)}`,
+						);
 					});
 				configSaveChain = save.then(() => undefined);
 				await save;
 			}
-			const conversation = buildResolvedConversation(config, accountId, channelKey, configuredAccount.channels[channelKey] ?? channel);
-				const worker = new GatewayConversationWorker({ conversation, cwd, agentDir, logger, usageStore });
+			const conversation = buildResolvedConversation(
+				config,
+				accountId,
+				channelKey,
+				configuredAccount.channels[channelKey] ?? channel,
+			);
+			const worker = new GatewayConversationWorker({ conversation, cwd, agentDir, logger, usageStore });
 			await worker.start();
 			workers.push(worker);
 			workerByConversationId.set(conversationId, worker);
-			logger.info(`[${conversationId}] auto-discovered ${conversation.service} channel ${conversation.channel.name ?? conversation.channel.id}`);
+			logger.info(
+				`[${conversationId}] auto-discovered ${conversation.service} channel ${conversation.channel.name ?? conversation.channel.id}`,
+			);
 			return worker;
 		})();
 		workerCreatePromises.set(conversationId, promise);
@@ -744,14 +777,15 @@ export async function runGateway(options: RunGatewayOptions = {}): Promise<void>
 		updatedAt: new Date().toISOString(),
 		cwd,
 		conversations: workers.map((worker) => worker.getHealth()),
-		adapters: adapters.map((adapter) =>
-			adapter.getHealth?.() ?? {
-				accountId: adapter.accountId,
-				service: adapter.service,
-				connected: true,
-				startedAt,
-				errorCount: 0,
-			},
+		adapters: adapters.map(
+			(adapter) =>
+				adapter.getHealth?.() ?? {
+					accountId: adapter.accountId,
+					service: adapter.service,
+					connected: true,
+					startedAt,
+					errorCount: 0,
+				},
 		),
 	});
 	await writeGatewayHealth(agentDir, buildHealth()).catch(() => undefined);
@@ -759,7 +793,7 @@ export async function runGateway(options: RunGatewayOptions = {}): Promise<void>
 		void writeGatewayHealth(agentDir, buildHealth()).catch(() => undefined);
 	}, 15000);
 	try {
-			adapters = await startGatewayChatAdapters(config, workers, { getOrCreateEndpoint, usageStore });
+		adapters = await startGatewayChatAdapters(config, workers, { getOrCreateEndpoint, usageStore });
 		await writeGatewayHealth(agentDir, buildHealth()).catch(() => undefined);
 		logger.info(
 			`Pie gateway running. conversations=${workers.length} adapters=${adapters.length} cwd=${cwd} pid=${process.pid}`,

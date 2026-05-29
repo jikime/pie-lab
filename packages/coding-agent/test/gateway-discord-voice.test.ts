@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { createWavBuffer, parseDiscordVoiceCommandText } from "../src/core/gateway/discord-voice.ts";
 import type { DiscordAccountConfig } from "../src/core/gateway/chat/core/config-types.ts";
+import { createWavBuffer, parseDiscordVoiceCommandText } from "../src/core/gateway/discord-voice.ts";
 
 const account: DiscordAccountConfig = {
 	service: "discord",

@@ -1,7 +1,7 @@
 import chalk from "chalk";
 import { APP_NAME, getAgentDir } from "./config.ts";
-import { type CronJob, CronJobStore, runCronJob, tickCronScheduler } from "./core/scheduler/index.ts";
 import { readGatewayStatus } from "./core/gateway/runner.ts";
+import { type CronJob, CronJobStore, runCronJob, tickCronScheduler } from "./core/scheduler/index.ts";
 import { SettingsManager } from "./core/settings-manager.ts";
 
 interface ParsedCronArgs {
@@ -57,7 +57,12 @@ export async function handleCronCommand(args: string[]): Promise<boolean> {
 							`Due now: ${value.due}`,
 						];
 						if (!value.gatewayRunning && value.settings.enabled) {
-							lines.push("", chalk.yellow("⚠ Gateway is not running — scheduled jobs will not tick. Start it with: pie gateway run"));
+							lines.push(
+								"",
+								chalk.yellow(
+									"⚠ Gateway is not running — scheduled jobs will not tick. Start it with: pie gateway run",
+								),
+							);
 						}
 						return lines.join("\n");
 					},

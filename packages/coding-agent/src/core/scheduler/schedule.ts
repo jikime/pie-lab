@@ -92,11 +92,27 @@ function parseCronExpression(expression: string) {
 		throw new Error("Cron schedule must use five fields: minute hour day-of-month month day-of-week.");
 	}
 	const monthNames: Record<string, number> = {
-		jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6,
-		jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12,
+		jan: 1,
+		feb: 2,
+		mar: 3,
+		apr: 4,
+		may: 5,
+		jun: 6,
+		jul: 7,
+		aug: 8,
+		sep: 9,
+		oct: 10,
+		nov: 11,
+		dec: 12,
 	};
 	const dowNames: Record<string, number> = {
-		sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6,
+		sun: 0,
+		mon: 1,
+		tue: 2,
+		wed: 3,
+		thu: 4,
+		fri: 5,
+		sat: 6,
 	};
 	return {
 		minutes: parseCronField(parts[0], 0, 59),
@@ -114,15 +130,21 @@ function parseCronExpression(expression: string) {
 // ---------------------------------------------------------------------------
 
 const DOW_SHORT: Record<string, number> = {
-	Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6,
+	Sun: 0,
+	Mon: 1,
+	Tue: 2,
+	Wed: 3,
+	Thu: 4,
+	Fri: 5,
+	Sat: 6,
 };
 
 interface DateComponents {
 	minutes: number;
 	hours: number;
 	dayOfMonth: number;
-	month: number;       // 1-based
-	dayOfWeek: number;   // 0=Sun
+	month: number; // 1-based
+	dayOfWeek: number; // 0=Sun
 }
 
 /**
@@ -150,9 +172,7 @@ function getDateComponents(date: Date, timezone?: string): DateComponents {
 			weekday: "short",
 			hour12: false,
 		});
-		const parts = Object.fromEntries(
-			fmt.formatToParts(date).map(({ type, value }) => [type, value]),
-		);
+		const parts = Object.fromEntries(fmt.formatToParts(date).map(({ type, value }) => [type, value]));
 		// "hour12: false" may give "24" for midnight in some implementations
 		const rawHour = Number(parts.hour ?? "0");
 		return {
@@ -187,11 +207,7 @@ export function validateTimezone(tz: string): string {
 	}
 }
 
-function cronMatches(
-	date: Date,
-	parsed: ReturnType<typeof parseCronExpression>,
-	timezone?: string,
-): boolean {
+function cronMatches(date: Date, parsed: ReturnType<typeof parseCronExpression>, timezone?: string): boolean {
 	const c = getDateComponents(date, timezone);
 	if (!parsed.minutes.has(c.minutes)) return false;
 	if (!parsed.hours.has(c.hours)) return false;
