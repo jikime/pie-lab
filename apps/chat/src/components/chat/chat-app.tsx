@@ -226,7 +226,7 @@ export function ChatApp() {
       <aside className="hidden w-72 shrink-0 border-r bg-card lg:flex lg:flex-col">
         {/* Header */}
         <div className="flex h-[57px] items-center justify-end border-b px-4">
-          <Button type="button" variant="outline" size="icon" onClick={resetChat} aria-label="새 대화">
+          <Button type="button" variant="outline" size="icon" onClick={resetChat}>
             <MessageSquarePlus />
           </Button>
         </div>
