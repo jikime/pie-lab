@@ -225,10 +225,16 @@ export function ChatApp() {
     <main className="flex min-h-screen bg-background text-foreground">
       <aside className="hidden w-72 shrink-0 border-r bg-card lg:flex lg:flex-col">
         {/* Header */}
-        <div className="flex h-[57px] items-center justify-end border-b px-4">
-          <Button type="button" variant="outline" size="icon" onClick={resetChat}>
-            <MessageSquarePlus />
-          </Button>
+        <div className="flex h-[57px] items-center border-b px-4">
+          <div className="flex w-full items-center justify-between gap-3">
+            <div>
+              <h1 className="text-base font-semibold">Pie Chat</h1>
+              <p className="mt-1 truncate text-xs text-muted-foreground">{routeSummary}</p>
+            </div>
+            <Button type="button" variant="outline" size="icon" onClick={resetChat} aria-label="새 대화">
+              <MessageSquarePlus />
+            </Button>
+          </div>
         </div>
 
         {/* Conversation list */}
