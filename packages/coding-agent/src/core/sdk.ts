@@ -536,6 +536,38 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 										: undefined,
 							});
 
+							// Single-route fast path: stream events directly to outer without buffering.
+							// Buffering is only needed for multi-route fallback (to detect whether
+							// any content was emitted before deciding to retry the next route).
+							const isFinalAttempt = attemptIndex >= attemptCount - 1;
+							if (isFinalAttempt) {
+								for await (const event of inner) {
+									if (event.type === "done") {
+										await recordUsage(event.message, "success");
+										outer.push(event);
+										return;
+									}
+									if (event.type === "error") {
+										const errorText = getMessageErrorText(event.error);
+										await recordUsage(
+											event.error,
+											event.error.stopReason === "aborted" ? "aborted" : "error",
+											errorText,
+										);
+										await modelRegistry.markProviderConnectionUnavailable(
+											connectionId,
+											resolvedModel,
+											event.error,
+										);
+										outer.push(event);
+										return;
+									}
+									outer.push(event);
+								}
+								continue;
+							}
+
+							// Multi-route fallback path: buffer until done/error to decide retry.
 							const bufferedEvents: AssistantMessageEvent[] = [];
 							let shouldTryNextRoute = false;
 							for await (const event of inner) {
@@ -563,7 +595,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 									const emittedContent = bufferedEvents.some(
 										(bufferedEvent) => bufferedEvent.type !== "error",
 									);
-									if (attemptIndex < attemptCount - 1 && !emittedContent) {
+									if (!emittedContent) {
 										shouldTryNextRoute = true;
 										break;
 									}
