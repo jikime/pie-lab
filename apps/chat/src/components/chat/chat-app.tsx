@@ -125,15 +125,11 @@ export function ChatApp() {
 
   // Close menu when clicking outside
   useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-      if (!target.closest('[class*="relative"]')) {
-        setOpenMenuId(null);
-      }
-    };
+    if (!openMenuId) return;
+    const handleClickOutside = () => setOpenMenuId(null);
     document.addEventListener("click", handleClickOutside);
     return () => document.removeEventListener("click", handleClickOutside);
-  }, []);
+  }, [openMenuId]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -304,15 +300,21 @@ export function ChatApp() {
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8 shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
-                          onClick={() => setOpenMenuId(isMenuOpen ? null : conv.id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setOpenMenuId(isMenuOpen ? null : conv.id);
+                          }}
                         >
                           <MoreVertical className="h-4 w-4" />
                         </Button>
                         {isMenuOpen && (
-                          <div className="absolute right-0 top-8 z-50 w-40 rounded-md border bg-popover p-1 shadow-md">
+                          <div className="absolute right-0 top-8 z-50 w-40 rounded-md border bg-popover p-1 shadow-md" onClick={(e) => e.stopPropagation()}>
                             <button
                               type="button"
-                              onClick={() => void handleDeleteConversation(conv.id)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void handleDeleteConversation(conv.id);
+                              }}
                               className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs text-destructive hover:bg-destructive/10"
                             >
                               <Trash2 className="h-4 w-4" />
