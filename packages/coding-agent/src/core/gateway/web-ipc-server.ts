@@ -246,6 +246,9 @@ export class WebIPCServer {
 
 		if (msg.type === "abort") {
 			this.abortControllers.get(conversationId)?.abort();
+			// Also abort the gateway worker's in-flight LLM call so it doesn't
+			// keep running after the IPC client disconnects.
+			this.workers.get(conversationId)?.abortActive?.();
 			return;
 		}
 
@@ -262,8 +265,24 @@ export class WebIPCServer {
 			const text = msg.text ?? "";
 			const userId = msg.userId ?? "web-user";
 
-			const worker = await this.getOrCreateWorker(conversationId);
+			// Create the transport BEFORE any async work so close() can always
+			// be called to send the 'done' frame, even if getOrCreateWorker throws
+			// (BUG-002: transport missing when getOrCreateWorker fails).
 			const transport = new WebIPCTransport(writeLine);
+			let worker: GatewayConversationEndpoint & { disconnect(): Promise<void> };
+			try {
+				worker = await this.getOrCreateWorker(conversationId);
+			} catch (err) {
+				transport.close();
+				throw err;
+			}
+
+			// If the worker is still processing a previous turn, abort it so the
+			// new message isn't silently queued while the transport is closed.
+			// This prevents stale inFlight state (from a previous hung/slow LLM
+			// call) from causing the next message to get an empty auto-done.
+			worker.abortActive?.();
+
 			const abortController = new AbortController();
 			this.abortControllers.set(conversationId, abortController);
 

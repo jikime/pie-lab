@@ -348,10 +348,11 @@ function createGatewayIPCSession(
 				message: partial,
 				assistantMessageEvent: {
 					type: "text_delta",
+					contentIndex: 0,
 					delta: event.text,
 					partial,
 				},
-			} as unknown as AgentSessionEvent);
+			} as AgentSessionEvent);
 		}
 		if (event.type === "done") {
 			// Use || (not ??) so an empty event.text falls back to assistantBuffer.
@@ -360,24 +361,49 @@ function createGatewayIPCSession(
 			// aborted run, empty response) — in those cases assistantBuffer may hold
 			// an error delta that should still be surfaced as the response.
 			const fullText = event.text || assistantBuffer;
-			// Gateway sends the full response as a single "done" (no prior streaming deltas).
-			// Emit a synthetic text_delta so streaming SSE consumers (handleStreamingAgentChat)
-			// receive content via the message_update path and write it to the SSE stream.
-			if (fullText && !assistantBuffer) {
+			// Emit a synthetic text_delta when done.text differs from what was
+			// already accumulated via delta frames (covers both the non-streaming
+			// case where assistantBuffer is empty, and the case where the gateway
+			// corrected the final text in the done frame).
+			if (fullText && fullText !== assistantBuffer) {
 				const partial = makeAssistantMsg(fullText);
 				emit({
 					type: "message_update",
 					message: partial,
 					assistantMessageEvent: {
 						type: "text_delta",
+						contentIndex: 0,
 						delta: fullText,
 						partial,
 					},
-				} as unknown as AgentSessionEvent);
+				} as AgentSessionEvent);
 			}
 			const msg = makeAssistantMsg(fullText);
-			emit({ type: "message_end", message: msg } as unknown as AgentSessionEvent);
+			emit({ type: "message_end", message: msg } as AgentSessionEvent);
 		}
+		if (event.type === "error") {
+			// Surface gateway errors as a final message so the SSE stream gets
+			// content instead of silently completing with an empty bubble.
+			const errText = event.message || "An error occurred in the gateway.";
+			if (errText !== assistantBuffer) {
+				const partial = makeAssistantMsg(errText);
+				emit({
+					type: "message_update",
+					message: partial,
+					assistantMessageEvent: {
+						type: "text_delta",
+						contentIndex: 0,
+						delta: errText,
+						partial,
+					},
+				} as AgentSessionEvent);
+			}
+			const msg = makeAssistantMsg(errText);
+			emit({ type: "message_end", message: msg } as AgentSessionEvent);
+		}
+		// "typing" events are intentionally ignored — the SSE stream has no
+		// typing-indicator concept and the web UI derives activity from the
+		// isStreaming flag on the session instead.
 	};
 
 	return {
@@ -485,7 +511,9 @@ async function handleStreamingAgentChat(options: {
 	const abort = () => {
 		if (!completed) void options.session.abort().catch(() => undefined);
 	};
-	options.request.on("aborted", abort);
+	// Use only response 'close' for abort detection. The IncomingMessage 'aborted'
+	// event was removed in Node.js 19+ and is unreliable on modern Node.js
+	// (BUG-05: deprecated 'aborted' event never fires on modern Node.js).
 	options.response.on("close", abort);
 
 	try {
@@ -512,7 +540,6 @@ async function handleStreamingAgentChat(options: {
 		options.response.end();
 	} finally {
 		unsubscribe();
-		options.request.off("aborted", abort);
 		options.response.off("close", abort);
 	}
 }
@@ -864,7 +891,19 @@ async function writeRawSse(response: ServerResponse, chunk: string): Promise<voi
 		return;
 	}
 
-	await new Promise<void>((resolve) => response.once("drain", resolve));
+	// Race 'drain' against 'close'/'error' so a client disconnect never
+	// causes this promise to hang forever (BUG-1: writeRawSse deadlock).
+	await new Promise<void>((resolve) => {
+		const done = () => {
+			response.removeListener("drain", done);
+			response.removeListener("close", done);
+			response.removeListener("error", done);
+			resolve();
+		};
+		response.once("drain", done);
+		response.once("close", done);
+		response.once("error", done);
+	});
 }
 
 function writeMethodNotAllowed(response: ServerResponse): void {

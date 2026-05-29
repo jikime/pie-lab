@@ -233,7 +233,7 @@ function isChatOrModelPath(pathname: string): boolean {
 }
 
 function isPieAgentChatPath(pathname: string): boolean {
-	return pathname === "/v1/pie/chat/completions";
+	return pathname === "/v1/pie/chat/completions" || pathname === "/v1/pie/chat/sessions";
 }
 
 function isProviderPath(pathname: string): boolean {

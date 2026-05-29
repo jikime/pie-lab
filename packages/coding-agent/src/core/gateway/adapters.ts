@@ -40,6 +40,8 @@ export interface GatewayConversationEndpoint {
 	onCaughtUp(): Promise<void>;
 	onError(error: Error): Promise<void>;
 	onDisconnect?(): Promise<void>;
+	/** Abort the currently in-flight LLM turn, if any. No-op when idle. */
+	abortActive?(): void;
 }
 
 export interface GatewayAccountAdapterContext {

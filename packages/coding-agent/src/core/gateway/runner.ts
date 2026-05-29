@@ -567,6 +567,12 @@ class GatewayConversationWorker implements GatewayConversationEndpoint {
 		}
 	}
 
+	abortActive(): void {
+		if (!this.inFlight) return;
+		this.activeAbort?.abort();
+		this.getActiveSessionState()?.session?.agent.abort();
+	}
+
 	async disconnect(): Promise<void> {
 		this.activeAbort?.abort();
 		this.stopTypingLoop();
