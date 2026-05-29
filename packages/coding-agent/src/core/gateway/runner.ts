@@ -543,10 +543,36 @@ class GatewayConversationWorker implements GatewayConversationEndpoint {
 		try {
 			const session = await this.ensureSession(sessionKey);
 			await session.reload();
-			await session.prompt(next.prompt, {
-				expandPromptTemplates: false,
-				source: "extension",
-			});
+
+			// Stream LLM deltas to the transport in real-time so Telegram/Discord/Web
+			// show incremental output instead of waiting for the full response.
+			// supportsStreaming=true (WebIPC): send() is a done-frame finalizer, so stream deltas freely.
+			// supportsStreaming=false/undefined (Telegram/Discord): send() posts a new message, so
+			// accumulate deltas here and skip the final send() to avoid double-posting.
+			const transport = this.transport;
+			let unsubscribe: (() => void) | undefined;
+			let streamedText = "";
+			if (transport) {
+				unsubscribe = session.subscribe((event) => {
+					if (event.type === "message_update" && event.assistantMessageEvent.type === "text_delta") {
+						const delta = event.assistantMessageEvent.delta;
+						if (delta) {
+							streamedText += delta;
+							void transport.sendImmediate(delta, next.triggerMessageId).catch(() => undefined);
+						}
+					}
+				});
+			}
+
+			try {
+				await session.prompt(next.prompt, {
+					expandPromptTemplates: false,
+					source: "extension",
+				});
+			} finally {
+				unsubscribe?.();
+			}
+
 			const summary = extractAssistantSummary(session.messages);
 			if (summary.stopReason === "aborted") {
 				await runtime.failActiveJob("aborted");
@@ -562,11 +588,17 @@ class GatewayConversationWorker implements GatewayConversationEndpoint {
 			const finalText = summary.text || (attachmentPaths.length > 0 ? "Attached requested file(s)." : "");
 			let remoteMessageId: string | undefined;
 			if (this.transport && finalText) {
-				remoteMessageId = await Promise.race([
-					this.transport.send(finalText, attachmentPaths, abortController.signal, next.triggerMessageId),
-					new Promise<string>((_, reject) => setTimeout(() => reject(new Error("send timed out")), 120000)),
-					waitForAbort(abortController.signal),
-				]);
+				// For non-streaming transports (Telegram, Discord), deltas were already
+				// sent via sendImmediate — skip send() to avoid posting the full text again.
+				// For streaming transports (WebIPC), send() is the done-frame finalizer and must run.
+				const skipSend = !this.transport.supportsStreaming && streamedText.length > 0 && attachmentPaths.length === 0;
+				if (!skipSend) {
+					remoteMessageId = await Promise.race([
+						this.transport.send(finalText, attachmentPaths, abortController.signal, next.triggerMessageId),
+						new Promise<string>((_, reject) => setTimeout(() => reject(new Error("send timed out")), 120000)),
+						waitForAbort(abortController.signal),
+					]);
+				}
 			}
 			await runtime.completeActiveJob(finalText, remoteMessageId, attachmentPaths);
 		} catch (error) {

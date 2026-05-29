@@ -44,6 +44,8 @@ export interface GatewayTransport {
 	send(text: string, attachmentPaths?: string[], signal?: AbortSignal, replyToMessageId?: string): Promise<string>;
 	startTyping(): Promise<void>;
 	stopTyping(): Promise<void>;
+	/** True when the transport handles streaming deltas via sendImmediate and send() is used only for finalization (e.g. WebIPC). False for transports where send() posts a new message (Telegram, Discord). */
+	readonly supportsStreaming?: boolean;
 }
 
 export interface GatewayConversationEndpoint {

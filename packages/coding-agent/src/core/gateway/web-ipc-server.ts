@@ -72,6 +72,7 @@ export function buildWebConversation(agentDir: string, conversationId: string): 
 // ─── IPC Transport (streams response back over the socket) ─────────────────
 
 class WebIPCTransport implements GatewayTransport {
+	readonly supportsStreaming = true;
 	private closed: boolean;
 	/** True once send() has written a {"type":"done"} frame. */
 	private doneSent: boolean;
