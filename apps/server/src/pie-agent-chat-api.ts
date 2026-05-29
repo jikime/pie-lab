@@ -79,7 +79,7 @@ interface SessionEntry {
 
 const CORS_HEADERS = {
 	"access-control-allow-headers": "content-type, authorization, x-pie-client-origin, x-pie-origin",
-	"access-control-allow-methods": "GET, POST, OPTIONS",
+	"access-control-allow-methods": "GET, POST, DELETE, OPTIONS",
 	"access-control-allow-origin": "*",
 };
 
