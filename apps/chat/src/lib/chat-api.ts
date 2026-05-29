@@ -40,6 +40,30 @@ export interface SessionHistoryResponse {
   messages: SessionHistoryMessage[];
 }
 
+export interface ConversationSummary {
+  id: string;
+  title: string;
+  lastMessage: string;
+  lastMessageRole: "user" | "assistant";
+  lastMessageAt: string;
+  messageCount: number;
+}
+
+export async function listConversations(
+  signal?: AbortSignal,
+): Promise<ConversationSummary[]> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/v1/pie/chat/conversations`, {
+      signal,
+    });
+    if (!response.ok) return [];
+    const body = (await response.json()) as { conversations?: ConversationSummary[] };
+    return body.conversations ?? [];
+  } catch {
+    return [];
+  }
+}
+
 export async function fetchSessionHistory(
   conversationId: string,
   signal?: AbortSignal,

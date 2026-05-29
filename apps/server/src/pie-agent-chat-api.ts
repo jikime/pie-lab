@@ -10,7 +10,7 @@ import {
 	type SessionMessageEntry,
 } from "@pie-lab/coding-agent";
 import { WebIPCClient, type WebIPCEvent } from "@pie-lab/coding-agent";
-import { readdirSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { PIE_LAB_ROUTER_PROVIDER } from "@pie-lab/router";
 import { randomUUID } from "node:crypto";
@@ -85,6 +85,7 @@ const CORS_HEADERS = {
 
 const DEFAULT_ENDPOINT = "/v1/pie/chat/completions";
 const SESSIONS_ENDPOINT = "/v1/pie/chat/sessions";
+const CONVERSATIONS_ENDPOINT = "/v1/pie/chat/conversations";
 const DEFAULT_MODEL = "auto:chat";
 const DEFAULT_MAX_SESSIONS = 20;
 
@@ -134,6 +135,14 @@ async function handlePieAgentChatRequest(
 
 	const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
 
+	// GET /v1/pie/chat/conversations — list all web conversations with previews
+	if (url.pathname === CONVERSATIONS_ENDPOINT && request.method === "GET") {
+		const agentDir = options.agentDir ?? getAgentDir();
+		const conversations = loadWebConversationList(agentDir);
+		writeJson(response, 200, { conversations });
+		return;
+	}
+
 	// GET /v1/pie/chat/sessions?conversation_id=… — return session history from disk
 	if (url.pathname === SESSIONS_ENDPOINT && request.method === "GET") {
 		const conversationId = url.searchParams.get("conversation_id")?.slice(0, 160);
@@ -142,6 +151,14 @@ async function handlePieAgentChatRequest(
 			return;
 		}
 		const agentDir = options.agentDir ?? getAgentDir();
+		// Gateway path: ~/.pie/agent/chat/accounts/web/channels/{id}/channel.jsonl
+		const gatewayChannelPath = join(agentDir, "chat", "accounts", "web", "channels", conversationId, "channel.jsonl");
+		const gatewayMessages = loadGatewayChannelHistory(gatewayChannelPath);
+		if (gatewayMessages.length > 0) {
+			writeJson(response, 200, { conversation_id: conversationId, messages: gatewayMessages });
+			return;
+		}
+		// Standalone fallback: ~/.pie/agent/sessions/web-chat/{id}/
 		const sessionDir = process.env.PIE_WEB_CHAT_SESSION_DIR ?? join(agentDir, "sessions", "web-chat");
 		const convDir = join(sessionDir, conversationId);
 		const messages = loadConversationHistory(convDir);
@@ -971,4 +988,101 @@ function extractMessageText(content: unknown): string {
 		.filter((block) => block.type === "text" && typeof block.text === "string")
 		.map((block) => block.text as string)
 		.join("");
+}
+
+// ── Gateway channel history (inbound/outbound JSONL format) ──────────────────
+
+interface GatewayRecord {
+	type: string;
+	timestamp: string;
+	text?: string;
+	userName?: string;
+	userId?: string;
+}
+
+/** Read channel.jsonl written by the gateway and return chat messages. */
+function loadGatewayChannelHistory(channelJsonlPath: string): Array<{ role: string; content: string }> {
+	let raw: string;
+	try {
+		raw = readFileSync(channelJsonlPath, "utf8");
+	} catch {
+		return [];
+	}
+	const messages: Array<{ role: string; content: string }> = [];
+	for (const line of raw.split("\n")) {
+		const trimmed = line.trim();
+		if (!trimmed) continue;
+		let record: GatewayRecord;
+		try {
+			record = JSON.parse(trimmed) as GatewayRecord;
+		} catch {
+			continue;
+		}
+		if (record.type === "inbound" && record.text?.trim()) {
+			messages.push({ role: "user", content: record.text.trim() });
+		} else if (record.type === "outbound" && record.text?.trim()) {
+			messages.push({ role: "assistant", content: record.text.trim() });
+		}
+	}
+	return messages;
+}
+
+// ── Conversation list (for sidebar) ─────────────────────────────────────────
+
+export interface WebConversationSummary {
+	id: string;
+	title: string;
+	lastMessage: string;
+	lastMessageRole: "user" | "assistant";
+	lastMessageAt: string;
+	messageCount: number;
+}
+
+/** Scan gateway web channels and return conversation summaries sorted by recency. */
+function loadWebConversationList(agentDir: string): WebConversationSummary[] {
+	const webChannelsDir = join(agentDir, "chat", "accounts", "web", "channels");
+	let channelDirs: string[];
+	try {
+		channelDirs = readdirSync(webChannelsDir);
+	} catch {
+		return [];
+	}
+
+	const summaries: WebConversationSummary[] = [];
+	for (const id of channelDirs) {
+		const channelJsonl = join(webChannelsDir, id, "channel.jsonl");
+		let raw: string;
+		try {
+			raw = readFileSync(channelJsonl, "utf8");
+		} catch {
+			continue;
+		}
+		const records: GatewayRecord[] = [];
+		for (const line of raw.split("\n")) {
+			const trimmed = line.trim();
+			if (!trimmed) continue;
+			try {
+				records.push(JSON.parse(trimmed) as GatewayRecord);
+			} catch {
+				continue;
+			}
+		}
+		const msgRecords = records.filter((r) => r.type === "inbound" || r.type === "outbound");
+		if (msgRecords.length === 0) continue;
+		const last = msgRecords[msgRecords.length - 1];
+		const firstUserMsg = records.find((r) => r.type === "inbound");
+		// Use first user message as title (truncated), fallback to ID
+		const title = firstUserMsg?.text?.trim().slice(0, 40) || id.slice(0, 20);
+		summaries.push({
+			id,
+			title,
+			lastMessage: last?.text?.trim().slice(0, 100) ?? "",
+			lastMessageRole: last?.type === "outbound" ? "assistant" : "user",
+			lastMessageAt: last?.timestamp ?? "",
+			messageCount: msgRecords.length,
+		});
+	}
+
+	// Sort by most recent first
+	return summaries.sort((a, b) => (b.lastMessageAt > a.lastMessageAt ? 1 : -1));
 }

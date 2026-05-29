@@ -13,8 +13,10 @@ import {
   API_BASE_URL,
   checkServerHealth,
   fetchSessionHistory,
+  listConversations,
   listModels,
   streamChatCompletion,
+  type ConversationSummary,
   type OpenAiChatMessage,
   type RouteInfo,
 } from "@/lib/chat-api";
@@ -53,6 +55,7 @@ export function ChatApp() {
   const [models, setModels] = useState<string[]>(QUICK_MODELS);
   const [isSending, setIsSending] = useState(false);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const abortRef = useRef<AbortController | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
 
@@ -62,7 +65,7 @@ export function ChatApp() {
     return `${lastRoute.routing_mode ?? "router"} · ${lastRoute.resolved_provider ?? "provider"}`;
   }, [messages]);
 
-  // Load server state (health + models)
+  // Load server state (health + models + conversation list)
   useEffect(() => {
     const controller = new AbortController();
 
@@ -72,15 +75,25 @@ export function ChatApp() {
       setServerStatus(online ? "online" : "offline");
       if (!online) return;
 
-      const nextModels = await listModels(controller.signal);
+      const [nextModels, convs] = await Promise.all([
+        listModels(controller.signal),
+        listConversations(controller.signal),
+      ]);
       if (nextModels.length > 0) {
         setModels(Array.from(new Set([...QUICK_MODELS, ...nextModels])));
       }
+      setConversations(convs);
     }
 
     loadServerState();
     return () => controller.abort();
   }, []);
+
+  // Refresh conversation list after each send completes
+  const refreshConversations = async () => {
+    const convs = await listConversations();
+    setConversations(convs);
+  };
 
   // Load conversation history from disk on mount (or when conversationId changes)
   useEffect(() => {
@@ -169,6 +182,7 @@ export function ChatApp() {
         abortRef.current = null;
       }
       setIsSending(false);
+      void refreshConversations();
     }
   }
 
@@ -185,9 +199,32 @@ export function ChatApp() {
     setInput("");
   }
 
+  async function switchConversation(id: string) {
+    if (id === conversationId) return;
+    abortRef.current?.abort();
+    localStorage.setItem(LS_CONVERSATION_KEY, id);
+    setConversationId(id);
+    setMessages([]);
+    setInput("");
+    // Load history for selected conversation
+    setIsLoadingHistory(true);
+    const history = await fetchSessionHistory(id);
+    if (history.length > 0) {
+      setMessages(
+        history.map((msg) => ({
+          id: createId(msg.role),
+          role: msg.role as "user" | "assistant",
+          content: msg.content,
+        })),
+      );
+    }
+    setIsLoadingHistory(false);
+  }
+
   return (
     <main className="flex min-h-screen bg-background text-foreground">
       <aside className="hidden w-72 shrink-0 border-r bg-card lg:flex lg:flex-col">
+        {/* Header */}
         <div className="flex h-[57px] items-center border-b px-4">
           <div className="flex w-full items-center justify-between gap-3">
             <div>
@@ -200,36 +237,49 @@ export function ChatApp() {
           </div>
         </div>
 
-        <div className="space-y-4 px-4 py-4">
-          <div className="space-y-2">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-xs font-medium text-muted-foreground">서버</span>
-              <ServerBadge status={serverStatus} />
-            </div>
-            <p className="break-all rounded-lg border bg-muted/40 px-2.5 py-2 text-xs text-muted-foreground">
-              {API_BASE_URL}
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <span className="text-xs font-medium text-muted-foreground">빠른 모델</span>
-            <div className="flex flex-wrap gap-2">
-              {QUICK_MODELS.map((quickModel) => (
-                <Button
-                  key={quickModel}
-                  type="button"
-                  size="sm"
-                  variant={model === quickModel ? "default" : "outline"}
-                  onClick={() => setModel(quickModel)}
-                >
-                  {quickModel}
-                </Button>
-              ))}
-            </div>
-          </div>
+        {/* Conversation list */}
+        <div className="flex-1 overflow-y-auto py-2">
+          {conversations.length === 0 ? (
+            <p className="px-4 py-6 text-center text-xs text-muted-foreground">대화 기록이 없습니다</p>
+          ) : (
+            <ul className="space-y-0.5 px-2">
+              {conversations.map((conv) => {
+                const isActive = conv.id === conversationId;
+                const time = conv.lastMessageAt
+                  ? new Date(conv.lastMessageAt).toLocaleDateString("ko-KR", { month: "numeric", day: "numeric" })
+                  : "";
+                return (
+                  <li key={conv.id}>
+                    <button
+                      type="button"
+                      onClick={() => void switchConversation(conv.id)}
+                      className={cn(
+                        "w-full rounded-md px-3 py-2 text-left transition-colors hover:bg-muted/60",
+                        isActive && "bg-muted",
+                      )}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="truncate text-xs font-medium leading-5">{conv.title}</span>
+                        <span className="shrink-0 text-xs text-muted-foreground">{time}</span>
+                      </div>
+                      <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                        {conv.lastMessageRole === "assistant" ? "AI: " : ""}
+                        {conv.lastMessage}
+                      </p>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </div>
 
-        <div className="mt-auto border-t px-4 py-4">
+        {/* Footer */}
+        <div className="border-t px-4 py-3 space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs text-muted-foreground">서버</span>
+            <ServerBadge status={serverStatus} />
+          </div>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <RefreshCw className="size-3.5" />
             <span>pie AgentSession</span>
