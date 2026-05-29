@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
-import { access, mkdir, rm, watch, writeFile } from "node:fs/promises";
-import { statSync } from "node:fs";
+import { access, mkdir, readdir, rm, watch, writeFile } from "node:fs/promises";
+import { existsSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
@@ -625,6 +625,46 @@ export async function handleGatewayCommand(args: string[]): Promise<boolean> {
 	}
 }
 
+// ─── Web chat conversation discovery ────────────────────────────────────────
+
+interface WebConversationInfo {
+	conversationId: string;
+	conversationName: string;
+	channelKey: string;
+	service: "web";
+	logPath: string;
+}
+
+async function listWebConversations(agentDir = getAgentDir()): Promise<WebConversationInfo[]> {
+	const webChannelsDir = join(agentDir, "chat", "accounts", "web", "channels");
+	if (!existsSync(webChannelsDir)) return [];
+	let entries: string[];
+	try {
+		entries = await readdir(webChannelsDir);
+	} catch {
+		return [];
+	}
+	const results: WebConversationInfo[] = [];
+	for (const entry of entries) {
+		const logPath = join(webChannelsDir, entry, "channel.jsonl");
+		if (!existsSync(logPath)) continue;
+		results.push({
+			conversationId: entry,
+			conversationName: `Web / ${entry}`,
+			channelKey: entry,
+			service: "web",
+			logPath,
+		});
+	}
+	return results.sort((a, b) => {
+		try {
+			return statSync(b.logPath).mtimeMs - statSync(a.logPath).mtimeMs;
+		} catch {
+			return 0;
+		}
+	});
+}
+
 // ─── pie gateway history ────────────────────────────────────────────────────
 
 function fmtRecordTime(iso: string): string {
@@ -660,6 +700,7 @@ function renderRecord(record: ChatLogRecord): string | undefined {
 async function printHistory(args: string[]): Promise<void> {
 	const config = await loadChatConfig();
 	const conversations = listConfiguredConversations(config);
+	const webConvs = await listWebConversations();
 
 	// Parse args: [channelSpec] [--limit N] [--all]
 	const limitIdx = args.findIndex((a) => a === "--limit" || a === "-n");
@@ -667,59 +708,84 @@ async function printHistory(args: string[]): Promise<void> {
 	const showAll = args.includes("--all");
 	const channelSpec = args.find((a) => !a.startsWith("-") && isNaN(Number(a)));
 
+	const serviceBadge = (service: string) =>
+		service === "discord" ? chalk.blue(`[discord]`) :
+		service === "web"     ? chalk.magenta(`[web]`)   :
+		chalk.cyan(`[telegram]`);
+
 	// No channel specified → list available channels
 	if (!channelSpec) {
-		if (conversations.length === 0) {
+		const hasAny = conversations.length > 0 || webConvs.length > 0;
+		if (!hasAny) {
 			console.log(chalk.dim("설정된 채널이 없습니다. pie gateway setup을 실행하세요."));
 			return;
 		}
 		console.log(chalk.bold("\n사용 가능한 채널:\n"));
 		for (const conv of conversations) {
-			const badge = conv.service === "discord" ? chalk.blue(`[discord]`) : chalk.cyan(`[telegram]`);
-			console.log(`  ${badge} ${chalk.white(conv.conversationName)}  ${chalk.dim(conv.channelKey)}`);
+			console.log(`  ${serviceBadge(conv.service)} ${chalk.white(conv.conversationName)}  ${chalk.dim(conv.channelKey)}`);
 		}
-		console.log(chalk.dim(`\nUsage: pie gateway history <accountId/channelKey> [--limit N]`));
-		console.log(chalk.dim(`Example: pie gateway history ${conversations[0]?.channelKey ?? "telegram-pio/dm-john"}`));
+		for (const wc of webConvs) {
+			console.log(`  ${serviceBadge("web")} ${chalk.white(wc.conversationName)}  ${chalk.dim(wc.channelKey)}`);
+		}
+		const example = conversations[0]?.channelKey ?? webConvs[0]?.channelKey ?? "telegram-pio/dm-john";
+		console.log(chalk.dim(`\nUsage: pie gateway history <channelKey> [--limit N]`));
+		console.log(chalk.dim(`Example: pie gateway history ${example}`));
 		return;
 	}
 
-	// Resolve conversation
+	// Resolve conversation — check Telegram/Discord first, then web
 	const conv = resolveConversation(config, channelSpec)
 		?? conversations.find((c) => c.conversationName.toLowerCase().includes(channelSpec.toLowerCase()))
 		?? conversations.find((c) => c.channelKey.includes(channelSpec));
 
-	if (!conv) {
-		console.error(chalk.red(`채널을 찾을 수 없습니다: ${channelSpec}`));
-		console.error(chalk.dim("pie gateway history 를 인수 없이 실행하면 채널 목록을 볼 수 있습니다."));
-		process.exitCode = 1;
+	// Helper: print records from a resolved logPath
+	const printRecords = async (name: string, service: string, logPath: string) => {
+		let rawRecords: ChatLogRecord[];
+		try {
+			const { readFile } = await import("node:fs/promises");
+			const text = await readFile(logPath, "utf8");
+			rawRecords = text.split("\n").filter(Boolean).map((l) => JSON.parse(l) as ChatLogRecord);
+		} catch {
+			rawRecords = [];
+		}
+		if (rawRecords.length === 0) {
+			console.log(chalk.dim(`${name}: 대화 내역이 없습니다.`));
+			return;
+		}
+		const displayable = showAll
+			? rawRecords
+			: rawRecords.filter((r) => r.type === "inbound" || r.type === "outbound" || r.type === "job_failed" || r.type === "error");
+		const slice = displayable.slice(-limit);
+		console.log(chalk.bold(`\n${serviceBadge(service)} ${name}`) + chalk.dim(`  (최근 ${slice.length}/${displayable.length}개)`));
+		console.log(chalk.dim("─".repeat(70)));
+		for (const record of slice) {
+			const line = renderRecord(record);
+			if (line) console.log(line);
+		}
+		if (displayable.length > limit) {
+			console.log(chalk.dim(`\n(${displayable.length - limit}개 더 있음. --limit ${displayable.length} 로 전체 조회)`));
+		}
+	};
+
+	if (conv) {
+		await printRecords(conv.conversationName, conv.service, conv.logPath);
 		return;
 	}
 
-	const records = await readConversationLog(conv);
-	if (records.length === 0) {
-		console.log(chalk.dim(`${conv.conversationName}: 대화 내역이 없습니다.`));
+	// Try web chat channels
+	const webMatch = webConvs.find(
+		(wc) => wc.channelKey === channelSpec ||
+			wc.conversationName.toLowerCase().includes(channelSpec.toLowerCase()) ||
+			wc.channelKey.includes(channelSpec),
+	);
+	if (webMatch) {
+		await printRecords(webMatch.conversationName, "web", webMatch.logPath);
 		return;
 	}
 
-	// Filter to only message-level records (skip checkpoints) unless --all
-	const displayable = showAll
-		? records
-		: records.filter((r) => r.type === "inbound" || r.type === "outbound" || r.type === "job_failed" || r.type === "error");
-
-	const slice = displayable.slice(-limit);
-
-	const badge = conv.service === "discord" ? chalk.blue(`[discord]`) : chalk.cyan(`[telegram]`);
-	console.log(chalk.bold(`\n${badge} ${conv.conversationName}`) + chalk.dim(`  (최근 ${slice.length}/${displayable.length}개)`));
-	console.log(chalk.dim("─".repeat(70)));
-
-	for (const record of slice) {
-		const line = renderRecord(record);
-		if (line) console.log(line);
-	}
-
-	if (displayable.length > limit) {
-		console.log(chalk.dim(`\n(${displayable.length - limit}개 더 있음. --limit ${displayable.length} 로 전체 조회)`));
-	}
+	console.error(chalk.red(`채널을 찾을 수 없습니다: ${channelSpec}`));
+	console.error(chalk.dim("pie gateway history 를 인수 없이 실행하면 채널 목록을 볼 수 있습니다."));
+	process.exitCode = 1;
 }
 
 // ─── pie gateway attach ─────────────────────────────────────────────────────
@@ -727,31 +793,62 @@ async function printHistory(args: string[]): Promise<void> {
 async function attachGateway(args: string[]): Promise<void> {
 	const config = await loadChatConfig();
 	const conversations = listConfiguredConversations(config);
+	const webConvs = await listWebConversations();
 	const channelSpec = args.find((a) => !a.startsWith("-"));
 
-	// Determine which conversations to watch
-	let targets = conversations;
+	const serviceBadge = (service: string) =>
+		service === "discord" ? chalk.blue(`[discord]`) :
+		service === "web"     ? chalk.magenta(`[web]`)   :
+		chalk.cyan(`[telegram]`);
+
+	// Unified target list: { service, conversationName, logPath }
+	type AttachTarget = { service: string; conversationName: string; logPath: string };
+
+	let targets: AttachTarget[];
+
 	if (channelSpec) {
+		// Match in Telegram/Discord first
 		const conv = resolveConversation(config, channelSpec)
 			?? conversations.find((c) => c.conversationName.toLowerCase().includes(channelSpec.toLowerCase()))
 			?? conversations.find((c) => c.channelKey.includes(channelSpec));
-		if (!conv) {
-			console.error(chalk.red(`채널을 찾을 수 없습니다: ${channelSpec}`));
-			process.exitCode = 1;
-			return;
+		if (conv) {
+			targets = [{ service: conv.service, conversationName: conv.conversationName, logPath: conv.logPath }];
+		} else {
+			// Try web channels
+			const wc = webConvs.find(
+				(w) => w.channelKey === channelSpec ||
+					w.conversationName.toLowerCase().includes(channelSpec.toLowerCase()) ||
+					w.channelKey.includes(channelSpec),
+			);
+			if (!wc) {
+				console.error(chalk.red(`채널을 찾을 수 없습니다: ${channelSpec}`));
+				process.exitCode = 1;
+				return;
+			}
+			targets = [{ service: "web", conversationName: wc.conversationName, logPath: wc.logPath }];
 		}
-		targets = [conv];
+	} else {
+		// No filter — watch everything: Telegram/Discord + web
+		const configTargets: AttachTarget[] = conversations.map((c) => ({
+			service: c.service,
+			conversationName: c.conversationName,
+			logPath: c.logPath,
+		}));
+		const webTargets: AttachTarget[] = webConvs.map((wc) => ({
+			service: "web",
+			conversationName: wc.conversationName,
+			logPath: wc.logPath,
+		}));
+		targets = [...configTargets, ...webTargets];
 	}
 
 	if (targets.length === 0) {
-		console.log(chalk.dim("설정된 채널이 없습니다. pie gateway setup을 실행하세요."));
+		console.log(chalk.dim("설정된 채널이 없습니다. pie gateway setup을 실행하거나 웹 채팅을 사용해보세요."));
 		return;
 	}
 
 	// Check gateway status
 	const status = await readGatewayStatus();
-
-	const badge = (service: string) => service === "discord" ? chalk.blue(`[discord]`) : chalk.cyan(`[telegram]`);
 
 	console.log(chalk.bold("\n🔗 Gateway Attach"));
 	if (status.running) {
@@ -759,36 +856,33 @@ async function attachGateway(args: string[]): Promise<void> {
 	} else {
 		console.log(chalk.yellow("○ gateway가 실행되고 있지 않습니다. 로그 파일만 tailing합니다."));
 	}
-	console.log(chalk.dim(`모니터링 채널: ${targets.map((c) => c.conversationName).join(", ")}`));
+	console.log(chalk.dim(`모니터링 채널 (${targets.length}개): ${targets.map((t) => t.conversationName).join(", ")}`));
 	console.log(chalk.dim("중지하려면 Ctrl+C\n"));
 	console.log(chalk.dim("─".repeat(70)));
 
 	// Track file sizes for tail-mode reading
 	const fileSizes = new Map<string, number>();
-	for (const conv of targets) {
+	for (const t of targets) {
 		try {
-			fileSizes.set(conv.logPath, statSync(conv.logPath).size);
+			fileSizes.set(t.logPath, statSync(t.logPath).size);
 		} catch {
-			fileSizes.set(conv.logPath, 0);
+			fileSizes.set(t.logPath, 0);
 		}
 	}
 
-	// Watch each channel.jsonl for new appended lines
-	const watchers: Array<{ close(): void }> = [];
 	const abortController = new AbortController();
 
-	const processNewLines = async (conv: (typeof targets)[0], lastSize: number): Promise<number> => {
+	const processNewLines = async (t: AttachTarget, lastSize: number): Promise<number> => {
 		const { readFile } = await import("node:fs/promises");
 		let content: string;
 		try {
-			content = await readFile(conv.logPath, "utf8");
+			content = await readFile(t.logPath, "utf8");
 		} catch {
 			return lastSize;
 		}
 		const currentSize = Buffer.byteLength(content, "utf8");
 		if (currentSize <= lastSize) return lastSize;
 
-		// Parse only the newly appended portion
 		const newContent = content.slice(lastSize);
 		const lines = newContent.split("\n").map((l) => l.trim()).filter(Boolean);
 		for (const line of lines) {
@@ -796,9 +890,7 @@ async function attachGateway(args: string[]): Promise<void> {
 				const record = JSON.parse(line) as ChatLogRecord;
 				const rendered = renderRecord(record);
 				if (rendered) {
-					const channelBadge = badge(conv.service);
-					const name = chalk.dim(conv.conversationName);
-					console.log(`${channelBadge} ${name}  ${rendered}`);
+					console.log(`${serviceBadge(t.service)} ${chalk.dim(t.conversationName)}  ${rendered}`);
 				}
 			} catch {
 				// malformed JSON line — skip
@@ -807,24 +899,75 @@ async function attachGateway(args: string[]): Promise<void> {
 		return currentSize;
 	};
 
-	for (const conv of targets) {
+	// Watch existing log files
+	for (const t of targets) {
+		if (!existsSync(t.logPath)) continue;
 		try {
-			const watcher = watch(conv.logPath, { signal: abortController.signal });
-			watchers.push({ close: () => abortController.abort() });
-			// Run watcher loop in background
+			const watcher = watch(t.logPath, { signal: abortController.signal });
 			(async () => {
 				try {
 					for await (const _event of watcher) {
-						const prevSize = fileSizes.get(conv.logPath) ?? 0;
-						const newSize = await processNewLines(conv, prevSize);
-						fileSizes.set(conv.logPath, newSize);
+						const prevSize = fileSizes.get(t.logPath) ?? 0;
+						const newSize = await processNewLines(t, prevSize);
+						fileSizes.set(t.logPath, newSize);
 					}
 				} catch (e) {
 					if (e instanceof Error && e.name === "AbortError") return;
 				}
 			})();
 		} catch {
-			// File doesn't exist yet — will be created when gateway writes to it
+			// ignore watch setup errors
+		}
+	}
+
+	// Also watch the web channels directory for newly created conversations
+	const webChannelsDir = join(getAgentDir(), "chat", "accounts", "web", "channels");
+	const watchedLogPaths = new Set(targets.map((t) => t.logPath));
+	if (existsSync(webChannelsDir) && !channelSpec) {
+		try {
+			const dirWatcher = watch(webChannelsDir, { recursive: true, signal: abortController.signal });
+			(async () => {
+				try {
+					for await (const event of dirWatcher) {
+						if (typeof event.filename !== "string") continue;
+						if (!event.filename.endsWith("channel.jsonl")) continue;
+						const logPath = join(webChannelsDir, event.filename);
+						if (watchedLogPaths.has(logPath)) continue;
+						watchedLogPaths.add(logPath);
+						const parts = event.filename.split("/");
+						const convId = parts[0] ?? event.filename;
+						const newTarget: AttachTarget = {
+							service: "web",
+							conversationName: `Web / ${convId}`,
+							logPath,
+						};
+						targets.push(newTarget);
+						fileSizes.set(logPath, 0);
+						console.log(chalk.dim(`[web] 새 대화 감지: ${convId}`));
+						// Start watching the new file
+						try {
+							const newWatcher = watch(logPath, { signal: abortController.signal });
+							(async () => {
+								try {
+									for await (const _e of newWatcher) {
+										const prevSize = fileSizes.get(logPath) ?? 0;
+										const newSize = await processNewLines(newTarget, prevSize);
+										fileSizes.set(logPath, newSize);
+									}
+								} catch (e2) {
+									if (e2 instanceof Error && e2.name === "AbortError") return;
+								}
+							})();
+						} catch {
+							// ignore
+						}
+					}
+				} catch (e) {
+					if (e instanceof Error && e.name === "AbortError") return;
+				}
+			})();
+		} catch {
+			// ignore directory watch errors
 		}
 	}
 
@@ -837,7 +980,6 @@ async function attachGateway(args: string[]): Promise<void> {
 		};
 		process.once("SIGINT", onSignal);
 		process.once("SIGTERM", onSignal);
-		// Also resolve if abort fires from watcher
 		abortController.signal.addEventListener("abort", () => resolve(), { once: true });
 	});
 }
