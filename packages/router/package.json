@@ -1,6 +1,6 @@
 {
 	"name": "@pie-lab/router",
-	"version": "0.1.3",
+	"version": "0.1.6",
 	"type": "module",
 	"description": "Model routing and fallback policy for pie-lab",
 	"main": "./dist/index.js",

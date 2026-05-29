@@ -240,7 +240,6 @@ class GatewayConversationWorker implements GatewayConversationEndpoint {
 	private activeAbort?: AbortController;
 	private activeSessionKey?: string;
 	private nudgeTimer?: ReturnType<typeof setTimeout>;
-	private lastUserActivityAt = 0;
 
 	constructor(options: {
 		conversation: ResolvedConversation;
@@ -312,7 +311,6 @@ class GatewayConversationWorker implements GatewayConversationEndpoint {
 		if (!runtime) return;
 		// Track user activity for nudge timer
 		if (!(input.isBot ?? false)) {
-			this.lastUserActivityAt = Date.now();
 			this.resetNudgeTimer();
 		}
 		if (runtime.isArmed()) {
