@@ -129,6 +129,97 @@ discord/channel-id    ← Discord 채널 세션
 | `apps/chat/src/lib/chat-api.ts` | `fetchSessionHistory()` 함수 |
 | `apps/chat/src/components/chat/chat-app.tsx` | conversationId 관리, 이력 복원 UI |
 
+## 웹 채팅 정상 동작 요건
+
+웹 채팅은 두 가지 경로로 동작합니다. **게이트웨이 경로(권장)**와 **독립 폴백** 경로입니다.
+
+### 게이트웨이 경로 (권장)
+
+`pie gateway run`이 실행 중이면 웹 채팅 메시지는 gateway를 통해 처리됩니다.
+
+**필수 실행 순서:**
+
+```bash
+# 1. API 서버 실행
+npm --workspace @pie-lab/server run dev
+
+# 2. 게이트웨이 실행 (별도 터미널)
+pie gateway run
+
+# 3. 웹 채팅 앱 실행 (별도 터미널)
+npm --workspace @pie-lab/pie-chat run dev
+```
+
+세 프로세스가 모두 실행 중이어야 웹 채팅이 정상 동작합니다.
+
+**게이트웨이가 실행 중인지 확인:**
+
+```bash
+pie gateway status
+# 또는
+echo '{"type":"ping"}' | nc -U ~/.pie/agent/gateway-web.sock -w 3
+# → {"type":"pong"} 가 오면 정상
+```
+
+### 독립 폴백 경로
+
+`pie gateway run`이 실행되지 않은 경우 서버는 자동으로 독립 `AgentSession`을 생성합니다. 이 경우 LLM 응답은 오지만 Telegram/Discord와 대화 공유, 대화 영속성 등 게이트웨이 기능은 사용할 수 없습니다.
+
+### 코드 업데이트 후 재시작
+
+`packages/coding-agent`를 빌드하거나 게이트웨이 관련 코드를 수정했을 때는 **반드시 게이트웨이를 재시작**해야 합니다. Node.js는 모듈을 메모리에 캐시하므로 파일을 변경해도 실행 중인 프로세스는 구 버전을 계속 사용합니다.
+
+```bash
+pie gateway stop
+pie gateway run
+```
+
+또는:
+
+```bash
+kill $(cat ~/.pie/agent/gateway/pid)
+pie gateway run
+```
+
+**재시작이 필요한 경우:**
+
+- `packages/coding-agent/` 소스 수정 후 빌드
+- `npm run build --workspace @pie-lab/coding-agent` 실행 후
+- `git pull`로 gateway 관련 코드 업데이트 후
+
+### 웹 채팅 응답이 안 올 때 점검 순서
+
+```bash
+# 1. 게이트웨이가 실행 중인지 확인
+pie gateway status
+
+# 2. 게이트웨이가 없다면 시작
+pie gateway run
+
+# 3. IPC 소켓 ping 테스트
+echo '{"type":"ping"}' | nc -U ~/.pie/agent/gateway-web.sock -w 3
+
+# 4. 채널 로그에 job_queued가 있는지 확인 (없으면 게이트웨이 재시작 필요)
+tail -20 ~/.pie/agent/chat/accounts/web/channels/<conversationId>/channel.jsonl
+
+# 5. 직접 API 테스트 (60초 이내 응답이 와야 함)
+curl -s -X POST http://127.0.0.1:4873/v1/pie/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model":"auto:chat","messages":[{"role":"user","content":"hi"}],"conversation_id":"debug_test","stream":true}' \
+  --max-time 60 -N
+```
+
+**채널 로그에서 정상 흐름 확인:**
+
+```
+inbound N      ← 사용자 메시지 수신
+job_queued N+1 ← LLM 호출 예약 (없으면 게이트웨이 재시작 필요)
+outbound N+2   ← LLM 응답
+job_completed N+3
+```
+
+`job_queued` 레코드 없이 `inbound`만 쌓이면 게이트웨이가 구 버전 코드로 실행 중인 것입니다 — 재시작으로 해결됩니다.
+
 ## 설계 결정 사항
 
 ### 선택적 연결 (Optional IPC)
@@ -153,10 +244,13 @@ const webIpc = new WebIPCServer({
         const conversation = buildWebConversation(agentDir, conversationId);
         const worker = new GatewayConversationWorker({ ... });
         await worker.start();
+        await worker.onCaughtUp(); // 런타임 arming — 없으면 메시지가 큐에 쌓이지 않음
         return worker;
     },
 });
 ```
+
+`onCaughtUp()`은 `ConversationRuntime.armedAfterRecordId`를 설정합니다. 이 값이 설정되지 않으면 `shouldQueueTrigger()`가 항상 `false`를 반환해 어떤 메시지도 LLM 처리로 넘어가지 않습니다. Telegram/Discord 어댑터는 catch-up 완료 시 자동으로 `onCaughtUp()`을 호출하지만, 웹 IPC 워커는 수동으로 호출해야 합니다.
 
 ### TypeScript `erasableSyntaxOnly` 호환
 
@@ -186,3 +280,10 @@ class WebIPCServer {
 | 2026-05-27 | `message_update` 필수 `message` 필드 누락 | `makeAssistantMsg()` 헬퍼 추가 |
 | 2026-05-27 | `GatewayConversationWorker` 순환 import | factory callback 패턴으로 분리 |
 | 2026-05-27 | `erasableSyntaxOnly` TS1294 오류 | 파라미터 프로퍼티 → 명시적 필드 선언 |
+| 2026-05-28 | 웹 IPC 워커 런타임 미armed — 메시지 큐 없음 | `createWorker` 팩토리에 `await worker.onCaughtUp()` 추가 |
+| 2026-05-28 | `WebIPCTransport.close()`가 `done` 미전송 — IPC 클라이언트 영구 대기 | `doneSent` 플래그 추적, `close()`에서 자동 `done` 전송 |
+| 2026-05-28 | IPC `done` 이벤트의 텍스트가 SSE 스트림에 미전달 | `createGatewayIPCSession.onIPCEvent`에서 합성 `text_delta` 이벤트 emit |
+| 2026-05-29 | `writeRawSse` drain 대기 deadlock | `drain` + `close` + `error` 세 이벤트 중 먼저 오는 것으로 promise resolve |
+| 2026-05-29 | IPC abort이 gateway worker LLM 호출 미중단 | `abortActive()` 메서드 추가, IPC abort/chat 핸들러에서 호출 |
+| 2026-05-29 | `/v1/pie/chat/sessions` 라우팅 누락 — 대화 이력 미복원 | `isPieAgentChatPath()`에 sessions 엔드포인트 추가 |
+| 2026-05-29 | Node.js 19+ deprecated `request.aborted` 이벤트 사용 | `response.on("close")` 단일 핸들러로 교체 |

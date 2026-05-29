@@ -25,6 +25,8 @@ pie gateway doctor
 pie gateway stop
 ```
 
+> **웹 채팅 사용 시 주의**: `pie gateway run`이 실행되지 않으면 웹 채팅이 독립 AgentSession 폴백으로 동작합니다. 또한 `packages/coding-agent`를 재빌드한 후에는 게이트웨이도 재시작해야 새 코드가 반영됩니다 — Node.js는 모듈을 메모리에 캐시하므로, 파일이 바뀌어도 실행 중인 프로세스는 구 버전을 계속 사용합니다.
+
 OpenAI audio key 저장과 확인:
 
 ```bash

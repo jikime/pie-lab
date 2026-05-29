@@ -9,13 +9,23 @@
 
 ## 웹 채팅 실행
 
-먼저 pie-lab API server를 실행합니다.
+웹 채팅은 API 서버, 게이트웨이, 웹 앱 세 프로세스가 모두 실행 중이어야 합니다.
+
+**터미널 1 — API 서버:**
 
 ```bash
 npm --workspace @pie-lab/server run dev
 ```
 
-다른 터미널에서 Pie Chat 웹 앱을 실행합니다.
+**터미널 2 — 게이트웨이 (AI 처리 담당):**
+
+```bash
+pie gateway run
+```
+
+게이트웨이가 실행되지 않으면 웹 채팅 메시지가 독립 AgentSession으로 폴백됩니다. 폴백도 LLM 응답을 받을 수 있지만, Telegram/Discord 대화 공유와 대화 영속성은 게이트웨이 경로에서만 지원됩니다.
+
+**터미널 3 — 웹 채팅 앱:**
 
 ```bash
 npm --workspace @pie-lab/pie-chat run dev
@@ -34,6 +44,16 @@ API server: http://127.0.0.1:4873
 google/gemini-3.1-pro-preview
 google/gemini-2.5-flash
 ```
+
+### 코드 업데이트 후 재시작
+
+`packages/coding-agent`를 재빌드했거나 `git pull`로 게이트웨이 관련 코드를 업데이트한 경우 게이트웨이도 재시작해야 합니다.
+
+```bash
+pie gateway stop && pie gateway run
+```
+
+Node.js는 모듈을 메모리에 캐시하므로, 파일이 바뀌어도 실행 중인 게이트웨이는 구 버전을 계속 사용합니다. 재시작하지 않으면 웹 채팅에서 응답이 오지 않거나 "응답 생성 중" 상태에서 멈출 수 있습니다.
 
 웹 채팅 요청은 API server로 전달될 때 `clientOrigin=pie-chat:web`으로 usage record에 저장됩니다. dashboard의 `Usage -> Origins` 탭에서 웹 채팅 비용과 CLI/bridge 비용을 분리해서 볼 수 있습니다.
 
