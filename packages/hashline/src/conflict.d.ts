@@ -36,4 +36,14 @@ export declare function detectSemanticConflicts(edits: LineEdit[], contextLines?
  * Check if two text ranges would conflict in a merge
  */
 export declare function wouldConflict(baseStart: number, baseEnd: number, change1Start: number, change1End: number, change2Start: number, change2End: number): boolean;
+/**
+ * Simple 3-way merge
+ * Merges changes from two versions against a base
+ */
+export interface MergeResult {
+    merged: string;
+    conflicts: ConflictMarker[];
+    hasConflicts: boolean;
+}
+export declare function threeWayMerge(base: string, ours: string, theirs: string): MergeResult;
 //# sourceMappingURL=conflict.d.ts.map

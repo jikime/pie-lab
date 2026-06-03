@@ -4,6 +4,7 @@ import {
 	resolveConflicts,
 	detectSemanticConflicts,
 	wouldConflict,
+	threeWayMerge,
 } from "./conflict.ts";
 
 describe("conflict detection", () => {
@@ -120,6 +121,51 @@ line 2`;
 		it("should handle adjacent ranges", () => {
 			const overlaps = wouldConflict(5, 10, 1, 5, 10, 15);
 			expect(overlaps).toBe(false);
+		});
+	});
+
+	describe("3-way merge", () => {
+		it("should accept both identical changes", () => {
+			const base = "line 1\nline 2\nline 3";
+			const ours = "line 1\nline 2 modified\nline 3";
+			const theirs = "line 1\nline 2 modified\nline 3";
+
+			const result = threeWayMerge(base, ours, theirs);
+			expect(result.hasConflicts).toBe(false);
+			expect(result.merged).toBe(ours);
+		});
+
+		it("should accept non-overlapping changes", () => {
+			const base = "line 1\nline 2\nline 3";
+			const ours = "line 1 modified\nline 2\nline 3";
+			const theirs = "line 1\nline 2\nline 3 modified";
+
+			const result = threeWayMerge(base, ours, theirs);
+			expect(result.hasConflicts).toBe(false);
+			expect(result.merged).toContain("line 1 modified");
+			expect(result.merged).toContain("line 3 modified");
+		});
+
+		it("should detect conflicting changes to same line", () => {
+			const base = "line 1\nline 2\nline 3";
+			const ours = "line 1\nline 2 our way\nline 3";
+			const theirs = "line 1\nline 2 their way\nline 3";
+
+			const result = threeWayMerge(base, ours, theirs);
+			expect(result.hasConflicts).toBe(true);
+			expect(result.conflicts.length).toBe(1);
+			expect(result.merged).toContain("<<<<<<< HEAD");
+			expect(result.merged).toContain("line 2 our way");
+			expect(result.merged).toContain("line 2 their way");
+		});
+
+		it("should handle deletion vs modification", () => {
+			const base = "line 1\nline 2\nline 3";
+			const ours = "line 1\nline 3"; // deleted line 2
+			const theirs = "line 1\nline 2 modified\nline 3";
+
+			const result = threeWayMerge(base, ours, theirs);
+			expect(result.hasConflicts).toBe(true); // Can't merge delete with modify
 		});
 	});
 });

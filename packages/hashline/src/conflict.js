@@ -109,4 +109,60 @@ export function wouldConflict(baseStart, baseEnd, change1Start, change1End, chan
     // Ranges overlap if one starts before the other ends
     return !(change1End < change2Start || change2End < change1Start);
 }
+export function threeWayMerge(base, ours, theirs) {
+    const baseLines = base.split("\n");
+    const ourLines = ours.split("\n");
+    const theirLines = theirs.split("\n");
+    // Check for obvious non-conflict cases
+    if (ours === theirs) {
+        return { merged: ours, conflicts: [], hasConflicts: false };
+    }
+    if (ours === base) {
+        return { merged: theirs, conflicts: [], hasConflicts: false };
+    }
+    if (theirs === base) {
+        return { merged: ours, conflicts: [], hasConflicts: false };
+    }
+    // Simple line-by-line merge: if all three differ, it's a conflict
+    const result = [];
+    const conflicts = [];
+    const maxLines = Math.max(baseLines.length, ourLines.length, theirLines.length);
+    for (let i = 0; i < maxLines; i++) {
+        const baseLine = baseLines[i] || "";
+        const ourLine = ourLines[i] || "";
+        const theirLine = theirLines[i] || "";
+        if (ourLine === theirLine) {
+            // Both agree
+            result.push(ourLine);
+        }
+        else if (ourLine === baseLine) {
+            // We didn't change, they did → take theirs
+            result.push(theirLine);
+        }
+        else if (theirLine === baseLine) {
+            // They didn't change, we did → take ours
+            result.push(ourLine);
+        }
+        else {
+            // Both changed differently → conflict
+            result.push(`<<<<<<< HEAD`);
+            result.push(ourLine);
+            result.push(`=======`);
+            result.push(theirLine);
+            result.push(`>>>>>>>`);
+            conflicts.push({
+                lineStart: result.length - 5,
+                lineEnd: result.length - 1,
+                ours: [ourLine],
+                theirs: [theirLine],
+                base: [baseLine],
+            });
+        }
+    }
+    return {
+        merged: result.join("\n"),
+        conflicts,
+        hasConflicts: conflicts.length > 0,
+    };
+}
 //# sourceMappingURL=conflict.js.map
