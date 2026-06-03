@@ -198,6 +198,65 @@ export function createWriteToolDefinition(
 			_onUpdate?,
 			_ctx?,
 		) {
+			// Check if it's an internal URL first
+			const { isInternalURL, parseInternalURL } = await import("./internal-urls.ts");
+
+			if (isInternalURL(path)) {
+				// Handle internal URL (conflict:// for now)
+				const parsedUrl = parseInternalURL(path);
+				if (!parsedUrl) {
+					throw new Error(`Invalid internal URL format: ${path}`);
+				}
+
+				if (parsedUrl.scheme === "conflict") {
+					// Store conflict resolution metadata
+					if (signal?.aborted) throw new Error("Operation aborted");
+
+					const conflictDir = resolveToCwd(".pie/conflicts", cwd);
+					const conflictFile = `${conflictDir}/${parsedUrl.id}.json`;
+
+					return withFileMutationQueue(conflictFile, async () => {
+						const throwIfAborted = (): void => {
+							if (signal?.aborted) throw new Error("Operation aborted");
+						};
+
+						throwIfAborted();
+						await ops.mkdir(conflictDir);
+						throwIfAborted();
+
+						// Parse and validate JSON content
+						let jsonContent: Record<string, unknown>;
+						try {
+							jsonContent = JSON.parse(content);
+						} catch (e) {
+							throw new Error(`Invalid JSON for conflict metadata: ${e instanceof Error ? e.message : String(e)}`);
+						}
+
+						// Add metadata
+						jsonContent.id = parsedUrl.id;
+						jsonContent.updatedAt = new Date().toISOString();
+
+						const jsonText = JSON.stringify(jsonContent, null, 2);
+						await ops.writeFile(conflictFile, jsonText);
+						throwIfAborted();
+
+						return {
+							content: [
+								{
+									type: "text",
+									text: `Successfully saved conflict metadata for "${parsedUrl.id}" (${jsonText.length} bytes)`,
+								},
+							],
+							details: undefined,
+						};
+					});
+				} else {
+					// Other internal URL schemes don't support writing yet
+					throw new Error(`Writing to ${parsedUrl.scheme}:// resources is not supported yet`);
+				}
+			}
+
+			// Handle file system path
 			const absolutePath = resolveToCwd(path, cwd);
 			const dir = dirname(absolutePath);
 			return withFileMutationQueue(absolutePath, async () => {
