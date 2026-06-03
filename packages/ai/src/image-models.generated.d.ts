@@ -120,6 +120,21 @@ export declare const IMAGE_MODELS: {
                 cacheWrite: number;
             };
         };
+        readonly "microsoft/mai-image-2.5": {
+            id: string;
+            name: string;
+            api: "openrouter-images";
+            provider: string;
+            baseUrl: string;
+            input: ("image" | "text")[];
+            output: "image"[];
+            cost: {
+                input: number;
+                output: number;
+                cacheRead: number;
+                cacheWrite: number;
+            };
+        };
         readonly "openai/gpt-5-image": {
             id: string;
             name: string;

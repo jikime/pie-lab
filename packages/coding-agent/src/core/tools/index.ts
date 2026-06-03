@@ -82,6 +82,7 @@ export {
 	type CommitSplitterToolOptions,
 } from "./commit-splitter.ts";
 export { createLspTool, createLspToolDefinition, type LspToolInput } from "./lsp.ts";
+export { createDapTool, createDapToolDefinition, type DapToolInput } from "./dap.ts";
 
 import type { AgentTool } from "@pie-lab/agent-core";
 import type { ToolDefinition } from "../extensions/types.ts";
@@ -91,6 +92,7 @@ import { createCommitSplitterTool, createCommitSplitterToolDefinition, type Comm
 import { createEditTool, createEditToolDefinition, type EditToolOptions } from "./edit.ts";
 import { createFindTool, createFindToolDefinition, type FindToolOptions } from "./find.ts";
 import { createGrepTool, createGrepToolDefinition, type GrepToolOptions } from "./grep.ts";
+import { createDapTool, createDapToolDefinition } from "./dap.ts";
 import { createLspTool, createLspToolDefinition } from "./lsp.ts";
 import { createLsTool, createLsToolDefinition, type LsToolOptions } from "./ls.ts";
 import { createReadTool, createReadToolDefinition, type ReadToolOptions } from "./read.ts";
@@ -98,8 +100,8 @@ import { createWriteTool, createWriteToolDefinition, type WriteToolOptions } fro
 
 export type Tool = AgentTool<any>;
 export type ToolDef = ToolDefinition<any, any>;
-export type ToolName = "read" | "bash" | "edit" | "write" | "grep" | "find" | "ls" | "code-review" | "commit-splitter" | "lsp";
-export const allToolNames: Set<ToolName> = new Set(["read", "bash", "edit", "write", "grep", "find", "ls", "code-review", "commit-splitter", "lsp"]);
+export type ToolName = "read" | "bash" | "edit" | "write" | "grep" | "find" | "ls" | "code-review" | "commit-splitter" | "lsp" | "dap";
+export const allToolNames: Set<ToolName> = new Set(["read", "bash", "edit", "write", "grep", "find", "ls", "code-review", "commit-splitter", "lsp", "dap"]);
 
 export interface ToolsOptions {
 	read?: ReadToolOptions;
@@ -135,6 +137,8 @@ export function createToolDefinition(toolName: ToolName, cwd: string, options?: 
 			return createCommitSplitterToolDefinition(cwd, options?.["commit-splitter"]);
 		case "lsp":
 			return createLspToolDefinition(cwd);
+		case "dap":
+			return createDapToolDefinition(cwd);
 		default:
 			throw new Error(`Unknown tool name: ${toolName}`);
 	}
@@ -162,6 +166,8 @@ export function createTool(toolName: ToolName, cwd: string, options?: ToolsOptio
 			return createCommitSplitterTool(cwd, options?.["commit-splitter"]);
 		case "lsp":
 			return createLspTool(cwd);
+		case "dap":
+			return createDapTool(cwd);
 		default:
 			throw new Error(`Unknown tool name: ${toolName}`);
 	}
@@ -197,6 +203,7 @@ export function createAllToolDefinitions(cwd: string, options?: ToolsOptions): R
 		"code-review": createCodeReviewToolDefinition(cwd, options?.["code-review"]),
 		"commit-splitter": createCommitSplitterToolDefinition(cwd, options?.["commit-splitter"]),
 		lsp: createLspToolDefinition(cwd),
+		dap: createDapToolDefinition(cwd),
 	};
 }
 
@@ -230,5 +237,6 @@ export function createAllTools(cwd: string, options?: ToolsOptions): Record<Tool
 		"code-review": createCodeReviewTool(cwd, options?.["code-review"]),
 		"commit-splitter": createCommitSplitterTool(cwd, options?.["commit-splitter"]),
 		lsp: createLspTool(cwd),
+		dap: createDapTool(cwd),
 	};
 }
