@@ -238,105 +238,124 @@ export function createReadToolDefinition(
 
 					(async () => {
 						try {
-							const absolutePath = await resolveReadPathAsync(path, cwd);
-							if (aborted) return;
-							// Check if file exists and is readable.
-							await ops.access(absolutePath);
-							if (aborted) return;
-							const mimeType = ops.detectImageMimeType ? await ops.detectImageMimeType(absolutePath) : undefined;
+							// Check if it's an internal URL first
+							const { isInternalURL, parseInternalURL, resolveInternalURL } = await import("./internal-urls.ts");
 							let content: (TextContent | ImageContent)[];
 							let details: ReadToolDetails | undefined;
 							const nonVisionImageNote = getNonVisionImageNote(ctx?.model);
-							if (mimeType) {
-								// Read image as binary.
-								const buffer = await ops.readFile(absolutePath);
-								if (autoResizeImages) {
-									// Resize image if needed before sending it back to the model.
-									const resized = await resizeImage(buffer, mimeType);
-									if (!resized) {
-										let textNote = `Read image file [${mimeType}]\n[Image omitted: could not be resized below the inline image size limit.]`;
-										if (nonVisionImageNote) textNote += `\n${nonVisionImageNote}`;
-										content = [{ type: "text", text: textNote }];
+
+							if (isInternalURL(path)) {
+								// Handle internal URL (pr://, issue://, agent://, skill://, rule://, conflict://)
+								const parsedUrl = parseInternalURL(path);
+								if (!parsedUrl) {
+									throw new Error(`Invalid internal URL format: ${path}`);
+								}
+								const resolvedContent = await resolveInternalURL(parsedUrl);
+								if (resolvedContent === null) {
+									throw new Error(`Could not resolve internal URL: ${path}`);
+								}
+								if (aborted) return;
+								content = [{ type: "text", text: resolvedContent }];
+								details = undefined;
+							} else {
+								// Handle file system path
+								const absolutePath = await resolveReadPathAsync(path, cwd);
+								if (aborted) return;
+								// Check if file exists and is readable.
+								await ops.access(absolutePath);
+								if (aborted) return;
+								const mimeType = ops.detectImageMimeType ? await ops.detectImageMimeType(absolutePath) : undefined;
+								if (mimeType) {
+									// Read image as binary.
+									const buffer = await ops.readFile(absolutePath);
+									if (autoResizeImages) {
+										// Resize image if needed before sending it back to the model.
+										const resized = await resizeImage(buffer, mimeType);
+										if (!resized) {
+											let textNote = `Read image file [${mimeType}]\n[Image omitted: could not be resized below the inline image size limit.]`;
+											if (nonVisionImageNote) textNote += `\n${nonVisionImageNote}`;
+											content = [{ type: "text", text: textNote }];
+										} else {
+											const dimensionNote = formatDimensionNote(resized);
+											let textNote = `Read image file [${resized.mimeType}]`;
+											if (dimensionNote) textNote += `\n${dimensionNote}`;
+											if (nonVisionImageNote) textNote += `\n${nonVisionImageNote}`;
+											content = [
+												{ type: "text", text: textNote },
+												{ type: "image", data: resized.data, mimeType: resized.mimeType },
+											];
+										}
 									} else {
-										const dimensionNote = formatDimensionNote(resized);
-										let textNote = `Read image file [${resized.mimeType}]`;
-										if (dimensionNote) textNote += `\n${dimensionNote}`;
+										let textNote = `Read image file [${mimeType}]`;
 										if (nonVisionImageNote) textNote += `\n${nonVisionImageNote}`;
 										content = [
 											{ type: "text", text: textNote },
-											{ type: "image", data: resized.data, mimeType: resized.mimeType },
+											{ type: "image", data: buffer.toString("base64"), mimeType },
 										];
 									}
 								} else {
-									let textNote = `Read image file [${mimeType}]`;
-									if (nonVisionImageNote) textNote += `\n${nonVisionImageNote}`;
-									content = [
-										{ type: "text", text: textNote },
-										{ type: "image", data: buffer.toString("base64"), mimeType },
-									];
-								}
-							} else {
-								// Read text content.
-								const buffer = await ops.readFile(absolutePath);
-								const textContent = buffer.toString("utf-8");
-								const allLines = textContent.split("\n");
-								const totalFileLines = allLines.length;
-								// Apply offset if specified. Convert from 1-indexed input to 0-indexed array access.
-								const startLine = offset ? Math.max(0, offset - 1) : 0;
-								const startLineDisplay = startLine + 1;
-								// Check if offset is out of bounds.
-								if (startLine >= allLines.length) {
-									throw new Error(`Offset ${offset} is beyond end of file (${allLines.length} lines total)`);
-								}
-								let selectedContent: string;
-								let userLimitedLines: number | undefined;
-								// If limit is specified by the user, honor it first. Otherwise truncateHead decides.
-								if (limit !== undefined) {
-									const endLine = Math.min(startLine + limit, allLines.length);
-									selectedContent = allLines.slice(startLine, endLine).join("\n");
-									userLimitedLines = endLine - startLine;
-								} else {
-									selectedContent = allLines.slice(startLine).join("\n");
-								}
-								// Apply truncation, respecting both line and byte limits.
-								const truncation = truncateHead(selectedContent);
-								let outputText: string;
-								if (truncation.firstLineExceedsLimit) {
-									// First line alone exceeds the byte limit. Point the model at a bash fallback.
-									const firstLineSize = formatSize(Buffer.byteLength(allLines[startLine], "utf-8"));
-									outputText = `[Line ${startLineDisplay} is ${firstLineSize}, exceeds ${formatSize(DEFAULT_MAX_BYTES)} limit. Use bash: sed -n '${startLineDisplay}p' ${path} | head -c ${DEFAULT_MAX_BYTES}]`;
-									details = { truncation };
-								} else if (truncation.truncated) {
-									// Truncation occurred. Build an actionable continuation notice.
-									const endLineDisplay = startLineDisplay + truncation.outputLines - 1;
-									const nextOffset = endLineDisplay + 1;
-									outputText = truncation.content;
-									if (truncation.truncatedBy === "lines") {
-										outputText += `\n\n[Showing lines ${startLineDisplay}-${endLineDisplay} of ${totalFileLines}. Use offset=${nextOffset} to continue.]`;
-									} else {
-										outputText += `\n\n[Showing lines ${startLineDisplay}-${endLineDisplay} of ${totalFileLines} (${formatSize(DEFAULT_MAX_BYTES)} limit). Use offset=${nextOffset} to continue.]`;
+									// Read text content.
+									const buffer = await ops.readFile(absolutePath);
+									const textContent = buffer.toString("utf-8");
+									const allLines = textContent.split("\n");
+									const totalFileLines = allLines.length;
+									// Apply offset if specified. Convert from 1-indexed input to 0-indexed array access.
+									const startLine = offset ? Math.max(0, offset - 1) : 0;
+									const startLineDisplay = startLine + 1;
+									// Check if offset is out of bounds.
+									if (startLine >= allLines.length) {
+										throw new Error(`Offset ${offset} is beyond end of file (${allLines.length} lines total)`);
 									}
-									details = { truncation };
-								} else if (userLimitedLines !== undefined && startLine + userLimitedLines < allLines.length) {
-									// User-specified limit stopped early, but the file still has more content.
-									const remaining = allLines.length - (startLine + userLimitedLines);
-									const nextOffset = startLine + userLimitedLines + 1;
-									outputText = `${truncation.content}\n\n[${remaining} more lines in file. Use offset=${nextOffset} to continue.]`;
-								} else {
-									// No truncation and no remaining user-limited content.
-									outputText = truncation.content;
+									let selectedContent: string;
+									let userLimitedLines: number | undefined;
+									// If limit is specified by the user, honor it first. Otherwise truncateHead decides.
+									if (limit !== undefined) {
+										const endLine = Math.min(startLine + limit, allLines.length);
+										selectedContent = allLines.slice(startLine, endLine).join("\n");
+										userLimitedLines = endLine - startLine;
+									} else {
+										selectedContent = allLines.slice(startLine).join("\n");
+									}
+									// Apply truncation, respecting both line and byte limits.
+									const truncation = truncateHead(selectedContent);
+									let outputText: string;
+									if (truncation.firstLineExceedsLimit) {
+										// First line alone exceeds the byte limit. Point the model at a bash fallback.
+										const firstLineSize = formatSize(Buffer.byteLength(allLines[startLine], "utf-8"));
+										outputText = `[Line ${startLineDisplay} is ${firstLineSize}, exceeds ${formatSize(DEFAULT_MAX_BYTES)} limit. Use bash: sed -n '${startLineDisplay}p' ${path} | head -c ${DEFAULT_MAX_BYTES}]`;
+										details = { truncation };
+									} else if (truncation.truncated) {
+										// Truncation occurred. Build an actionable continuation notice.
+										const endLineDisplay = startLineDisplay + truncation.outputLines - 1;
+										const nextOffset = endLineDisplay + 1;
+										outputText = truncation.content;
+										if (truncation.truncatedBy === "lines") {
+											outputText += `\n\n[Showing lines ${startLineDisplay}-${endLineDisplay} of ${totalFileLines}. Use offset=${nextOffset} to continue.]`;
+										} else {
+											outputText += `\n\n[Showing lines ${startLineDisplay}-${endLineDisplay} of ${totalFileLines} (${formatSize(DEFAULT_MAX_BYTES)} limit). Use offset=${nextOffset} to continue.]`;
+										}
+										details = { truncation };
+									} else if (userLimitedLines !== undefined && startLine + userLimitedLines < allLines.length) {
+										// User-specified limit stopped early, but the file still has more content.
+										const remaining = allLines.length - (startLine + userLimitedLines);
+										const nextOffset = startLine + userLimitedLines + 1;
+										outputText = `${truncation.content}\n\n[${remaining} more lines in file. Use offset=${nextOffset} to continue.]`;
+									} else {
+										// No truncation and no remaining user-limited content.
+										outputText = truncation.content;
+									}
+									content = [{ type: "text", text: outputText }];
 								}
-								content = [{ type: "text", text: outputText }];
+	
+								if (aborted) return;
+								signal?.removeEventListener("abort", onAbort);
+								resolve({ content, details });
 							}
-
-							if (aborted) return;
-							signal?.removeEventListener("abort", onAbort);
-							resolve({ content, details });
-						} catch (error: any) {
-							signal?.removeEventListener("abort", onAbort);
-							if (!aborted) reject(error);
-						}
-					})();
+							} catch (error: any) {
+								signal?.removeEventListener("abort", onAbort);
+								if (!aborted) reject(error);
+							}
+						})();
 				},
 			);
 		},
