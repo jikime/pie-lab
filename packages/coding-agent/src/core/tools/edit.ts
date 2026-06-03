@@ -18,6 +18,7 @@ import {
 	restoreLineEndings,
 	stripBom,
 } from "./edit-diff.ts";
+import { applyHashlineEdit } from "@pie-lab/hashline";
 import { withFileMutationQueue } from "./file-mutation-queue.ts";
 import { resolveToCwd } from "./path-utils.ts";
 import { invalidArgText, shortenPath, str } from "./render-utils.ts";
@@ -36,6 +37,21 @@ const replaceEditSchema = Type.Object(
 				"Exact text for one targeted replacement. It must be unique in the original file and must not overlap with any other edits[].oldText in the same call.",
 		}),
 		newText: Type.String({ description: "Replacement text for this targeted edit." }),
+		hash: Type.Optional(
+			Type.String({
+				description: "Optional SHA256 hash of the target line for anchor recovery when file has changed.",
+			}),
+		),
+		before: Type.Optional(
+			Type.Array(Type.String(), {
+				description: "Optional context lines before the target (for fuzzy recovery).",
+			}),
+		),
+		after: Type.Optional(
+			Type.Array(Type.String(), {
+				description: "Optional context lines after the target (for fuzzy recovery).",
+			}),
+		),
 	},
 	{ additionalProperties: false },
 );
@@ -164,6 +180,43 @@ function getEditCallRenderComponent(state: EditRenderState, lastComponent: unkno
 	const component = createEditCallRenderComponent();
 	state.callComponent = component;
 	return component;
+}
+
+/**
+ * Try to apply edits using Hashline if hash/context info is available.
+ * Falls back to traditional string matching if Hashline fails or lacks context.
+ */
+function tryApplyWithHashline(content: string, edits: Edit[]): { newContent: string; usedHashline: boolean } | null {
+	// Only use Hashline if at least one edit has hash/context
+	const hasHashlineInfo = edits.some((e) => e.hash || e.before || e.after);
+	if (!hasHashlineInfo) return null;
+
+	let currentContent = content;
+	const appliedLines: number[] = [];
+
+	// Apply edits in reverse line order to avoid line number shifts
+	const contentLines = content.split("\n");
+
+	for (const edit of edits) {
+		const hashlineEdit = {
+			anchor: edit.oldText,
+			hash: edit.hash,
+			before: edit.before,
+			after: edit.after,
+			newText: edit.newText,
+		};
+
+		const result = applyHashlineEdit(currentContent, hashlineEdit);
+
+		// If Hashline fails, return null to fall back to traditional matching
+		if (result.error) {
+			return null;
+		}
+
+		currentContent = result.text;
+	}
+
+	return { newContent: currentContent, usedHashline: true };
 }
 
 function getRenderablePreviewInput(args: RenderableEditArgs | undefined): { path: string; edits: Edit[] } | null {
@@ -344,7 +397,21 @@ export function createEditToolDefinition(
 				const { bom, text: content } = stripBom(rawContent);
 				const originalEnding = detectLineEnding(content);
 				const normalizedContent = normalizeToLF(content);
-				const { baseContent, newContent } = applyEditsToNormalizedContent(normalizedContent, edits, path);
+
+				// Try Hashline first if hash/context info is available
+				let baseContent = normalizedContent;
+				let newContent: string;
+				const hashlineResult = tryApplyWithHashline(normalizedContent, edits);
+
+				if (hashlineResult) {
+					// Hashline succeeded
+					newContent = hashlineResult.newContent;
+				} else {
+					// Fall back to traditional string matching
+					const result = applyEditsToNormalizedContent(normalizedContent, edits, path);
+					baseContent = result.baseContent;
+					newContent = result.newContent;
+				}
 				throwIfAborted();
 
 				const finalContent = bom + restoreLineEndings(newContent, originalEnding);

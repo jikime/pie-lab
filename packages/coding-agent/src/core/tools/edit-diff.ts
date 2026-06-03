@@ -7,6 +7,7 @@ import * as Diff from "diff";
 import { constants } from "fs";
 import { access, readFile } from "fs/promises";
 import { resolveToCwd } from "./path-utils.ts";
+import { applyHashlineEdit, type HashlineEdit } from "@pie-lab/hashline";
 
 export function detectLineEnding(content: string): "\r\n" | "\n" {
 	const crlfIdx = content.indexOf("\r\n");
@@ -73,6 +74,9 @@ export interface FuzzyMatchResult {
 export interface Edit {
 	oldText: string;
 	newText: string;
+	hash?: string;
+	before?: string[];
+	after?: string[];
 }
 
 interface MatchedEdit {

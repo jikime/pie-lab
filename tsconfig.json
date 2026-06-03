@@ -29,6 +29,8 @@
 			"@pie-lab/chat/*": ["./packages/chat/src/*"],
 			"@pie-lab/shared": ["./packages/shared/src/index.ts"],
 			"@pie-lab/shared/*": ["./packages/shared/src/*"],
+			"@pie-lab/hashline": ["./packages/hashline/src/index.ts"],
+			"@pie-lab/hashline/*": ["./packages/hashline/src/*"],
 			"@pie-lab/agent-old": ["./packages/agent-old/src/index.ts"],
 			"@pie-lab/agent-old/*": ["./packages/agent-old/src/*"]
 		}

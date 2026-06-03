@@ -1,0 +1,23 @@
+{
+  "name": "@pie-lab/hashline",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Hashline: content-hash based edit anchoring for pie-lab",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "src"],
+  "scripts": {
+    "build": "tsgo",
+    "test": "bun test"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/bun": "latest"
+  }
+}
