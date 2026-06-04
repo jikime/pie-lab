@@ -1,9 +1,9 @@
-import type { AgentTool } from "@pie-lab/agent-core";
-import { Container, Text } from "@pie-lab/tui";
 import { execFile as execFileCallback } from "node:child_process";
 import { promisify } from "node:util";
+import type { AgentTool } from "@pie-lab/agent-core";
+import { Text } from "@pie-lab/tui";
 import { type Static, Type } from "typebox";
-import type { ToolDefinition, ToolRenderResultOptions } from "../extensions/types.ts";
+import type { ToolDefinition } from "../extensions/types.ts";
 import { resolveToCwd } from "./path-utils.ts";
 import { shortenPath, str } from "./render-utils.ts";
 import { wrapToolDefinition } from "./tool-definition-wrapper.ts";
@@ -30,6 +30,19 @@ export interface CodeReviewOperations {
 }
 
 const execFile = promisify(execFileCallback);
+
+interface ExecFailure {
+	stdout?: unknown;
+	stderr?: unknown;
+	message?: unknown;
+}
+
+function getExecFailureOutput(error: unknown): string {
+	const failure = error as ExecFailure;
+	const stdout = typeof failure.stdout === "string" ? failure.stdout : "";
+	const stderr = typeof failure.stderr === "string" ? failure.stderr : "";
+	return stdout + stderr;
+}
 
 const defaultCodeReviewOperations: CodeReviewOperations = {
 	exec: async (cmd, args, opts) => {
@@ -153,11 +166,7 @@ function parseTscOutput(tscOutput: string): TypeScriptError[] {
 	return errors;
 }
 
-function buildMarkdownReport(
-	diffStats: DiffStats,
-	tscErrors: TypeScriptError[],
-	checks: string[],
-): string {
+function buildMarkdownReport(diffStats: DiffStats, tscErrors: TypeScriptError[], checks: string[]): string {
 	let report = "## Code Review Report\n\n";
 
 	// Summary
@@ -168,7 +177,7 @@ function buildMarkdownReport(
 		if (tscErrors.length > 0) {
 			report += `### TypeScript Errors (${tscErrors.length})\n`;
 			for (const err of tscErrors) {
-				report += `- \`${err.file}:${err.line}:${err.column}\` — ${err.message}\n`;
+				report += `- \`${err.file}:${err.line}:${err.column}\` - ${err.message}\n`;
 			}
 			report += "\n";
 		}
@@ -179,8 +188,8 @@ function buildMarkdownReport(
 		if (diffStats.issues.length > 0) {
 			report += `### Potential Issues (${diffStats.issues.length})\n`;
 			for (const issue of diffStats.issues) {
-				const icon = issue.type === "secret" ? "🔒" : "⚠️ ";
-				report += `- ${icon} \`${issue.file}\` +${issue.line}: ${issue.message}\n`;
+				const label = issue.type === "secret" ? "secret" : issue.type;
+				report += `- [${label}] \`${issue.file}\` +${issue.line}: ${issue.message}\n`;
 			}
 			report += "\n";
 		}
@@ -191,13 +200,13 @@ function buildMarkdownReport(
 	if (totalIssues > 0) {
 		const blockingCount = tscErrors.length;
 		report += `### Summary\n`;
-		report += `❌ ${blockingCount} blocking issue${blockingCount !== 1 ? "s" : ""} (TypeScript error${blockingCount !== 1 ? "s" : ""})`;
+		report += `${blockingCount} blocking issue${blockingCount !== 1 ? "s" : ""} (TypeScript error${blockingCount !== 1 ? "s" : ""})`;
 		if (diffStats.issues.length > 0) {
 			report += `, ${diffStats.issues.length} potential issue${diffStats.issues.length !== 1 ? "s" : ""}`;
 		}
 		report += "\n";
 	} else {
-		report += "### Summary\n✅ No issues found\n";
+		report += "### Summary\nNo issues found\n";
 	}
 
 	return report;
@@ -253,12 +262,10 @@ export function createCodeReviewToolDefinition(
 					// tsc writes errors to stdout/stderr, parse both
 					const allOutput = (result.stdout || "") + (result.stderr || "");
 					tscErrors.push(...parseTscOutput(allOutput));
-				} catch (error: any) {
+				} catch (error) {
 					// tsc exits with non-zero on errors, which throws in execFile
-					if (error.stdout || error.stderr) {
-						const allOutput = (error.stdout || "") + (error.stderr || "");
-						tscErrors.push(...parseTscOutput(allOutput));
-					}
+					const allOutput = getExecFailureOutput(error);
+					if (allOutput) tscErrors.push(...parseTscOutput(allOutput));
 				}
 			}
 

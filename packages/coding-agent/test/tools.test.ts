@@ -1,3 +1,4 @@
+import { InMemorySnapshotStore } from "@pie-lab/hashline";
 import { applyPatch } from "diff";
 import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
@@ -5,6 +6,7 @@ import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { executeBashWithOperations } from "../src/core/bash-executor.ts";
 import { type BashOperations, createBashTool, createLocalBashOperations } from "../src/core/tools/bash.ts";
+import { ConflictHistory } from "../src/core/tools/conflict-history.ts";
 import { computeEditsDiff } from "../src/core/tools/edit-diff.ts";
 import {
 	createEditTool,
@@ -66,6 +68,41 @@ describe("Coding Agent Tools", () => {
 			const testFile = join(testDir, "nonexistent.txt");
 
 			await expect(readTool.execute("test-call-2", { path: testFile })).rejects.toThrow(/ENOENT|not found/i);
+		});
+
+		it("should resolve internal URLs without hanging", async () => {
+			const result = await readTool.execute("test-call-internal-url", { path: "agent://reviewer" });
+
+			expect(getTextOutput(result)).toContain("[Agent: reviewer]");
+		});
+
+		it("should emit hashline output when a snapshot store is configured", async () => {
+			const snapshotStore = new InMemorySnapshotStore();
+			const hashlineReadTool = createReadTool(testDir, { useHashline: true, snapshotStore });
+			const testFile = join(testDir, "hashline-read.txt");
+			writeFileSync(testFile, "alpha\nbeta");
+
+			const result = await hashlineReadTool.execute("test-call-hashline-read", { path: "hashline-read.txt" });
+			const output = getTextOutput(result);
+
+			expect(output).toMatch(/^¶hashline-read\.txt#[0-9A-F]{4}\n1:alpha\n2:beta$/);
+			expect(snapshotStore.head(testFile)?.text).toBe("alpha\nbeta");
+		});
+
+		it("should keep hashline continuation notices outside numbered content", async () => {
+			const snapshotStore = new InMemorySnapshotStore();
+			const hashlineReadTool = createReadTool(testDir, { useHashline: true, snapshotStore });
+			const testFile = join(testDir, "hashline-limited.txt");
+			writeFileSync(testFile, "alpha\nbeta\ngamma\n");
+
+			const result = await hashlineReadTool.execute("test-call-hashline-limited", {
+				path: "hashline-limited.txt",
+				limit: 2,
+			});
+			const output = getTextOutput(result);
+
+			expect(output).toMatch(/^¶hashline-limited\.txt#[0-9A-F]{4}\n1:alpha\n2:beta\n\n\[1 more lines/);
+			expect(output).not.toContain("\n3:[");
 		});
 
 		it("should truncate files exceeding line limit", async () => {
@@ -203,6 +240,22 @@ describe("Coding Agent Tools", () => {
 	});
 
 	describe("write tool", () => {
+		it("should resolve recorded merge conflicts through conflict URLs", async () => {
+			const conflictHistory = new ConflictHistory();
+			const snapshotStore = new InMemorySnapshotStore();
+			const conflictReadTool = createReadTool(testDir, { conflictHistory, snapshotStore, useHashline: true });
+			const conflictWriteTool = createWriteTool(testDir, { conflictHistory, snapshotStore });
+			const testFile = join(testDir, "conflict.txt");
+			writeFileSync(testFile, "before\n<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> branch\nafter");
+
+			const readResult = await conflictReadTool.execute("test-call-conflict-read", { path: "conflict.txt" });
+			expect(getTextOutput(readResult)).toContain("conflict://1");
+
+			await conflictWriteTool.execute("test-call-conflict-write", { path: "conflict://1", content: "resolved" });
+
+			expect(readFileSync(testFile, "utf-8")).toBe("before\nresolved\nafter");
+		});
+
 		it("should write file contents", async () => {
 			const testFile = join(testDir, "write-test.txt");
 			const content = "Test content";
@@ -225,6 +278,25 @@ describe("Coding Agent Tools", () => {
 	});
 
 	describe("edit tool", () => {
+		it("should apply hashline patch input from read output", async () => {
+			const snapshotStore = new InMemorySnapshotStore();
+			const hashlineReadTool = createReadTool(testDir, { useHashline: true, snapshotStore });
+			const hashlineEditTool = createEditTool(testDir, { snapshotStore });
+			const testFile = join(testDir, "hashline-edit.txt");
+			writeFileSync(testFile, "alpha\nbeta\ngamma");
+
+			const readResult = await hashlineReadTool.execute("test-call-hashline-edit-read", {
+				path: "hashline-edit.txt",
+			});
+			const header = getTextOutput(readResult).split("\n")[0];
+
+			await hashlineEditTool.execute("test-call-hashline-edit", {
+				input: `${header}\nreplace 2..2:\n+BETA\ninsert tail:\n+omega`,
+			});
+
+			expect(readFileSync(testFile, "utf-8")).toBe("alpha\nBETA\ngamma\nomega");
+		});
+
 		it("should replace text in file", async () => {
 			const testFile = join(testDir, "edit-test.txt");
 			const originalContent = "Hello, world!";

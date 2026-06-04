@@ -1,10 +1,20 @@
 import type { AgentTool } from "@pie-lab/agent-core";
+import {
+	applyHashlineEdits,
+	applyHashlineSectionToText,
+	normalizeSnapshotText,
+	parseHashlinePatch,
+	type SnapshotStore,
+	validateHashlineSnapshot,
+} from "@pie-lab/hashline";
 import { Box, Container, Spacer, Text } from "@pie-lab/tui";
 import { constants } from "fs";
 import { access as fsAccess, readFile as fsReadFile, writeFile as fsWriteFile } from "fs/promises";
 import { type Static, Type } from "typebox";
 import { renderDiff } from "../../modes/interactive/components/diff.ts";
+import type { Theme } from "../../modes/interactive/theme/theme.ts";
 import type { ToolDefinition } from "../extensions/types.ts";
+import type { ConflictHistory } from "./conflict-history.ts";
 import {
 	applyEditsToNormalizedContent,
 	computeEditsDiff,
@@ -18,7 +28,6 @@ import {
 	restoreLineEndings,
 	stripBom,
 } from "./edit-diff.ts";
-import { applyHashlineEdit } from "@pie-lab/hashline";
 import { withFileMutationQueue } from "./file-mutation-queue.ts";
 import { resolveToCwd } from "./path-utils.ts";
 import { invalidArgText, shortenPath, str } from "./render-utils.ts";
@@ -58,11 +67,19 @@ const replaceEditSchema = Type.Object(
 
 const editSchema = Type.Object(
 	{
-		path: Type.String({ description: "Path to the file to edit (relative or absolute)" }),
-		edits: Type.Array(replaceEditSchema, {
-			description:
-				"One or more targeted replacements. Each edit is matched against the original file, not incrementally. Do not include overlapping or nested edits. If two changes touch the same block or nearby lines, merge them into one edit instead.",
-		}),
+		path: Type.Optional(Type.String({ description: "Path to the file to edit (relative or absolute)" })),
+		edits: Type.Optional(
+			Type.Array(replaceEditSchema, {
+				description:
+					"One or more targeted replacements. Each edit is matched against the original file, not incrementally. Do not include overlapping or nested edits. If two changes touch the same block or nearby lines, merge them into one edit instead.",
+			}),
+		),
+		input: Type.Optional(
+			Type.String({
+				description:
+					"Hashline patch input using ¶PATH#TAG headers from read output plus replace/delete/insert operations.",
+			}),
+		),
 	},
 	{ additionalProperties: false },
 );
@@ -104,6 +121,10 @@ const defaultEditOperations: EditOperations = {
 export interface EditToolOptions {
 	/** Custom operations for file editing. Default: local filesystem */
 	operations?: EditOperations;
+	/** Shared snapshot store for hashline patch edits. */
+	snapshotStore?: SnapshotStore;
+	/** Shared merge-conflict registry to invalidate stale conflict:// entries after edits. */
+	conflictHistory?: ConflictHistory;
 }
 
 function prepareEditArguments(input: unknown): EditToolInput {
@@ -133,6 +154,12 @@ function prepareEditArguments(input: unknown): EditToolInput {
 }
 
 function validateEditInput(input: EditToolInput): { path: string; edits: Edit[] } {
+	if (typeof input.input === "string") {
+		throw new Error("Hashline input must be handled by the hashline edit path.");
+	}
+	if (typeof input.path !== "string" || input.path.length === 0) {
+		throw new Error("Edit tool input is invalid. path is required for replacement edits.");
+	}
 	if (!Array.isArray(input.edits) || input.edits.length === 0) {
 		throw new Error("Edit tool input is invalid. edits must contain at least one replacement.");
 	}
@@ -190,33 +217,21 @@ function tryApplyWithHashline(content: string, edits: Edit[]): { newContent: str
 	// Only use Hashline if at least one edit has hash/context
 	const hasHashlineInfo = edits.some((e) => e.hash || e.before || e.after);
 	if (!hasHashlineInfo) return null;
+	if (edits.some((edit) => edit.oldText.includes("\n"))) return null;
 
-	let currentContent = content;
-	const appliedLines: number[] = [];
-
-	// Apply edits in reverse line order to avoid line number shifts
-	const contentLines = content.split("\n");
-
-	for (const edit of edits) {
-		const hashlineEdit = {
+	const result = applyHashlineEdits(
+		content,
+		edits.map((edit) => ({
 			anchor: edit.oldText,
 			hash: edit.hash,
 			before: edit.before,
 			after: edit.after,
 			newText: edit.newText,
-		};
+		})),
+	);
+	if (result.error) return null;
 
-		const result = applyHashlineEdit(currentContent, hashlineEdit);
-
-		// If Hashline fails, return null to fall back to traditional matching
-		if (result.error) {
-			return null;
-		}
-
-		currentContent = result.text;
-	}
-
-	return { newContent: currentContent, usedHashline: true };
+	return { newContent: result.text, usedHashline: true };
 }
 
 function getRenderablePreviewInput(args: RenderableEditArgs | undefined): { path: string; edits: Edit[] } | null {
@@ -244,10 +259,7 @@ function getRenderablePreviewInput(args: RenderableEditArgs | undefined): { path
 	return null;
 }
 
-function formatEditCall(
-	args: RenderableEditArgs | undefined,
-	theme: typeof import("../../modes/interactive/theme/theme.ts").theme,
-): string {
+function formatEditCall(args: RenderableEditArgs | undefined, theme: Theme): string {
 	const invalidArg = invalidArgText(theme);
 	const rawPath = str(args?.file_path ?? args?.path);
 	const path = rawPath !== null ? shortenPath(rawPath) : null;
@@ -259,7 +271,7 @@ function formatEditResult(
 	args: RenderableEditArgs | undefined,
 	preview: EditPreview | undefined,
 	result: EditToolResultLike,
-	theme: typeof import("../../modes/interactive/theme/theme.ts").theme,
+	theme: Theme,
 	isError: boolean,
 ): string | undefined {
 	const rawPath = str(args?.file_path ?? args?.path);
@@ -287,7 +299,7 @@ function formatEditResult(
 function getEditHeaderBg(
 	preview: EditPreview | undefined,
 	settledError: boolean | undefined,
-	theme: typeof import("../../modes/interactive/theme/theme.ts").theme,
+	theme: Theme,
 ): (text: string) => string {
 	if (preview) {
 		if ("error" in preview) {
@@ -304,7 +316,7 @@ function getEditHeaderBg(
 function buildEditCallComponent(
 	component: EditCallRenderComponent,
 	args: RenderableEditArgs | undefined,
-	theme: typeof import("../../modes/interactive/theme/theme.ts").theme,
+	theme: Theme,
 ): EditCallRenderComponent {
 	component.setBgFn(getEditHeaderBg(component.preview, component.settledError, theme));
 	component.clear();
@@ -346,14 +358,17 @@ export function createEditToolDefinition(
 	options?: EditToolOptions,
 ): ToolDefinition<typeof editSchema, EditToolDetails | undefined, EditRenderState> {
 	const ops = options?.operations ?? defaultEditOperations;
+	const snapshotStore = options?.snapshotStore;
+	const conflictHistory = options?.conflictHistory;
 	return {
 		name: "edit",
 		label: "edit",
 		description:
-			"Edit a single file using exact text replacement. Every edits[].oldText must match a unique, non-overlapping region of the original file. If two changes affect the same block or nearby lines, merge them into one edit instead of emitting overlapping edits. Do not include large unchanged regions just to connect distant changes.",
-		promptSnippet:
-			"Make precise file edits with exact text replacement, including multiple disjoint edits in one call",
+			"Edit files using either hashline patches from read output or exact text replacement. Prefer hashline input when read returned ¶PATH#TAG numbered content.",
+		promptSnippet: "Make precise file edits with hashline patches or exact text replacement",
 		promptGuidelines: [
+			"When read output includes a ¶PATH#TAG header, prefer edit input with hashline replace/delete/insert operations.",
+			"Hashline examples: replace 2..3: followed by +new lines; delete 5; insert after 8: followed by +new lines.",
 			"Use edit for precise changes (edits[].oldText must match exactly)",
 			"When changing multiple separate locations in one file, use one edit call with multiple entries in edits[] instead of multiple edit calls",
 			"Each edits[].oldText is matched against the original file, not after earlier edits are applied. Do not emit overlapping or nested edits. Merge nearby changes into one edit.",
@@ -363,6 +378,82 @@ export function createEditToolDefinition(
 		renderShell: "self",
 		prepareArguments: prepareEditArguments,
 		async execute(_toolCallId, input: EditToolInput, signal?: AbortSignal, _onUpdate?, _ctx?) {
+			if (typeof input.input === "string") {
+				if (!snapshotStore) {
+					throw new Error("Hashline edit input is not available in this session.");
+				}
+				const patch = parseHashlinePatch(input.input);
+				const seenFiles = new Set<string>();
+				const updates: Array<{
+					path: string;
+					absolutePath: string;
+					baseContent: string;
+					newContent: string;
+					originalEnding: "\r\n" | "\n";
+					bom: string;
+				}> = [];
+
+				for (const section of patch.sections) {
+					const absolutePath = resolveToCwd(section.path, cwd);
+					if (seenFiles.has(absolutePath)) {
+						throw new Error(`Multiple hashline sections target the same file: ${section.path}`);
+					}
+					seenFiles.add(absolutePath);
+
+					await ops.access(absolutePath);
+					if (signal?.aborted) throw new Error("Operation aborted");
+					const buffer = await ops.readFile(absolutePath);
+					if (signal?.aborted) throw new Error("Operation aborted");
+					const rawContent = buffer.toString("utf-8");
+					const { bom, text: content } = stripBom(rawContent);
+					const originalEnding = detectLineEnding(content);
+					const normalizedContent = normalizeToLF(content);
+					const snapshot = snapshotStore.byHash(absolutePath, section.hash);
+					validateHashlineSnapshot(normalizedContent, section.hash, section.path);
+					const baseContent = snapshot?.text ?? normalizeSnapshotText(normalizedContent);
+					const newContent = applyHashlineSectionToText(baseContent, section);
+					updates.push({
+						path: section.path,
+						absolutePath,
+						baseContent,
+						newContent,
+						originalEnding,
+						bom,
+					});
+				}
+
+				for (const update of updates) {
+					await withFileMutationQueue(update.absolutePath, async () => {
+						if (signal?.aborted) throw new Error("Operation aborted");
+						await ops.writeFile(
+							update.absolutePath,
+							update.bom + restoreLineEndings(update.newContent, update.originalEnding),
+						);
+						snapshotStore.record(update.absolutePath, update.newContent);
+						conflictHistory?.clearPath(update.absolutePath);
+					});
+				}
+
+				const baseContent = updates.map((update) => `--- ${update.path}\n${update.baseContent}`).join("\n");
+				const newContent = updates.map((update) => `--- ${update.path}\n${update.newContent}`).join("\n");
+				const diffResult = generateDiffString(baseContent, newContent);
+				return {
+					content: [
+						{
+							type: "text",
+							text: `Successfully applied hashline edit to ${updates.length} file(s).`,
+						},
+					],
+					details: {
+						diff: diffResult.diff,
+						patch: updates
+							.map((update) => generateUnifiedPatch(update.path, update.baseContent, update.newContent))
+							.join("\n"),
+						firstChangedLine: diffResult.firstChangedLine,
+					},
+				};
+			}
+
 			const { path, edits } = validateEditInput(input);
 			const absolutePath = resolveToCwd(path, cwd);
 
@@ -416,6 +507,8 @@ export function createEditToolDefinition(
 
 				const finalContent = bom + restoreLineEndings(newContent, originalEnding);
 				await ops.writeFile(absolutePath, finalContent);
+				snapshotStore?.record(absolutePath, newContent);
+				conflictHistory?.clearPath(absolutePath);
 				throwIfAborted();
 
 				const diffResult = generateDiffString(baseContent, newContent);

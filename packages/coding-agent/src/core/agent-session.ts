@@ -26,6 +26,7 @@ import {
 	resetApiProviders,
 	streamSimple,
 } from "@pie-lab/ai";
+import { InMemorySnapshotStore } from "@pie-lab/hashline";
 import { resolvePiModelRoute } from "@pie-lab/router";
 import { theme } from "../modes/interactive/theme/theme.js";
 import { stripFrontmatter } from "../utils/frontmatter.js";
@@ -83,6 +84,7 @@ import type { SlashCommandInfo } from "./slash-commands.js";
 import { createSyntheticSourceInfo, type SourceInfo } from "./source-info.js";
 import { type BuildSystemPromptOptions, buildSystemPrompt } from "./system-prompt.js";
 import { type BashOperations, createLocalBashOperations } from "./tools/bash.js";
+import { ConflictHistory } from "./tools/conflict-history.js";
 import { createAllToolDefinitions } from "./tools/index.js";
 import { createToolDefinitionFromAgentTool } from "./tools/tool-definition-wrapper.js";
 
@@ -257,6 +259,8 @@ export class AgentSession {
 	readonly settingsManager: SettingsManager;
 
 	private _scopedModels: Array<{ model: Model<any>; thinkingLevel?: ThinkingLevel }>;
+	private readonly _hashlineSnapshotStore = new InMemorySnapshotStore();
+	private readonly _conflictHistory = new ConflictHistory();
 
 	// Event subscription state
 	private _unsubscribeAgent?: () => void;
@@ -2390,6 +2394,9 @@ export class AgentSession {
 			: createAllToolDefinitions(this._cwd, {
 					read: { autoResizeImages },
 					bash: { commandPrefix: shellCommandPrefix, shellPath },
+					hashlineSnapshotStore: this._hashlineSnapshotStore,
+					conflictHistory: this._conflictHistory,
+					useHashline: true,
 				});
 
 		this._baseToolDefinitions = new Map(

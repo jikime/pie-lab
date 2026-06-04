@@ -14,7 +14,7 @@
   "files": ["dist", "src"],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "test": "bun test"
+    "test": "vitest --run"
   },
   "dependencies": {},
   "devDependencies": {

@@ -1,24 +1,17 @@
 import type { AgentTool } from "@pie-lab/agent-core";
 import { Text } from "@pie-lab/tui";
 import { type Static, Type } from "typebox";
-import { getOrCreateDapClient } from "../../utils/dap-client.ts";
-import type { ToolDefinition, ToolRenderResultOptions } from "../extensions/types.ts";
+import { type DebugResult, getOrCreateDapClient } from "../../utils/dap-client.ts";
+import type { ToolDefinition } from "../extensions/types.ts";
 import { resolveToCwd } from "./path-utils.ts";
 import { shortenPath, str } from "./render-utils.ts";
 import { wrapToolDefinition } from "./tool-definition-wrapper.ts";
 
 const dapSchema = Type.Object({
 	script: Type.String({ description: "Script file to execute (relative or absolute path)" }),
-	action: Type.Union(
-		[
-			Type.Literal("run"),
-			Type.Literal("debug"),
-		],
-		{
-			description:
-				"Debug action: run (execute script), debug (execute with debugger enabled)",
-		},
-	),
+	action: Type.Union([Type.Literal("run"), Type.Literal("debug")], {
+		description: "Debug action: run (execute script), debug (execute with debugger enabled)",
+	}),
 	args: Type.Optional(
 		Type.Array(Type.String(), {
 			description: "Script arguments",
@@ -29,7 +22,7 @@ const dapSchema = Type.Object({
 export type DapToolInput = Static<typeof dapSchema>;
 
 function formatRunResult(exitCode: number, stdout: string, stderr: string): string {
-	let markdown = `### Execute: ${exitCode === 0 ? "✅ Success" : "❌ Error"}\n\n`;
+	let markdown = `### Execute: ${exitCode === 0 ? "Success" : "Error"}\n\n`;
 	markdown += `**Exit code:** ${exitCode}\n\n`;
 
 	if (stdout.trim()) {
@@ -44,9 +37,9 @@ function formatRunResult(exitCode: number, stdout: string, stderr: string): stri
 }
 
 function formatDebugResult(exitCode: number, stdout: string, stderr: string): string {
-	let markdown = `### Debug: ${exitCode === 0 ? "✅ Success" : "❌ Error"}\n\n`;
+	let markdown = `### Debug: ${exitCode === 0 ? "Success" : "Error"}\n\n`;
 	markdown += `**Exit code:** ${exitCode}\n`;
-	markdown += `**Inspector enabled** (--inspect-brk)\n\n`;
+	markdown += `**Inspector enabled** (--inspect)\n\n`;
 
 	if (stdout.trim()) {
 		markdown += `**Output:**\n\`\`\`\n${stdout}\n\`\`\`\n`;
@@ -63,20 +56,15 @@ export function createDapToolDefinition(cwd: string): ToolDefinition<typeof dapS
 	return {
 		name: "dap",
 		label: "dap",
-		description: "Execute or debug JavaScript/TypeScript scripts with output capture",
+		description:
+			"Execute JavaScript/TypeScript scripts with output capture; debug uses Node's inspector mode, not a full DAP session",
 		promptSnippet: "Run or debug a script",
 		promptGuidelines: [
 			"Use dap run to execute a script and capture output",
-			"Use dap debug to run with Node.js inspector enabled",
+			"Use dap debug only when Node inspector output is useful; it is not a full breakpoint/debug-adapter session",
 		],
 		parameters: dapSchema,
-		async execute(
-			_toolCallId,
-			{ script, action, args }: DapToolInput,
-			signal?: AbortSignal,
-			_onUpdate?,
-			_ctx?,
-		) {
+		async execute(_toolCallId, { script, action, args }: DapToolInput, _signal?: AbortSignal, _onUpdate?, _ctx?) {
 			const absolutePath = resolveToCwd(script, cwd);
 
 			// Guard: ensure file is JavaScript/TypeScript
@@ -90,12 +78,10 @@ export function createDapToolDefinition(cwd: string): ToolDefinition<typeof dapS
 			try {
 				const client = getOrCreateDapClient(cwd);
 
-				let result;
-				if (action === "debug") {
-					result = await client.launchWithInspector(absolutePath, args);
-				} else {
-					result = await client.launch(absolutePath, args);
-				}
+				const result: DebugResult =
+					action === "debug"
+						? await client.launchWithInspector(absolutePath, args)
+						: await client.launch(absolutePath, args);
 
 				const markdown =
 					action === "debug"

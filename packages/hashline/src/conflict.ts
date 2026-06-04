@@ -30,8 +30,6 @@ export function detectMergeConflicts(content: string): ConflictDetectionResult {
 		if (lines[i].startsWith("<<<<<<<")) {
 			const conflictStart = i;
 			const ours: string[] = [];
-			let separatorLine = -1;
-			let theirStart = -1;
 
 			// Collect "ours" section
 			i++;
@@ -46,7 +44,6 @@ export function detectMergeConflicts(content: string): ConflictDetectionResult {
 				continue;
 			}
 
-			separatorLine = i;
 			const theirs: string[] = [];
 
 			// Collect "theirs" section
@@ -104,11 +101,7 @@ export function resolveConflicts(content: string, strategy: "ours" | "theirs" = 
 		const resolution = strategy === "ours" ? conflict.ours : conflict.theirs;
 
 		// Remove conflict markers and replace with chosen version
-		result = [
-			...result.slice(0, conflict.lineStart),
-			...resolution,
-			...result.slice(conflict.lineEnd + 1),
-		];
+		result = [...result.slice(0, conflict.lineStart), ...resolution, ...result.slice(conflict.lineEnd + 1)];
 	}
 
 	return result.join("\n");
@@ -152,8 +145,8 @@ export function detectSemanticConflicts(edits: LineEdit[], contextLines: number 
  * Check if two text ranges would conflict in a merge
  */
 export function wouldConflict(
-	baseStart: number,
-	baseEnd: number,
+	_baseStart: number,
+	_baseEnd: number,
 	change1Start: number,
 	change1End: number,
 	change2Start: number,

@@ -1,10 +1,10 @@
-import { describe, it, expect } from "bun:test";
+import { describe, expect, it } from "vitest";
 import {
 	detectMergeConflicts,
-	resolveConflicts,
 	detectSemanticConflicts,
-	wouldConflict,
+	resolveConflicts,
 	threeWayMerge,
+	wouldConflict,
 } from "./conflict.ts";
 
 describe("conflict detection", () => {

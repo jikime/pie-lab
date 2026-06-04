@@ -165,7 +165,8 @@ export default function (pi: ExtensionAPI) {
 
 		renderCall(args, theme, _context) {
 			let text = theme.fg("toolTitle", theme.bold("edit "));
-			text += theme.fg("accent", args.path);
+			const target = args.path ?? (args.input ? "hashline input" : "...");
+			text += theme.fg("accent", target);
 			return new Text(text, 0, 0);
 		},
 

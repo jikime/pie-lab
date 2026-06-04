@@ -4,6 +4,29 @@
 
 type HeadersInit = Record<string, string>;
 
+interface GitHubUserResponse {
+	login?: unknown;
+}
+
+interface GitHubLabelResponse {
+	name?: unknown;
+}
+
+interface GitHubPullResponse {
+	number?: unknown;
+	title?: unknown;
+	state?: unknown;
+	body?: unknown;
+	user?: GitHubUserResponse | null;
+	created_at?: unknown;
+	updated_at?: unknown;
+	html_url?: unknown;
+}
+
+interface GitHubIssueResponse extends GitHubPullResponse {
+	labels?: unknown;
+}
+
 export interface GitHubPRInfo {
 	number: number;
 	title: string;
@@ -65,39 +88,46 @@ export class GitHubClient {
 	}
 
 	async getPR(owner: string, repo: string, prNumber: string): Promise<GitHubPRInfo | null> {
-		const data = await this.fetch<any>(`/repos/${owner}/${repo}/pulls/${prNumber}`);
+		const data = await this.fetch<GitHubPullResponse>(`/repos/${owner}/${repo}/pulls/${prNumber}`);
 
 		if (!data) return null;
 
 		return {
-			number: data.number,
-			title: data.title,
-			state: data.state,
-			body: data.body || "",
-			author: data.user?.login || "unknown",
-			createdAt: data.created_at,
-			updatedAt: data.updated_at,
-			url: data.html_url,
+			number: typeof data.number === "number" ? data.number : Number(prNumber),
+			title: typeof data.title === "string" ? data.title : "",
+			state: data.state === "closed" ? "closed" : "open",
+			body: typeof data.body === "string" ? data.body : "",
+			author: typeof data.user?.login === "string" ? data.user.login : "unknown",
+			createdAt: typeof data.created_at === "string" ? data.created_at : "",
+			updatedAt: typeof data.updated_at === "string" ? data.updated_at : "",
+			url: typeof data.html_url === "string" ? data.html_url : "",
 		};
 	}
 
 	async getIssue(owner: string, repo: string, issueNumber: string): Promise<GitHubIssueInfo | null> {
-		const data = await this.fetch<any>(`/repos/${owner}/${repo}/issues/${issueNumber}`);
+		const data = await this.fetch<GitHubIssueResponse>(`/repos/${owner}/${repo}/issues/${issueNumber}`);
 
 		if (!data) return null;
 
-		// Filter out PR label
-		const labels = (data.labels || []).map((l: any) => l.name).filter((l: string) => l !== "pull_request");
+		const labels = Array.isArray(data.labels)
+			? data.labels
+					.map((label): string | undefined => {
+						if (typeof label === "string") return label;
+						const typedLabel = label as GitHubLabelResponse;
+						return typeof typedLabel.name === "string" ? typedLabel.name : undefined;
+					})
+					.filter((label): label is string => Boolean(label) && label !== "pull_request")
+			: [];
 
 		return {
-			number: data.number,
-			title: data.title,
-			state: data.state,
-			body: data.body || "",
-			author: data.user?.login || "unknown",
-			createdAt: data.created_at,
-			updatedAt: data.updated_at,
-			url: data.html_url,
+			number: typeof data.number === "number" ? data.number : Number(issueNumber),
+			title: typeof data.title === "string" ? data.title : "",
+			state: data.state === "closed" ? "closed" : "open",
+			body: typeof data.body === "string" ? data.body : "",
+			author: typeof data.user?.login === "string" ? data.user.login : "unknown",
+			createdAt: typeof data.created_at === "string" ? data.created_at : "",
+			updatedAt: typeof data.updated_at === "string" ? data.updated_at : "",
+			url: typeof data.html_url === "string" ? data.html_url : "",
 			labels,
 		};
 	}

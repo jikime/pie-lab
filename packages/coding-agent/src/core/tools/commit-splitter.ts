@@ -1,11 +1,9 @@
-import type { AgentTool } from "@pie-lab/agent-core";
-import { Text } from "@pie-lab/tui";
 import { execFile as execFileCallback } from "node:child_process";
 import { promisify } from "node:util";
+import type { AgentTool } from "@pie-lab/agent-core";
+import { Text } from "@pie-lab/tui";
 import { type Static, Type } from "typebox";
-import type { ToolDefinition, ToolRenderResultOptions } from "../extensions/types.ts";
-import { resolveToCwd } from "./path-utils.ts";
-import { shortenPath, str } from "./render-utils.ts";
+import type { ToolDefinition } from "../extensions/types.ts";
 import { wrapToolDefinition } from "./tool-definition-wrapper.ts";
 
 const commitSplitterSchema = Type.Object({
@@ -185,8 +183,7 @@ function classifyHunks(hunks: Hunk[]): CommitGroup[] {
 	return Array.from(groupMap.values())
 		.sort(
 			(a, b) =>
-				categoryOrder.indexOf(a.category) - categoryOrder.indexOf(b.category) ||
-				a.label.localeCompare(b.label),
+				categoryOrder.indexOf(a.category) - categoryOrder.indexOf(b.category) || a.label.localeCompare(b.label),
 		)
 		.map((group) => ({
 			...group,
@@ -256,7 +253,12 @@ export function createCommitSplitterToolDefinition(
 				}
 			} catch (error) {
 				return {
-					content: [{ type: "text", text: `Error running git diff: ${error instanceof Error ? error.message : String(error)}` }],
+					content: [
+						{
+							type: "text",
+							text: `Error running git diff: ${error instanceof Error ? error.message : String(error)}`,
+						},
+					],
 					details: undefined,
 				};
 			}

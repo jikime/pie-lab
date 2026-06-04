@@ -58,14 +58,9 @@ export function isLikelyMatch(
  * Find best match for anchor in text
  * Uses exact match → hash match → fuzzy match → proximity search
  */
-export function findAnchorLine(
-	lines: string[],
-	anchor: string,
-	targetHash?: string,
-	nearLine?: number,
-): number | null {
+export function findAnchorLine(lines: string[], anchor: string, targetHash?: string, nearLine?: number): number | null {
 	// 1. Exact match
-	let idx = lines.indexOf(anchor);
+	const idx = lines.indexOf(anchor);
 	if (idx !== -1) return idx;
 
 	// 2. Hash match (if provided)

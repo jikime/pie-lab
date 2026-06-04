@@ -1,10 +1,16 @@
-import { describe, it, expect } from "bun:test";
+import { describe, expect, it } from "vitest";
 import {
 	applyHashlineEdit,
 	applyHashlineEdits,
+	applyHashlineSectionToText,
 	computeEditContext,
+	computeFileHash,
 	computeLineHash,
 	findAnchorLine,
+	formatHashlineHeader,
+	formatNumberedLines,
+	parseHashlinePatch,
+	validateHashlineSnapshot,
 } from "./index.ts";
 
 describe("hashline", () => {
@@ -88,6 +94,41 @@ describe("hashline", () => {
 			expect(result.text).toContain("const y = 456;");
 		});
 
+		it("should reject ambiguous anchors instead of editing the first match", () => {
+			const content = "target\nmiddle\ntarget";
+			const result = applyHashlineEdit(content, {
+				anchor: "target",
+				newText: "changed",
+			});
+
+			expect(result.error).toContain("ambiguous");
+			expect(result.text).toBe(content);
+		});
+
+		it("should use context to disambiguate duplicate anchors", () => {
+			const content = "before a\ntarget\nafter a\nbefore b\ntarget\nafter b";
+			const result = applyHashlineEdit(content, {
+				anchor: "target",
+				before: ["before b"],
+				after: ["after b"],
+				newText: "changed",
+			});
+
+			expect(result.error).toBeUndefined();
+			expect(result.text).toBe("before a\ntarget\nafter a\nbefore b\nchanged\nafter b");
+		});
+
+		it("should not fuzzy-recover from a prefix match during edit application", () => {
+			const content = "target something else";
+			const result = applyHashlineEdit(content, {
+				anchor: "target",
+				newText: "changed",
+			});
+
+			expect(result.error).toBeDefined();
+			expect(result.text).toBe(content);
+		});
+
 		it("should fail with proper error when anchor not found", () => {
 			const content = "const x = 123;";
 			const result = applyHashlineEdit(content, {
@@ -135,6 +176,71 @@ describe("hashline", () => {
 			const content = "const a = 1;";
 			const ctx = computeEditContext(content, "missing", 1);
 			expect(ctx).toBeNull();
+		});
+	});
+
+	describe("snapshot patch format", () => {
+		it("should format hashline read output", () => {
+			const text = "alpha\nbeta";
+			const hash = computeFileHash(text);
+
+			expect(formatHashlineHeader("src/file.ts", hash)).toBe(`¶src/file.ts#${hash}`);
+			expect(formatNumberedLines(text)).toBe("1:alpha\n2:beta");
+		});
+
+		it("should parse and apply replace, delete, and insert operations", () => {
+			const original = "alpha\nbeta\ngamma\ndelta";
+			const hash = computeFileHash(original);
+			const patch = parseHashlinePatch(`¶file.txt#${hash}
+replace 2..2:
++BETA
+delete 3
+insert tail:
++omega`);
+
+			validateHashlineSnapshot(original, patch.sections[0].hash, patch.sections[0].path);
+			const updated = applyHashlineSectionToText(original, patch.sections[0]);
+
+			expect(updated).toBe("alpha\nBETA\ndelta\nomega");
+		});
+
+		it("should reject stale snapshot tags", () => {
+			expect(() => validateHashlineSnapshot("changed", "0000", "file.txt")).toThrow(/Stale hashline snapshot/);
+		});
+
+		it("should reject overlapping concrete ranges", () => {
+			const original = "a\nb\nc";
+			const hash = computeFileHash(original);
+			const patch = parseHashlinePatch(`¶file.txt#${hash}
+replace 1..2:
++x
+delete 2..3`);
+
+			expect(() => applyHashlineSectionToText(original, patch.sections[0])).toThrow(/Overlapping/);
+		});
+
+		it("should preserve final newline when inserting at tail", () => {
+			const original = "alpha\n";
+			const hash = computeFileHash(original);
+			const patch = parseHashlinePatch(`¶file.txt#${hash}
+insert tail:
++omega`);
+
+			const updated = applyHashlineSectionToText(original, patch.sections[0]);
+
+			expect(updated).toBe("alpha\nomega\n");
+		});
+
+		it("should reject inserts inside replaced ranges", () => {
+			const original = "a\nb\nc";
+			const hash = computeFileHash(original);
+			const patch = parseHashlinePatch(`¶file.txt#${hash}
+replace 1..3:
++x
+insert before 2:
++y`);
+
+			expect(() => applyHashlineSectionToText(original, patch.sections[0])).toThrow(/middle/);
 		});
 	});
 });

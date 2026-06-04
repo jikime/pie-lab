@@ -1,11 +1,26 @@
 import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { extname } from "node:path";
+import { pathToFileURL } from "node:url";
 
 interface PendingRequest {
-	resolve: (value: any) => void;
+	resolve: (value: unknown) => void;
 	reject: (error: Error) => void;
 	timeout: NodeJS.Timeout;
+}
+
+interface JsonRpcError {
+	message?: unknown;
+}
+
+interface JsonRpcResponse {
+	id?: unknown;
+	result?: unknown;
+	error?: JsonRpcError;
+}
+
+interface InitializeResult {
+	capabilities?: unknown;
 }
 
 export class LspClient {
@@ -39,8 +54,15 @@ export class LspClient {
 			console.warn(`[LSP] ${chunk.toString("utf-8")}`);
 		});
 
+		this.process.on("error", (error) => {
+			this.failPendingRequests(error instanceof Error ? error : new Error(String(error)));
+			this.process = null;
+			this.initialized = false;
+		});
+
 		// Handle process exit
 		this.process.on("exit", (code) => {
+			this.failPendingRequests(new Error(`LSP server exited with code ${code}`));
 			this.process = null;
 			this.initialized = false;
 			console.warn(`[LSP] Server exited with code ${code}`);
@@ -73,7 +95,7 @@ export class LspClient {
 			this.messageBuffer = this.messageBuffer.substring(bodyEnd);
 
 			try {
-				const message = JSON.parse(body);
+				const message = JSON.parse(body) as unknown;
 				this.handleMessage(message);
 			} catch (e) {
 				console.warn(`[LSP] Failed to parse message: ${e}`);
@@ -86,21 +108,34 @@ export class LspClient {
 		return match ? parseInt(match[1], 10) : -1;
 	}
 
-	private handleMessage(message: any): void {
-		if (message.id && this.pendingRequests.has(message.id)) {
-			const pending = this.pendingRequests.get(message.id)!;
-			this.pendingRequests.delete(message.id);
+	private handleMessage(message: unknown): void {
+		if (!message || typeof message !== "object") return;
+		const response = message as JsonRpcResponse;
+		if (typeof response.id === "number" && this.pendingRequests.has(response.id)) {
+			const pending = this.pendingRequests.get(response.id);
+			if (!pending) return;
+			this.pendingRequests.delete(response.id);
 			clearTimeout(pending.timeout);
 
-			if (message.error) {
-				pending.reject(new Error(message.error.message));
+			if (response.error) {
+				const messageText =
+					typeof response.error.message === "string" ? response.error.message : "LSP request failed";
+				pending.reject(new Error(messageText));
 			} else {
-				pending.resolve(message.result);
+				pending.resolve(response.result);
 			}
 		}
 	}
 
-	private sendMessage(message: any): void {
+	private failPendingRequests(error: Error): void {
+		for (const [id, pending] of this.pendingRequests) {
+			this.pendingRequests.delete(id);
+			clearTimeout(pending.timeout);
+			pending.reject(error);
+		}
+	}
+
+	private sendMessage(message: Record<string, unknown>): void {
 		if (!this.process || !this.process.stdin) {
 			throw new Error("LSP server not running");
 		}
@@ -110,16 +145,18 @@ export class LspClient {
 		this.process.stdin.write(header + body);
 	}
 
-	private async sendRequest(method: string, params?: any): Promise<any> {
+	private async sendRequest<T = unknown>(method: string, params?: unknown): Promise<T> {
 		const id = this.nextId++;
-		const message = {
+		const message: Record<string, unknown> = {
 			jsonrpc: "2.0",
 			id,
 			method,
-			...(params && { params }),
 		};
+		if (params !== undefined) {
+			message.params = params;
+		}
 
-		return new Promise((resolve, reject) => {
+		return new Promise<unknown>((resolve, reject) => {
 			const timeout = setTimeout(() => {
 				this.pendingRequests.delete(id);
 				reject(new Error(`LSP request ${method} timed out`));
@@ -133,13 +170,38 @@ export class LspClient {
 				clearTimeout(timeout);
 				reject(e);
 			}
+		}) as Promise<T>;
+	}
+
+	private sendNotification(method: string, params?: unknown): void {
+		this.sendMessage({
+			jsonrpc: "2.0",
+			method,
+			...(params === undefined ? {} : { params }),
+		});
+	}
+
+	private openDocument(filePath: string): void {
+		this.sendNotification("textDocument/didOpen", {
+			textDocument: {
+				uri: pathToFileURL(filePath).href,
+				languageId: getLanguageId(filePath),
+				version: 1,
+				text: readFileSync(filePath, "utf-8"),
+			},
+		});
+	}
+
+	private closeDocument(filePath: string): void {
+		this.sendNotification("textDocument/didClose", {
+			textDocument: { uri: pathToFileURL(filePath).href },
 		});
 	}
 
 	async initialize(): Promise<void> {
 		if (this.initialized) return;
 
-		const result = await this.sendRequest("initialize", {
+		const result = await this.sendRequest<InitializeResult>("initialize", {
 			processId: process.pid,
 			rootPath: this.cwd,
 			capabilities: {
@@ -151,89 +213,50 @@ export class LspClient {
 			},
 		});
 
-		if (result && result.capabilities) {
+		if (result?.capabilities) {
 			this.initialized = true;
-			await this.sendRequest("initialized", {});
+			this.sendNotification("initialized", {});
 		}
 	}
 
-	async hover(filePath: string, line: number, character: number): Promise<any> {
-		const uri = `file://${filePath}`;
-		const content = readFileSync(filePath, "utf-8");
-
-		// Open document
-		await this.sendRequest("textDocument/didOpen", {
-			textDocument: {
-				uri,
-				languageId: "typescript",
-				version: 1,
-				text: content,
-			},
-		});
-
-		// Request hover
-		const result = await this.sendRequest("textDocument/hover", {
-			textDocument: { uri },
-			position: { line: line - 1, character: character - 1 },
-		});
-
-		// Close document
-		await this.sendRequest("textDocument/didClose", {
-			textDocument: { uri },
-		});
-
-		return result;
+	async hover(filePath: string, line: number, character: number): Promise<unknown> {
+		const uri = pathToFileURL(filePath).href;
+		this.openDocument(filePath);
+		try {
+			return await this.sendRequest("textDocument/hover", {
+				textDocument: { uri },
+				position: { line: line - 1, character: character - 1 },
+			});
+		} finally {
+			this.closeDocument(filePath);
+		}
 	}
 
-	async definition(filePath: string, line: number, character: number): Promise<any> {
-		const uri = `file://${filePath}`;
-		const content = readFileSync(filePath, "utf-8");
-
-		await this.sendRequest("textDocument/didOpen", {
-			textDocument: {
-				uri,
-				languageId: "typescript",
-				version: 1,
-				text: content,
-			},
-		});
-
-		const result = await this.sendRequest("textDocument/definition", {
-			textDocument: { uri },
-			position: { line: line - 1, character: character - 1 },
-		});
-
-		await this.sendRequest("textDocument/didClose", {
-			textDocument: { uri },
-		});
-
-		return result;
+	async definition(filePath: string, line: number, character: number): Promise<unknown> {
+		const uri = pathToFileURL(filePath).href;
+		this.openDocument(filePath);
+		try {
+			return await this.sendRequest("textDocument/definition", {
+				textDocument: { uri },
+				position: { line: line - 1, character: character - 1 },
+			});
+		} finally {
+			this.closeDocument(filePath);
+		}
 	}
 
-	async references(filePath: string, line: number, character: number): Promise<any> {
-		const uri = `file://${filePath}`;
-		const content = readFileSync(filePath, "utf-8");
-
-		await this.sendRequest("textDocument/didOpen", {
-			textDocument: {
-				uri,
-				languageId: "typescript",
-				version: 1,
-				text: content,
-			},
-		});
-
-		const result = await this.sendRequest("textDocument/references", {
-			textDocument: { uri },
-			position: { line: line - 1, character: character - 1 },
-			context: { includeDeclaration: true },
-		});
-
-		await this.sendRequest("textDocument/didClose", {
-			textDocument: { uri },
-		});
-
-		return result;
+	async references(filePath: string, line: number, character: number): Promise<unknown> {
+		const uri = pathToFileURL(filePath).href;
+		this.openDocument(filePath);
+		try {
+			return await this.sendRequest("textDocument/references", {
+				textDocument: { uri },
+				position: { line: line - 1, character: character - 1 },
+				context: { includeDeclaration: true },
+			});
+		} finally {
+			this.closeDocument(filePath);
+		}
 	}
 
 	async shutdown(): Promise<void> {
@@ -241,8 +264,8 @@ export class LspClient {
 
 		try {
 			await this.sendRequest("shutdown", {});
-			await this.sendRequest("exit", {});
-		} catch (e) {
+			this.sendNotification("exit", {});
+		} catch (_e) {
 			// Ignore errors during shutdown
 		}
 
@@ -252,6 +275,21 @@ export class LspClient {
 		this.process.kill();
 		this.process = null;
 		this.initialized = false;
+	}
+}
+
+function getLanguageId(filePath: string): string {
+	switch (extname(filePath).toLowerCase()) {
+		case ".js":
+		case ".mjs":
+		case ".cjs":
+			return "javascript";
+		case ".jsx":
+			return "javascriptreact";
+		case ".tsx":
+			return "typescriptreact";
+		default:
+			return "typescript";
 	}
 }
 

@@ -1,12 +1,15 @@
 import type { AgentTool } from "@pie-lab/agent-core";
+import { normalizeSnapshotText, type SnapshotStore, stripHashlinePrefixes } from "@pie-lab/hashline";
 import { Container, Text } from "@pie-lab/tui";
 import { mkdir as fsMkdir, writeFile as fsWriteFile } from "fs/promises";
 import { dirname } from "path";
 import { type Static, Type } from "typebox";
 import { keyHint } from "../../modes/interactive/components/keybinding-hints.ts";
-import { getLanguageFromPath, highlightCode } from "../../modes/interactive/theme/theme.ts";
+import { getLanguageFromPath, highlightCode, type Theme } from "../../modes/interactive/theme/theme.ts";
 import type { ToolDefinition, ToolRenderResultOptions } from "../extensions/types.ts";
+import type { ConflictHistory } from "./conflict-history.ts";
 import { withFileMutationQueue } from "./file-mutation-queue.ts";
+import { isInternalURL, parseInternalURL } from "./internal-urls.ts";
 import { resolveToCwd } from "./path-utils.ts";
 import { invalidArgText, normalizeDisplayText, replaceTabs, shortenPath, str } from "./render-utils.ts";
 import { wrapToolDefinition } from "./tool-definition-wrapper.ts";
@@ -37,6 +40,10 @@ const defaultWriteOperations: WriteOperations = {
 export interface WriteToolOptions {
 	/** Custom operations for file writing. Default: local filesystem */
 	operations?: WriteOperations;
+	/** Shared snapshot store for hashline edits. */
+	snapshotStore?: SnapshotStore;
+	/** Shared merge-conflict registry for conflict:// writes. */
+	conflictHistory?: ConflictHistory;
 }
 
 type WriteHighlightCache = {
@@ -131,7 +138,7 @@ function trimTrailingEmptyLines(lines: string[]): string[] {
 function formatWriteCall(
 	args: { path?: string; file_path?: string; content?: string } | undefined,
 	options: ToolRenderResultOptions,
-	theme: typeof import("../../modes/interactive/theme/theme.ts").theme,
+	theme: Theme,
 	cache: WriteHighlightCache | undefined,
 ): string {
 	const rawPath = str(args?.file_path ?? args?.path);
@@ -163,7 +170,7 @@ function formatWriteCall(
 
 function formatWriteResult(
 	result: { content: Array<{ type: string; text?: string; data?: string; mimeType?: string }>; isError?: boolean },
-	theme: typeof import("../../modes/interactive/theme/theme.ts").theme,
+	theme: Theme,
 ): string | undefined {
 	if (!result.isError) {
 		return undefined;
@@ -183,6 +190,8 @@ export function createWriteToolDefinition(
 	options?: WriteToolOptions,
 ): ToolDefinition<typeof writeSchema, undefined> {
 	const ops = options?.operations ?? defaultWriteOperations;
+	const snapshotStore = options?.snapshotStore;
+	const conflictHistory = options?.conflictHistory;
 	return {
 		name: "write",
 		label: "write",
@@ -199,8 +208,6 @@ export function createWriteToolDefinition(
 			_ctx?,
 		) {
 			// Check if it's an internal URL first
-			const { isInternalURL, parseInternalURL } = await import("./internal-urls.ts");
-
 			if (isInternalURL(path)) {
 				// Handle internal URL (conflict:// for now)
 				const parsedUrl = parseInternalURL(path);
@@ -209,6 +216,19 @@ export function createWriteToolDefinition(
 				}
 
 				if (parsedUrl.scheme === "conflict") {
+					if (conflictHistory) {
+						const resolvedPath = await conflictHistory.resolve(parsedUrl.id, content);
+						snapshotStore?.invalidate(resolvedPath);
+						return {
+							content: [
+								{
+									type: "text",
+									text: `Successfully resolved conflict "${parsedUrl.id}" in ${resolvedPath}`,
+								},
+							],
+							details: undefined,
+						};
+					}
 					// Store conflict resolution metadata
 					if (signal?.aborted) throw new Error("Operation aborted");
 
@@ -229,7 +249,9 @@ export function createWriteToolDefinition(
 						try {
 							jsonContent = JSON.parse(content);
 						} catch (e) {
-							throw new Error(`Invalid JSON for conflict metadata: ${e instanceof Error ? e.message : String(e)}`);
+							throw new Error(
+								`Invalid JSON for conflict metadata: ${e instanceof Error ? e.message : String(e)}`,
+							);
 						}
 
 						// Add metadata
@@ -258,6 +280,8 @@ export function createWriteToolDefinition(
 
 			// Handle file system path
 			const absolutePath = resolveToCwd(path, cwd);
+			const stripped = stripHashlinePrefixes(content);
+			const contentToWrite = stripped.text;
 			const dir = dirname(absolutePath);
 			return withFileMutationQueue(absolutePath, async () => {
 				// Do not reject from an abort event listener here: that would release the
@@ -274,11 +298,16 @@ export function createWriteToolDefinition(
 				throwIfAborted();
 
 				// Write the file contents.
-				await ops.writeFile(absolutePath, content);
+				await ops.writeFile(absolutePath, contentToWrite);
+				snapshotStore?.record(absolutePath, normalizeSnapshotText(contentToWrite));
+				conflictHistory?.clearPath(absolutePath);
 				throwIfAborted();
 
+				const note = stripped.stripped ? " Auto-stripped hashline display prefixes before writing." : "";
 				return {
-					content: [{ type: "text", text: `Successfully wrote ${content.length} bytes to ${path}` }],
+					content: [
+						{ type: "text", text: `Successfully wrote ${contentToWrite.length} bytes to ${path}.${note}` },
+					],
 					details: undefined,
 				};
 			});

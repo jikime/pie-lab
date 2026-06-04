@@ -4,7 +4,10 @@
  * Includes conflict detection and resolution support
  */
 
-export * from "./types.ts";
-export * from "./hash.ts";
 export * from "./apply.ts";
 export * from "./conflict.ts";
+export * from "./format.ts";
+export * from "./hash.ts";
+export * from "./patch.ts";
+export * from "./snapshots.ts";
+export * from "./types.ts";

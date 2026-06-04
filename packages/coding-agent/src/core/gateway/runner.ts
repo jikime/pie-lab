@@ -591,7 +591,8 @@ class GatewayConversationWorker implements GatewayConversationEndpoint {
 				// For non-streaming transports (Telegram, Discord), deltas were already
 				// sent via sendImmediate — skip send() to avoid posting the full text again.
 				// For streaming transports (WebIPC), send() is the done-frame finalizer and must run.
-				const skipSend = !this.transport.supportsStreaming && streamedText.length > 0 && attachmentPaths.length === 0;
+				const skipSend =
+					!this.transport.supportsStreaming && streamedText.length > 0 && attachmentPaths.length === 0;
 				if (!skipSend) {
 					remoteMessageId = await Promise.race([
 						this.transport.send(finalText, attachmentPaths, abortController.signal, next.triggerMessageId),

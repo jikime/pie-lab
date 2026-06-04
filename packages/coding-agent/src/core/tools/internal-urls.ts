@@ -3,6 +3,8 @@
  * Supports: pr://, issue://, agent://, skill://, rule://, conflict://
  */
 
+import { getGitHubClient } from "./github-api.ts";
+
 export interface InternalURL {
 	scheme: "pr" | "issue" | "agent" | "skill" | "rule" | "conflict";
 	owner?: string;
@@ -95,7 +97,6 @@ async function resolvePR(url: InternalURL): Promise<string | null> {
 	if (!url.owner || !url.repo) return null;
 
 	try {
-		const { getGitHubClient } = await import("./github-api.ts");
 		const client = getGitHubClient();
 		const pr = await client.getPR(url.owner, url.repo, url.id);
 
@@ -116,7 +117,6 @@ async function resolveIssue(url: InternalURL): Promise<string | null> {
 	if (!url.owner || !url.repo) return null;
 
 	try {
-		const { getGitHubClient } = await import("./github-api.ts");
 		const client = getGitHubClient();
 		const issue = await client.getIssue(url.owner, url.repo, url.id);
 

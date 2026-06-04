@@ -3,6 +3,13 @@ import { promisify } from "node:util";
 
 const execFile = promisify(execFileCallback);
 
+interface ExecFileFailure {
+	code?: unknown;
+	stdout?: unknown;
+	stderr?: unknown;
+	message?: unknown;
+}
+
 export interface DebugResult {
 	exitCode: number;
 	stdout: string;
@@ -30,38 +37,46 @@ export class DapClient {
 				stdout,
 				stderr,
 			};
-		} catch (error: any) {
+		} catch (error) {
+			const failure = error as ExecFileFailure;
 			return {
-				exitCode: error.code ?? 1,
-				stdout: error.stdout ?? "",
-				stderr: error.stderr ?? error.message ?? String(error),
+				exitCode: typeof failure.code === "number" ? failure.code : 1,
+				stdout: typeof failure.stdout === "string" ? failure.stdout : "",
+				stderr:
+					typeof failure.stderr === "string"
+						? failure.stderr
+						: typeof failure.message === "string"
+							? failure.message
+							: String(error),
 			};
 		}
 	}
 
 	async launchWithInspector(scriptPath: string, args?: string[]): Promise<DebugResult> {
 		try {
-			const { stdout, stderr } = (await execFile(
-				"node",
-				["--inspect-brk", scriptPath, ...(args ?? [])],
-				{
-					cwd: this.cwd,
-					encoding: "utf-8",
-					timeout: 30000,
-					maxBuffer: 10 * 1024 * 1024,
-				},
-			)) as { stdout: string; stderr: string };
+			const { stdout, stderr } = (await execFile("node", ["--inspect", scriptPath, ...(args ?? [])], {
+				cwd: this.cwd,
+				encoding: "utf-8",
+				timeout: 30000,
+				maxBuffer: 10 * 1024 * 1024,
+			})) as { stdout: string; stderr: string };
 
 			return {
 				exitCode: 0,
 				stdout,
 				stderr,
 			};
-		} catch (error: any) {
+		} catch (error) {
+			const failure = error as ExecFileFailure;
 			return {
-				exitCode: error.code ?? 1,
-				stdout: error.stdout ?? "",
-				stderr: error.stderr ?? error.message ?? String(error),
+				exitCode: typeof failure.code === "number" ? failure.code : 1,
+				stdout: typeof failure.stdout === "string" ? failure.stdout : "",
+				stderr:
+					typeof failure.stderr === "string"
+						? failure.stderr
+						: typeof failure.message === "string"
+							? failure.message
+							: String(error),
 			};
 		}
 	}

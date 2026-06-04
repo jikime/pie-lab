@@ -2,7 +2,7 @@ import type { AgentTool } from "@pie-lab/agent-core";
 import { Text } from "@pie-lab/tui";
 import { type Static, Type } from "typebox";
 import { getOrCreateLspClient } from "../../utils/lsp-client.ts";
-import type { ToolDefinition, ToolRenderResultOptions } from "../extensions/types.ts";
+import type { ToolDefinition } from "../extensions/types.ts";
 import { resolveToCwd } from "./path-utils.ts";
 import { shortenPath, str } from "./render-utils.ts";
 import { wrapToolDefinition } from "./tool-definition-wrapper.ts";
@@ -27,10 +27,12 @@ interface FileLocation {
 }
 
 interface HoverResult {
-	contents: {
-		language?: string;
-		value?: string;
-	} | string;
+	contents:
+		| {
+				language?: string;
+				value?: string;
+		  }
+		| string;
 	range?: {
 		start: { line: number; character: number };
 		end: { line: number; character: number };
@@ -122,7 +124,7 @@ export function createLspToolDefinition(cwd: string): ToolDefinition<typeof lspS
 		async execute(
 			_toolCallId,
 			{ file, line, column, action }: LspToolInput,
-			signal?: AbortSignal,
+			_signal?: AbortSignal,
 			_onUpdate?,
 			_ctx?,
 		) {
@@ -143,16 +145,19 @@ export function createLspToolDefinition(cwd: string): ToolDefinition<typeof lspS
 				let markdown = "";
 
 				if (action === "hover") {
-					const result = await client.hover(absolutePath, line, column);
+					const result = (await client.hover(absolutePath, line, column)) as HoverResult | null;
 					// Extract symbol name from position (best effort)
 					const symbol = `symbol@${line}:${column}`;
 					markdown = formatHoverResult(result, symbol);
 				} else if (action === "definition") {
-					const result = await client.definition(absolutePath, line, column);
+					const result = (await client.definition(absolutePath, line, column)) as
+						| FileLocation
+						| FileLocation[]
+						| null;
 					const symbol = `symbol@${line}:${column}`;
 					markdown = formatDefinitionResult(result, symbol);
 				} else if (action === "references") {
-					const result = await client.references(absolutePath, line, column);
+					const result = (await client.references(absolutePath, line, column)) as FileLocation[] | null;
 					const symbol = `symbol@${line}:${column}`;
 					markdown = formatReferencesResult(result, symbol);
 				}
