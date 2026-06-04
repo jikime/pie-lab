@@ -297,6 +297,27 @@ describe("Coding Agent Tools", () => {
 			expect(readFileSync(testFile, "utf-8")).toBe("alpha\nBETA\ngamma\nomega");
 		});
 
+		it("should recover hashline patch input after unrelated file changes", async () => {
+			const snapshotStore = new InMemorySnapshotStore();
+			const hashlineReadTool = createReadTool(testDir, { useHashline: true, snapshotStore });
+			const hashlineEditTool = createEditTool(testDir, { snapshotStore });
+			const testFile = join(testDir, "hashline-recover.txt");
+			writeFileSync(testFile, "alpha\nbeta\ngamma");
+
+			const readResult = await hashlineReadTool.execute("test-call-hashline-recover-read", {
+				path: "hashline-recover.txt",
+			});
+			const header = getTextOutput(readResult).split("\n")[0];
+			writeFileSync(testFile, "intro\nalpha\nbeta\ngamma");
+
+			const editResult = await hashlineEditTool.execute("test-call-hashline-recover-edit", {
+				input: `${header}\nreplace 2..2:\n+BETA`,
+			});
+
+			expect(getTextOutput(editResult)).toContain("Recovered stale snapshot for 1 file(s)");
+			expect(readFileSync(testFile, "utf-8")).toBe("intro\nalpha\nBETA\ngamma");
+		});
+
 		it("should replace text in file", async () => {
 			const testFile = join(testDir, "edit-test.txt");
 			const originalContent = "Hello, world!";

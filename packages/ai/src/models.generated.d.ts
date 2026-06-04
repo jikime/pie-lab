@@ -8656,6 +8656,23 @@ export declare const MODELS: {
             contextWindow: number;
             maxTokens: number;
         };
+        readonly "minimax-m3-free": {
+            id: string;
+            name: string;
+            api: "anthropic-messages";
+            provider: string;
+            baseUrl: string;
+            reasoning: true;
+            input: ("image" | "text")[];
+            cost: {
+                input: number;
+                output: number;
+                cacheRead: number;
+                cacheWrite: number;
+            };
+            contextWindow: number;
+            maxTokens: number;
+        };
         readonly "nemotron-3-super-free": {
             id: string;
             name: string;
@@ -8946,6 +8963,23 @@ export declare const MODELS: {
             baseUrl: string;
             reasoning: true;
             input: "text"[];
+            cost: {
+                input: number;
+                output: number;
+                cacheRead: number;
+                cacheWrite: number;
+            };
+            contextWindow: number;
+            maxTokens: number;
+        };
+        readonly "qwen3.7-plus": {
+            id: string;
+            name: string;
+            api: "anthropic-messages";
+            provider: string;
+            baseUrl: string;
+            reasoning: true;
+            input: ("image" | "text")[];
             cost: {
                 input: number;
                 output: number;
@@ -10847,6 +10881,23 @@ export declare const MODELS: {
             contextWindow: number;
             maxTokens: number;
         };
+        readonly "nvidia/nemotron-3-ultra-550b-a55b:free": {
+            id: string;
+            name: string;
+            api: "openai-completions";
+            provider: string;
+            baseUrl: string;
+            reasoning: true;
+            input: "text"[];
+            cost: {
+                input: number;
+                output: number;
+                cacheRead: number;
+                cacheWrite: number;
+            };
+            contextWindow: number;
+            maxTokens: number;
+        };
         readonly "nvidia/nemotron-nano-12b-v2-vl:free": {
             id: string;
             name: string;
@@ -10950,23 +11001,6 @@ export declare const MODELS: {
             maxTokens: number;
         };
         readonly "openai/gpt-4": {
-            id: string;
-            name: string;
-            api: "openai-completions";
-            provider: string;
-            baseUrl: string;
-            reasoning: false;
-            input: "text"[];
-            cost: {
-                input: number;
-                output: number;
-                cacheRead: number;
-                cacheWrite: number;
-            };
-            contextWindow: number;
-            maxTokens: number;
-        };
-        readonly "openai/gpt-4-0314": {
             id: string;
             name: string;
             api: "openai-completions";
@@ -12753,6 +12787,23 @@ export declare const MODELS: {
             contextWindow: number;
             maxTokens: number;
         };
+        readonly "qwen/qwen3.7-plus": {
+            id: string;
+            name: string;
+            api: "openai-completions";
+            provider: string;
+            baseUrl: string;
+            reasoning: true;
+            input: ("image" | "text")[];
+            cost: {
+                input: number;
+                output: number;
+                cacheRead: number;
+                cacheWrite: number;
+            };
+            contextWindow: number;
+            maxTokens: number;
+        };
         readonly "rekaai/reka-edge": {
             id: string;
             name: string;
@@ -14002,7 +14053,7 @@ export declare const MODELS: {
             provider: string;
             baseUrl: string;
             reasoning: true;
-            input: ("image" | "text")[];
+            input: "text"[];
             cost: {
                 input: number;
                 output: number;
@@ -14274,7 +14325,7 @@ export declare const MODELS: {
             provider: string;
             baseUrl: string;
             reasoning: true;
-            input: ("image" | "text")[];
+            input: "text"[];
             cost: {
                 input: number;
                 output: number;
@@ -14714,7 +14765,7 @@ export declare const MODELS: {
             provider: string;
             baseUrl: string;
             reasoning: true;
-            input: ("image" | "text")[];
+            input: "text"[];
             cost: {
                 input: number;
                 output: number;
@@ -15207,7 +15258,7 @@ export declare const MODELS: {
             provider: string;
             baseUrl: string;
             reasoning: true;
-            input: ("image" | "text")[];
+            input: "text"[];
             cost: {
                 input: number;
                 output: number;
@@ -15224,7 +15275,7 @@ export declare const MODELS: {
             provider: string;
             baseUrl: string;
             reasoning: true;
-            input: ("image" | "text")[];
+            input: "text"[];
             cost: {
                 input: number;
                 output: number;
@@ -15241,7 +15292,7 @@ export declare const MODELS: {
             provider: string;
             baseUrl: string;
             reasoning: true;
-            input: ("image" | "text")[];
+            input: "text"[];
             cost: {
                 input: number;
                 output: number;

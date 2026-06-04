@@ -2,6 +2,7 @@ import type { AgentTool } from "@pie-lab/agent-core";
 import {
 	applyHashlineEdits,
 	applyHashlineSectionToText,
+	applyHashlineSectionWithRecovery,
 	normalizeSnapshotText,
 	parseHashlinePatch,
 	type SnapshotStore,
@@ -391,6 +392,7 @@ export function createEditToolDefinition(
 					newContent: string;
 					originalEnding: "\r\n" | "\n";
 					bom: string;
+					recovered: boolean;
 				}> = [];
 
 				for (const section of patch.sections) {
@@ -409,16 +411,24 @@ export function createEditToolDefinition(
 					const originalEnding = detectLineEnding(content);
 					const normalizedContent = normalizeToLF(content);
 					const snapshot = snapshotStore.byHash(absolutePath, section.hash);
-					validateHashlineSnapshot(normalizedContent, section.hash, section.path);
-					const baseContent = snapshot?.text ?? normalizeSnapshotText(normalizedContent);
-					const newContent = applyHashlineSectionToText(baseContent, section);
+					let newContent: string;
+					let recovered = false;
+					if (snapshot) {
+						const result = applyHashlineSectionWithRecovery(snapshot.text, normalizedContent, section);
+						newContent = result.text;
+						recovered = result.recovered;
+					} else {
+						validateHashlineSnapshot(normalizedContent, section.hash, section.path);
+						newContent = applyHashlineSectionToText(normalizeSnapshotText(normalizedContent), section);
+					}
 					updates.push({
 						path: section.path,
 						absolutePath,
-						baseContent,
+						baseContent: normalizeSnapshotText(normalizedContent),
 						newContent,
 						originalEnding,
 						bom,
+						recovered,
 					});
 				}
 
@@ -437,11 +447,14 @@ export function createEditToolDefinition(
 				const baseContent = updates.map((update) => `--- ${update.path}\n${update.baseContent}`).join("\n");
 				const newContent = updates.map((update) => `--- ${update.path}\n${update.newContent}`).join("\n");
 				const diffResult = generateDiffString(baseContent, newContent);
+				const recoveredCount = updates.filter((update) => update.recovered).length;
 				return {
 					content: [
 						{
 							type: "text",
-							text: `Successfully applied hashline edit to ${updates.length} file(s).`,
+							text:
+								`Successfully applied hashline edit to ${updates.length} file(s).` +
+								(recoveredCount > 0 ? ` Recovered stale snapshot for ${recoveredCount} file(s).` : ""),
 						},
 					],
 					details: {

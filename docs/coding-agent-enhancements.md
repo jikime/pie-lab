@@ -9,6 +9,7 @@ safe core of the reference workflow:
 - session-scoped Hashline snapshots
 - `read` output with `¶PATH#TAG` headers and numbered text rows
 - strict Hashline patch input for `edit`
+- conservative stale-snapshot recovery for Hashline patches
 - merge-conflict discovery through `read`
 - `conflict://<id>` read/write resolution
 - stabilized internal URL, LSP, and DAP behavior
@@ -57,7 +58,12 @@ Behavior:
   - `insert head:` followed by `+` body rows
   - `insert tail:` followed by `+` body rows
 - Patch application is atomic per call: all targets are validated before writes.
-- Stale file tags fail fast with an explicit mismatch error.
+- Stale file tags recover when the original target block or anchor can be
+  relocated exactly and uniquely in the current file.
+- Stale recovery applies the patch to the current file contents, so unrelated
+  edits made after `read` are preserved.
+- Stale recovery fails fast with an explicit re-read error when the target block
+  changed, disappeared, or remains ambiguous after adding nearby context.
 - Overlapping concrete ranges and inserts inside replace/delete ranges are
   rejected.
 - Existing exact replacement edits remain available and still reject ambiguous
@@ -65,8 +71,9 @@ Behavior:
 
 Current limitation:
 
-- There is no automatic stale-snapshot three-way recovery yet. If the file hash
-  changed after `read`, the user or model must re-read and retry.
+- Stale recovery is intentionally exact and conservative. It does not attempt a
+  fuzzy three-way merge when the target text itself changed; in those cases the
+  user or model must re-read and retry.
 
 ### Merge Conflict URLs
 
@@ -195,13 +202,12 @@ Remaining gaps:
 
 To reach full parity with `oh-my-pi`, continue in this order:
 
-1. Add stale-snapshot recovery using snapshot-backed three-way validation.
-2. Replace the inline internal URL resolver with a router and per-scheme
+1. Replace the inline internal URL resolver with a router and per-scheme
    handlers.
-3. Expand LSP into a session-aware client manager with diagnostics, rename, code
+2. Expand LSP into a session-aware client manager with diagnostics, rename, code
    actions, workspace edits, and mock-server tests.
-4. Replace the Node inspector wrapper with a real DAP session implementation.
-5. Add focused regression tests for each new URL scheme and recovery path.
+3. Replace the Node inspector wrapper with a real DAP session implementation.
+4. Add focused regression tests for each new URL scheme and recovery path.
 
 ## Verification Expectations
 

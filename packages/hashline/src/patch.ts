@@ -36,6 +36,13 @@ interface EditableLines {
 	trailingNewline: boolean;
 }
 
+export interface HashlineRecoveryResult {
+	text: string;
+	recovered: boolean;
+}
+
+const MAX_RECOVERY_CONTEXT_LINES = 3;
+
 function isAnchoredInsert(
 	operation: Extract<HashlineOperation, { kind: "insert" }>,
 ): operation is { kind: "insert"; position: "before" | "after"; line: number; lines: string[] } {
@@ -287,16 +294,164 @@ function validateNonOverlapping(mutations: Mutation[]): void {
 	}
 }
 
-export function applyHashlineSectionToText(text: string, section: HashlinePatchSection): string {
-	const { lines, trailingNewline } = splitEditableLines(text);
-	const mutations = section.operations.map((operation, index) => operationToMutation(operation, lines.length, index));
-	validateNonOverlapping(mutations);
+function describeOperation(operation: HashlineOperation): string {
+	switch (operation.kind) {
+		case "replace":
+			return `replace ${operation.startLine}..${operation.endLine}`;
+		case "delete":
+			return `delete ${operation.startLine}..${operation.endLine}`;
+		case "insert":
+			if (isAnchoredInsert(operation)) {
+				return `insert ${operation.position} ${operation.line}`;
+			}
+			return `insert ${operation.position}`;
+	}
+}
 
+function findSequenceMatches(lines: string[], pattern: string[]): number[] {
+	if (pattern.length === 0 || pattern.length > lines.length) {
+		return [];
+	}
+
+	const matches: number[] = [];
+	for (let index = 0; index <= lines.length - pattern.length; index++) {
+		let matched = true;
+		for (let offset = 0; offset < pattern.length; offset++) {
+			if (lines[index + offset] !== pattern[offset]) {
+				matched = false;
+				break;
+			}
+		}
+		if (matched) {
+			matches.push(index);
+		}
+	}
+	return matches;
+}
+
+function resolveCurrentIndexWithContext(
+	baseLines: string[],
+	currentLines: string[],
+	baseIndex: number,
+	targetLength: number,
+	path: string,
+	operation: HashlineOperation,
+): number {
+	let sawAmbiguousMatch = false;
+
+	for (let radius = 0; radius <= MAX_RECOVERY_CONTEXT_LINES; radius++) {
+		const beforeCount = Math.min(radius, baseIndex);
+		const afterCount = Math.min(radius, baseLines.length - (baseIndex + targetLength));
+		const contextStart = baseIndex - beforeCount;
+		const contextEnd = baseIndex + targetLength + afterCount;
+		const pattern = baseLines.slice(contextStart, contextEnd);
+		const matches = findSequenceMatches(currentLines, pattern);
+
+		if (matches.length === 1) {
+			return matches[0] + beforeCount;
+		}
+		if (matches.length > 1) {
+			sawAmbiguousMatch = true;
+		}
+	}
+
+	const reason = sawAmbiguousMatch ? "ambiguous" : "missing or changed";
+	throw new Error(
+		`Stale hashline snapshot for ${path}: recovery target for ${describeOperation(
+			operation,
+		)} is ${reason}. Re-read the file and retry.`,
+	);
+}
+
+function recoverMutationAgainstCurrent(
+	mutation: Mutation,
+	baseLines: string[],
+	currentLines: string[],
+	path: string,
+): Mutation {
+	if (mutation.operation.kind === "replace" || mutation.operation.kind === "delete") {
+		return {
+			...mutation,
+			index: resolveCurrentIndexWithContext(
+				baseLines,
+				currentLines,
+				mutation.index,
+				mutation.deleteCount,
+				path,
+				mutation.operation,
+			),
+		};
+	}
+
+	if (!isAnchoredInsert(mutation.operation)) {
+		return {
+			...mutation,
+			index: mutation.operation.position === "head" ? 0 : currentLines.length,
+		};
+	}
+
+	const anchorIndex = resolveCurrentIndexWithContext(
+		baseLines,
+		currentLines,
+		mutation.operation.line - 1,
+		1,
+		path,
+		mutation.operation,
+	);
+	return {
+		...mutation,
+		index: mutation.operation.position === "before" ? anchorIndex : anchorIndex + 1,
+	};
+}
+
+function applyMutations(lines: string[], trailingNewline: boolean, mutations: Mutation[]): string {
 	const result = [...lines];
 	for (const mutation of mutations.sort((a, b) => b.index - a.index || b.sourceOrder - a.sourceOrder)) {
 		result.splice(mutation.index, mutation.deleteCount, ...mutation.insertLines);
 	}
 	return joinEditableLines(result, trailingNewline);
+}
+
+export function applyHashlineSectionToText(text: string, section: HashlinePatchSection): string {
+	const { lines, trailingNewline } = splitEditableLines(text);
+	const mutations = section.operations.map((operation, index) => operationToMutation(operation, lines.length, index));
+	validateNonOverlapping(mutations);
+
+	return applyMutations(lines, trailingNewline, mutations);
+}
+
+export function applyHashlineSectionWithRecovery(
+	baseText: string,
+	currentText: string,
+	section: HashlinePatchSection,
+): HashlineRecoveryResult {
+	const normalizedBaseText = normalizeSnapshotText(baseText);
+	const normalizedCurrentText = normalizeSnapshotText(currentText);
+
+	validateHashlineSnapshot(normalizedBaseText, section.hash, section.path);
+	if (computeFileHash(normalizedCurrentText) === section.hash.toUpperCase()) {
+		return {
+			text: applyHashlineSectionToText(normalizedCurrentText, section),
+			recovered: false,
+		};
+	}
+
+	const { lines: baseLines } = splitEditableLines(normalizedBaseText);
+	const { lines: currentLines, trailingNewline } = splitEditableLines(normalizedCurrentText);
+	const baseMutations = section.operations.map((operation, index) =>
+		operationToMutation(operation, baseLines.length, index),
+	);
+	validateNonOverlapping(baseMutations);
+
+	const recoveredMutations = baseMutations.map((mutation) =>
+		recoverMutationAgainstCurrent(mutation, baseLines, currentLines, section.path),
+	);
+	validateNonOverlapping(recoveredMutations);
+
+	return {
+		text: applyMutations(currentLines, trailingNewline, recoveredMutations),
+		recovered: true,
+	};
 }
 
 export function validateHashlineSnapshot(text: string, expectedHash: string, path: string): void {

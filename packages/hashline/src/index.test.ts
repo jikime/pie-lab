@@ -3,6 +3,7 @@ import {
 	applyHashlineEdit,
 	applyHashlineEdits,
 	applyHashlineSectionToText,
+	applyHashlineSectionWithRecovery,
 	computeEditContext,
 	computeFileHash,
 	computeLineHash,
@@ -206,6 +207,49 @@ insert tail:
 
 		it("should reject stale snapshot tags", () => {
 			expect(() => validateHashlineSnapshot("changed", "0000", "file.txt")).toThrow(/Stale hashline snapshot/);
+		});
+
+		it("should recover a stale snapshot when the target block shifted", () => {
+			const original = "alpha\nbeta\ngamma";
+			const current = "intro\nalpha\nbeta\ngamma";
+			const hash = computeFileHash(original);
+			const patch = parseHashlinePatch(`¶file.txt#${hash}
+replace 2..2:
++BETA`);
+
+			const result = applyHashlineSectionWithRecovery(original, current, patch.sections[0]);
+
+			expect(result).toEqual({
+				text: "intro\nalpha\nBETA\ngamma",
+				recovered: true,
+			});
+		});
+
+		it("should reject stale recovery when the target block changed", () => {
+			const original = "alpha\nbeta\ngamma";
+			const current = "alpha\nBETTER\ngamma";
+			const hash = computeFileHash(original);
+			const patch = parseHashlinePatch(`¶file.txt#${hash}
+replace 2..2:
++BETA`);
+
+			expect(() => applyHashlineSectionWithRecovery(original, current, patch.sections[0])).toThrow(/Re-read/);
+		});
+
+		it("should use context to recover a duplicated target block", () => {
+			const original = "before a\ntarget\nafter a\nbefore b\ntarget\nafter b";
+			const current = `intro\n${original}`;
+			const hash = computeFileHash(original);
+			const patch = parseHashlinePatch(`¶file.txt#${hash}
+replace 5..5:
++changed`);
+
+			const result = applyHashlineSectionWithRecovery(original, current, patch.sections[0]);
+
+			expect(result).toEqual({
+				text: "intro\nbefore a\ntarget\nafter a\nbefore b\nchanged\nafter b",
+				recovered: true,
+			});
 		});
 
 		it("should reject overlapping concrete ranges", () => {

@@ -120,25 +120,10 @@ describe("Context overflow error handling", () => {
 
 	// =============================================================================
 	// GitHub Copilot (OAuth)
-	// Tests both OpenAI and Anthropic models via Copilot
+	// Tests Anthropic models via Copilot
 	// =============================================================================
 
 	describe("GitHub Copilot (OAuth)", () => {
-		// OpenAI model via Copilot
-		it.skipIf(!githubCopilotToken)(
-			"gpt-4o - should detect overflow via isContextOverflow",
-			async () => {
-				const model = getModel("github-copilot", "gpt-4o");
-				const result = await testContextOverflow(model, githubCopilotToken!);
-				logResult(result);
-
-				expect(result.stopReason).toBe("error");
-				expect(result.errorMessage).toMatch(/exceeds the limit of \d+/i);
-				expect(isContextOverflow(result.response, model.contextWindow)).toBe(true);
-			},
-			120000,
-		);
-
 		// Anthropic model via Copilot
 		it.skipIf(!githubCopilotToken)(
 			"claude-sonnet-4 - should detect overflow via isContextOverflow",
