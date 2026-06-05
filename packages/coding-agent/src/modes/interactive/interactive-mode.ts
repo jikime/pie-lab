@@ -271,23 +271,19 @@ const STARTUP_PALETTES: Record<"dark" | "light" | "universal", StartupPalette> =
 	},
 };
 
-const STARTUP_ASCII_WIDTH = 22;
+const STARTUP_ASCII_WIDTH = 28;
 const STARTUP_BOX_MAX_WIDTH = 112;
 const STARTUP_BOX_MIN_WIDTH = 72;
 
 const STARTUP_PIXEL_COLORS = {
-	crust: { rgb: [180, 105, 45], color256: 130 },
-	filling: { rgb: [245, 158, 66], color256: 215 },
-	cream: { rgb: [255, 244, 214], color256: 230 },
-	berry: { rgb: [220, 58, 88], color256: 167 },
-	plate: { rgb: [78, 176, 214], color256: 74 },
-	orange: { rgb: [249, 115, 22], color256: 202 },
-	yellow: { rgb: [234, 179, 8], color256: 220 },
-	red: { rgb: [239, 68, 68], color256: 203 },
-	green: { rgb: [132, 204, 22], color256: 112 },
-	cyan: { rgb: [34, 211, 238], color256: 80 },
-	blue: { rgb: [59, 130, 246], color256: 33 },
-	purple: { rgb: [139, 92, 246], color256: 99 },
+	outline: { rgb: [20, 24, 39], color256: 234 },
+	bodyDark: { rgb: [77, 50, 49], color256: 52 },
+	body: { rgb: [111, 72, 62], color256: 95 },
+	bodyLight: { rgb: [143, 94, 74], color256: 131 },
+	chest: { rgb: [226, 190, 132], color256: 180 },
+	eye: { rgb: [255, 252, 232], color256: 230 },
+	pupil: { rgb: [31, 45, 95], color256: 17 },
+	beak: { rgb: [249, 145, 42], color256: 208 },
 } satisfies Record<string, StartupColor>;
 
 type StartupPixelColor = keyof typeof STARTUP_PIXEL_COLORS;
@@ -357,44 +353,64 @@ function startupPixelLine(segments: StartupPixelSegment[]): string {
 	return `${line}${" ".repeat(Math.max(0, STARTUP_ASCII_WIDTH - width))}`;
 }
 
+const STARTUP_PIXEL_GLYPHS = new Map<string, StartupPixelColor | null>([
+	[".", null],
+	["#", "outline"],
+	["d", "bodyDark"],
+	["b", "body"],
+	["l", "bodyLight"],
+	["c", "chest"],
+	["e", "eye"],
+	["p", "pupil"],
+	["k", "beak"],
+]);
+
+function startupPixelRow(cells: Array<StartupPixelColor | null>): string {
+	const segments: StartupPixelSegment[] = [];
+	let currentColor: StartupPixelColor | null | undefined;
+	let currentLength = 0;
+	const flush = (): void => {
+		if (currentLength === 0) return;
+		segments.push({
+			text: (currentColor === null ? "  " : "██").repeat(currentLength),
+			...(currentColor !== null && currentColor !== undefined && { color: currentColor }),
+		});
+		currentLength = 0;
+	};
+
+	for (const cell of cells) {
+		if (cell !== currentColor) {
+			flush();
+			currentColor = cell;
+		}
+		currentLength++;
+	}
+	flush();
+	return startupPixelLine(segments);
+}
+
+function startupPixelPatternRow(pattern: string): string {
+	return startupPixelRow(
+		[...pattern].map((cell) => {
+			const color = STARTUP_PIXEL_GLYPHS.get(cell);
+			if (color === undefined) {
+				throw new Error(`Unknown startup pixel glyph: ${cell}`);
+			}
+			return color;
+		}),
+	);
+}
+
 function renderStartupPixelArt(): string[] {
 	return [
-		startupPixelLine([{ text: "        " }, { text: "██", color: "berry" }]),
-		startupPixelLine([
-			{ text: "    " },
-			{ text: "██", color: "cream" },
-			{ text: "██", color: "cream" },
-			{ text: "██", color: "cream" },
-		]),
-		startupPixelLine([{ text: "  " }, { text: "████████████", color: "crust" }]),
-		startupPixelLine([
-			{ text: "  " },
-			{ text: "██", color: "crust" },
-			{ text: "████████", color: "filling" },
-			{ text: "██", color: "crust" },
-		]),
-		startupPixelLine([
-			{ text: "  " },
-			{ text: "██", color: "crust" },
-			{ text: "██", color: "filling" },
-			{ text: "████", color: "berry" },
-			{ text: "██", color: "filling" },
-			{ text: "██", color: "crust" },
-		]),
-		startupPixelLine([
-			{ text: "    " },
-			{ text: "██", color: "crust" },
-			{ text: "██████", color: "filling" },
-			{ text: "██", color: "crust" },
-		]),
-		startupPixelLine([
-			{ text: "      " },
-			{ text: "██", color: "crust" },
-			{ text: "████", color: "filling" },
-			{ text: "██", color: "crust" },
-		]),
-		startupPixelLine([{ text: "        " }, { text: "████", color: "crust" }]),
-		startupPixelLine([{ text: "  " }, { text: "██████████████", color: "plate" }]),
+		startupPixelPatternRow("....#d...d#..."),
+		startupPixelPatternRow("...#ddddddd#.."),
+		startupPixelPatternRow("..#ddeelleedd#."),
+		startupPixelPatternRow("..#beplkpeb#."),
+		startupPixelPatternRow("..#blelllelb#."),
+		startupPixelPatternRow("..#dbcbcbcbd#."),
+		startupPixelPatternRow("...#dcdcdc#..."),
+		startupPixelPatternRow("....##.#.##..."),
 	];
 }
 

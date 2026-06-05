@@ -19,7 +19,12 @@ import { detectSupportedImageMimeTypeFromFile } from "../../utils/mime.ts";
 import { formatPathRelativeToCwdOrAbsolute } from "../../utils/paths.ts";
 import type { ToolDefinition, ToolRenderResultOptions } from "../extensions/types.ts";
 import type { ConflictHistory } from "./conflict-history.ts";
-import { isInternalURL, parseInternalURL, resolveInternalURL } from "./internal-urls.ts";
+import {
+	createDefaultInternalURLRouter,
+	type InternalURLRouter,
+	isInternalURL,
+	parseInternalURL,
+} from "./internal-urls.ts";
 import { resolveReadPathAsync, resolveToCwd } from "./path-utils.ts";
 import { getTextOutput, invalidArgText, replaceTabs, shortenPath, str } from "./render-utils.ts";
 import { wrapToolDefinition } from "./tool-definition-wrapper.ts";
@@ -74,6 +79,8 @@ export interface ReadToolOptions {
 	snapshotStore?: SnapshotStore;
 	/** Shared merge-conflict registry for conflict:// reads. */
 	conflictHistory?: ConflictHistory;
+	/** Router for internal URLs such as agent://, skill://, pr://, and conflict://. */
+	internalUrlRouter?: InternalURLRouter;
 }
 
 type ReadRenderArgs = { path?: string; file_path?: string; offset?: number; limit?: number };
@@ -232,6 +239,7 @@ export function createReadToolDefinition(
 	const useHashline = options?.useHashline ?? false;
 	const snapshotStore = options?.snapshotStore;
 	const conflictHistory = options?.conflictHistory;
+	const internalUrlRouter = options?.internalUrlRouter ?? createDefaultInternalURLRouter();
 	return {
 		name: "read",
 		label: "read",
@@ -258,17 +266,7 @@ export function createReadToolDefinition(
 				if (!parsedUrl) {
 					throw new Error(`Invalid internal URL format: ${path}`);
 				}
-				if (parsedUrl.scheme === "conflict" && conflictHistory) {
-					const conflictContent = conflictHistory.render(parsedUrl.id);
-					if (conflictContent === null) {
-						throw new Error(`Could not resolve internal URL: ${path}`);
-					}
-					return {
-						content: [{ type: "text", text: conflictContent }],
-						details: undefined,
-					};
-				}
-				const resolvedContent = await resolveInternalURL(parsedUrl);
+				const resolvedContent = await internalUrlRouter.resolve(parsedUrl, { conflictHistory });
 				throwIfAborted();
 				if (resolvedContent === null) {
 					throw new Error(`Could not resolve internal URL: ${path}`);

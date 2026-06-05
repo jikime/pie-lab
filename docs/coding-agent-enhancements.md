@@ -12,7 +12,9 @@ safe core of the reference workflow:
 - conservative stale-snapshot recovery for Hashline patches
 - merge-conflict discovery through `read`
 - `conflict://<id>` read/write resolution
-- stabilized internal URL, LSP, and DAP behavior
+- internal URL routing through per-scheme handlers
+- expanded LSP diagnostics, rename, code action, capabilities, and status
+- DAP adapter sessions with breakpoints, stack/scopes/variables/evaluate actions
 
 It is still not a complete `oh-my-pi` port. The remaining gaps are called out
 explicitly below.
@@ -124,10 +126,20 @@ conflict://conflict-id
 normally. GitHub-backed URL resolution is typed and does not rely on implicit
 `any`.
 
+Behavior:
+
+- Internal URLs are parsed into typed `InternalURL` objects.
+- `InternalURLRouter` dispatches each scheme through a registered handler.
+- `read` accepts a custom router, so tests and extensions can override scheme
+  behavior without modifying the read tool.
+- `conflict://` reads use the same router path and receive session conflict
+  history through resolver context.
+
 Current limitation:
 
-- This is still an inline resolver, not the full `oh-my-pi` router with
-  dedicated scheme handlers.
+- This is still a compact built-in router. It does not yet include the full
+  `oh-my-pi` protocol catalog such as vault, MCP, memory, artifact, and local
+  resource handlers.
 
 ### Code Review
 
@@ -160,20 +172,30 @@ Implementation:
 - `packages/coding-agent/src/core/tools/lsp.ts`
 - `packages/coding-agent/src/utils/lsp-client.ts`
 
-The current LSP tool supports TypeScript/JavaScript hover, definition, and
-references. The JSON-RPC client distinguishes requests from notifications, so
-`initialized`, `didOpen`, `didClose`, and `exit` do not wait for responses.
+The current LSP tool supports TypeScript/JavaScript hover, definition,
+references, diagnostics, rename, code actions, capabilities, and status. The
+JSON-RPC client distinguishes requests from notifications, caches published
+diagnostics, and pools clients per working directory.
+
+Behavior:
+
+- `diagnostics` opens/saves a document and waits briefly for
+  `textDocument/publishDiagnostics`.
+- `rename` requests `textDocument/rename` and can optionally apply returned
+  workspace edits.
+- `code_actions` requests `textDocument/codeAction`, lists available actions,
+  and can optionally apply a selected action's workspace edit.
+- `capabilities` reports the initialized server capabilities.
+- `status` reports client lifecycle and diagnostic cache state.
+- Tool-level tests use an injected fake client, so regressions do not require a
+  real language server or paid provider.
 
 Remaining gaps:
 
-- diagnostics caching
 - server configuration
-- per-command/per-cwd client pooling
-- rename
-- code actions
-- workspace edits
-- reload/status/capabilities actions
-- mock-server regression coverage
+- explicit reload action
+- full multi-server selection and project-aware server config
+- richer mock-server protocol tests beyond tool-level injected client coverage
 
 ### DAP
 
@@ -182,32 +204,40 @@ Implementation:
 - `packages/coding-agent/src/core/tools/dap.ts`
 - `packages/coding-agent/src/utils/dap-client.ts`
 
-The current `dap` tool executes Node scripts and can run with Node inspector
-enabled via `--inspect`. It is not a full Debug Adapter Protocol session.
+The current `dap` tool still supports `run` for direct Node execution, and now
+supports real Debug Adapter Protocol sessions when an `adapterCommand` is
+provided.
+
+Behavior:
+
+- `debug` starts a stdio DAP adapter, sends `initialize`, optional
+  `setBreakpoints`, `launch`, and `configurationDone`.
+- Active sessions are kept by id.
+- `set_breakpoints`, `continue`, `stack_trace`, `scopes`, `variables`,
+  `evaluate`, `disconnect`, and `status` operate on an active session.
+- Output, stopped, terminated, and exited DAP events are buffered into session
+  state.
+- Tool-level tests use an injected fake DAP client, so regressions do not need a
+  real adapter binary.
 
 Remaining gaps:
 
-- adapter selection
-- DAP handshake
-- breakpoints
 - stepping
-- stack traces
-- scopes
-- variables
-- evaluation
-- output event buffering
-- session lifecycle management
+- automatic adapter selection and bundled adapter defaults
+- richer adapter-specific launch profiles
+- protocol-level mock adapter tests beyond tool-level injected client coverage
 
 ## Remaining Porting Plan
 
-To reach full parity with `oh-my-pi`, continue in this order:
+The original four-item porting pass is implemented at the compact core level.
+To reach broader `oh-my-pi` parity, continue in this order:
 
-1. Replace the inline internal URL resolver with a router and per-scheme
-   handlers.
-2. Expand LSP into a session-aware client manager with diagnostics, rename, code
-   actions, workspace edits, and mock-server tests.
-3. Replace the Node inspector wrapper with a real DAP session implementation.
-4. Add focused regression tests for each new URL scheme and recovery path.
+1. Add the remaining internal URL schemes from `oh-my-pi` as separate handlers.
+2. Add LSP server configuration files, server selection, and multi-server
+   diagnostics/rename coordination.
+3. Add DAP adapter discovery/defaults and stepping actions.
+4. Add protocol-level mock servers for LSP and DAP in addition to the current
+   injected-client regression tests.
 
 ## Verification Expectations
 

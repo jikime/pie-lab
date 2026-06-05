@@ -3,11 +3,16 @@ import { applyPatch } from "diff";
 import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
+import { pathToFileURL } from "url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { executeBashWithOperations } from "../src/core/bash-executor.ts";
+import type { ExtensionContext } from "../src/core/extensions/types.ts";
 import { type BashOperations, createBashTool, createLocalBashOperations } from "../src/core/tools/bash.ts";
 import { ConflictHistory } from "../src/core/tools/conflict-history.ts";
+import { createDapToolDefinition } from "../src/core/tools/dap.ts";
 import { computeEditsDiff } from "../src/core/tools/edit-diff.ts";
+import { InternalURLRouter } from "../src/core/tools/internal-urls.ts";
+import { createLspToolDefinition } from "../src/core/tools/lsp.ts";
 import {
 	createEditTool,
 	createFindTool,
@@ -16,6 +21,8 @@ import {
 	createReadTool,
 	createWriteTool,
 } from "../src/index.ts";
+import type { DapClientLike, DapLaunchOptions, DapStatus, DebugResult } from "../src/utils/dap-client.ts";
+import type { LspClientLike, LspCodeAction, LspDiagnostic, LspWorkspaceEdit } from "../src/utils/lsp-client.ts";
 import * as shellModule from "../src/utils/shell.ts";
 
 const readTool = createReadTool(process.cwd());
@@ -74,6 +81,20 @@ describe("Coding Agent Tools", () => {
 			const result = await readTool.execute("test-call-internal-url", { path: "agent://reviewer" });
 
 			expect(getTextOutput(result)).toContain("[Agent: reviewer]");
+		});
+
+		it("should route internal URLs through registered scheme handlers", async () => {
+			const router = new InternalURLRouter([
+				{
+					scheme: "agent",
+					resolve: (url) => `custom agent ${url.id}`,
+				},
+			]);
+			const routedReadTool = createReadTool(testDir, { internalUrlRouter: router });
+
+			const result = await routedReadTool.execute("test-call-internal-url-router", { path: "agent://reviewer" });
+
+			expect(getTextOutput(result)).toBe("custom agent reviewer");
 		});
 
 		it("should emit hashline output when a snapshot store is configured", async () => {
@@ -526,6 +547,202 @@ describe("Coding Agent Tools", () => {
 			const result = await computeEditsDiff(unreadableFile, [{ oldText: "hello", newText: "world" }], testDir);
 
 			expect(result).toEqual({ error: `Could not edit file: ${unreadableFile}. Error code: EACCES.` });
+		});
+	});
+
+	describe("lsp tool", () => {
+		function createFakeLspClient(testFile: string): LspClientLike {
+			const edit: LspWorkspaceEdit = {
+				changes: {
+					[pathToFileURL(testFile).href]: [
+						{
+							range: {
+								start: { line: 0, character: 6 },
+								end: { line: 0, character: 13 },
+							},
+							newText: "newName",
+						},
+					],
+				},
+			};
+			const diagnostic: LspDiagnostic = {
+				range: {
+					start: { line: 0, character: 6 },
+					end: { line: 0, character: 13 },
+				},
+				severity: 1,
+				source: "fake-ts",
+				message: "Cannot find name oldName.",
+			};
+			const action: LspCodeAction = { title: "Rename oldName", kind: "quickfix", edit };
+			return {
+				start: async () => {},
+				hover: async () => ({ contents: { language: "ts", value: "const oldName: number" } }),
+				definition: async () => null,
+				references: async () => [],
+				diagnostics: async () => [diagnostic],
+				rename: async () => edit,
+				codeActions: async () => [action],
+				capabilities: () => ({ renameProvider: true, codeActionProvider: true }),
+				status: () => ({
+					cwd: testDir,
+					running: true,
+					initialized: true,
+					openDocuments: 0,
+					diagnosticFiles: 1,
+				}),
+				shutdown: async () => {},
+			};
+		}
+
+		it("should return diagnostics from the LSP client", async () => {
+			const testFile = join(testDir, "lsp-diagnostics.ts");
+			writeFileSync(testFile, "const oldName = 1;\n");
+			const lspTool = createLspToolDefinition(testDir, {
+				clientFactory: () => createFakeLspClient(testFile),
+			});
+
+			const result = await lspTool.execute(
+				"test-call-lsp-diagnostics",
+				{
+					action: "diagnostics",
+					file: "lsp-diagnostics.ts",
+				},
+				undefined,
+				undefined,
+				{} as ExtensionContext,
+			);
+
+			expect(getTextOutput(result)).toContain("Cannot find name oldName.");
+		});
+
+		it("should apply LSP rename workspace edits when requested", async () => {
+			const testFile = join(testDir, "lsp-rename.ts");
+			writeFileSync(testFile, "const oldName = 1;\nconsole.log(oldName);\n");
+			const lspTool = createLspToolDefinition(testDir, {
+				clientFactory: () => createFakeLspClient(testFile),
+			});
+
+			const result = await lspTool.execute(
+				"test-call-lsp-rename",
+				{
+					action: "rename",
+					file: "lsp-rename.ts",
+					line: 1,
+					column: 8,
+					newName: "newName",
+					apply: true,
+				},
+				undefined,
+				undefined,
+				{} as ExtensionContext,
+			);
+
+			expect(getTextOutput(result)).toContain("Applied to:");
+			expect(readFileSync(testFile, "utf-8")).toBe("const newName = 1;\nconsole.log(oldName);\n");
+		});
+
+		it("should list LSP code actions", async () => {
+			const testFile = join(testDir, "lsp-code-actions.ts");
+			writeFileSync(testFile, "const oldName = 1;\n");
+			const lspTool = createLspToolDefinition(testDir, {
+				clientFactory: () => createFakeLspClient(testFile),
+			});
+
+			const result = await lspTool.execute(
+				"test-call-lsp-code-actions",
+				{
+					action: "code_actions",
+					file: "lsp-code-actions.ts",
+					line: 1,
+					column: 8,
+				},
+				undefined,
+				undefined,
+				{} as ExtensionContext,
+			);
+
+			expect(getTextOutput(result)).toContain("0. Rename oldName");
+		});
+	});
+
+	describe("dap tool", () => {
+		function createFakeDapClient(): DapClientLike {
+			const statuses: DapStatus[] = [];
+			return {
+				launch: async (): Promise<DebugResult> => ({ exitCode: 0, stdout: "ran\n", stderr: "" }),
+				startSession: async (options: DapLaunchOptions) => {
+					statuses.push({ sessionId: options.sessionId, running: true, outputEvents: 0 });
+					return {
+						sessionId: options.sessionId,
+						initialized: true,
+						output: [`program=${options.program}`],
+						stoppedReason: "breakpoint",
+						exited: false,
+					};
+				},
+				setBreakpoints: async (_sessionId, _file, lines) => ({ breakpoints: lines.map((line) => ({ line })) }),
+				continue: async () => ({ allThreadsContinued: true }),
+				stackTrace: async () => ({ stackFrames: [{ id: 1, name: "main", line: 1, column: 1 }] }),
+				scopes: async () => ({ scopes: [{ name: "Local", variablesReference: 1 }] }),
+				variables: async () => ({ variables: [{ name: "x", value: "1", variablesReference: 0 }] }),
+				evaluate: async (_sessionId, expression) => ({ result: expression, variablesReference: 0 }),
+				disconnect: async (sessionId) => {
+					const status = statuses.find((entry) => entry.sessionId === sessionId);
+					if (status) status.running = false;
+				},
+				status: () => statuses,
+				disconnectAll: async () => {},
+			};
+		}
+
+		it("should run scripts through the DAP tool", async () => {
+			const dapTool = createDapToolDefinition(testDir, { clientFactory: createFakeDapClient });
+			const result = await dapTool.execute(
+				"test-call-dap-run",
+				{
+					action: "run",
+					script: "script.js",
+				},
+				undefined,
+				undefined,
+				{} as ExtensionContext,
+			);
+
+			expect(getTextOutput(result)).toContain("ran");
+		});
+
+		it("should start and inspect a DAP adapter session", async () => {
+			const dapTool = createDapToolDefinition(testDir, { clientFactory: createFakeDapClient });
+			const script = join(testDir, "debug.js");
+			writeFileSync(script, "console.log('debug');\n");
+
+			const debugResult = await dapTool.execute(
+				"test-call-dap-debug",
+				{
+					action: "debug",
+					script: "debug.js",
+					sessionId: "unit",
+					adapterCommand: "fake-adapter",
+					breakpoints: [{ line: 1 }],
+				},
+				undefined,
+				undefined,
+				{} as ExtensionContext,
+			);
+			const stackResult = await dapTool.execute(
+				"test-call-dap-stack",
+				{
+					action: "stack_trace",
+					sessionId: "unit",
+				},
+				undefined,
+				undefined,
+				{} as ExtensionContext,
+			);
+
+			expect(getTextOutput(debugResult)).toContain("DAP Session Started");
+			expect(getTextOutput(stackResult)).toContain("main");
 		});
 	});
 
