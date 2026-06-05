@@ -6435,7 +6435,7 @@ declare const BUILT_IN_MODELS: {
             api: "mistral-conversations";
             provider: string;
             baseUrl: string;
-            reasoning: true;
+            reasoning: false;
             input: ("image" | "text")[];
             cost: {
                 input: number;
@@ -8674,7 +8674,7 @@ declare const BUILT_IN_MODELS: {
             contextWindow: number;
             maxTokens: number;
         };
-        readonly "nemotron-3-super-free": {
+        readonly "nemotron-3-ultra-free": {
             id: string;
             name: string;
             api: "openai-completions";
@@ -10866,6 +10866,23 @@ declare const BUILT_IN_MODELS: {
             maxTokens: number;
         };
         readonly "nvidia/nemotron-3-super-120b-a12b:free": {
+            id: string;
+            name: string;
+            api: "openai-completions";
+            provider: string;
+            baseUrl: string;
+            reasoning: true;
+            input: "text"[];
+            cost: {
+                input: number;
+                output: number;
+                cacheRead: number;
+                cacheWrite: number;
+            };
+            contextWindow: number;
+            maxTokens: number;
+        };
+        readonly "nvidia/nemotron-3-ultra-550b-a55b": {
             id: string;
             name: string;
             api: "openai-completions";
@@ -13916,6 +13933,37 @@ declare const BUILT_IN_MODELS: {
             contextWindow: number;
             maxTokens: number;
         };
+        readonly "nvidia/nemotron-3-ultra-550b-a55b": {
+            id: string;
+            name: string;
+            api: "openai-completions";
+            provider: string;
+            baseUrl: string;
+            compat: {
+                supportsStore: false;
+                supportsDeveloperRole: false;
+                supportsReasoningEffort: false;
+                maxTokensField: "max_tokens";
+                supportsStrictMode: false;
+                supportsLongCacheRetention: false;
+                thinkingFormat: "together";
+            };
+            reasoning: true;
+            thinkingLevelMap: {
+                minimal: null;
+                low: null;
+                medium: null;
+            };
+            input: "text"[];
+            cost: {
+                input: number;
+                output: number;
+                cacheRead: number;
+                cacheWrite: number;
+            };
+            contextWindow: number;
+            maxTokens: number;
+        };
         readonly "openai/gpt-oss-120b": {
             id: string;
             name: string;
@@ -15627,6 +15675,23 @@ declare const BUILT_IN_MODELS: {
             maxTokens: number;
         };
         readonly "nvidia/nemotron-3-super-120b-a12b": {
+            id: string;
+            name: string;
+            api: "anthropic-messages";
+            provider: string;
+            baseUrl: string;
+            reasoning: true;
+            input: "text"[];
+            cost: {
+                input: number;
+                output: number;
+                cacheRead: number;
+                cacheWrite: number;
+            };
+            contextWindow: number;
+            maxTokens: number;
+        };
+        readonly "nvidia/nemotron-3-ultra-550b-a55b": {
             id: string;
             name: string;
             api: "anthropic-messages";

@@ -271,26 +271,31 @@ const STARTUP_PALETTES: Record<"dark" | "light" | "universal", StartupPalette> =
 	},
 };
 
-const STARTUP_ASCII_WIDTH = 28;
+const STARTUP_PIXEL_ART_WIDTH = 36;
 const STARTUP_BOX_MAX_WIDTH = 112;
 const STARTUP_BOX_MIN_WIDTH = 72;
 
 const STARTUP_PIXEL_COLORS = {
 	outline: { rgb: [20, 24, 39], color256: 234 },
+	shadow: { rgb: [42, 31, 39], color256: 235 },
 	bodyDark: { rgb: [77, 50, 49], color256: 52 },
 	body: { rgb: [111, 72, 62], color256: 95 },
 	bodyLight: { rgb: [143, 94, 74], color256: 131 },
+	face: { rgb: [157, 105, 82], color256: 137 },
 	chest: { rgb: [226, 190, 132], color256: 180 },
 	eye: { rgb: [255, 252, 232], color256: 230 },
 	pupil: { rgb: [31, 45, 95], color256: 17 },
 	beak: { rgb: [249, 145, 42], color256: 208 },
+	beakLight: { rgb: [255, 190, 73], color256: 215 },
+	highlight: { rgb: [229, 241, 255], color256: 195 },
 } satisfies Record<string, StartupColor>;
 
 type StartupPixelColor = keyof typeof STARTUP_PIXEL_COLORS;
 
 type StartupPixelSegment = {
 	text: string;
-	color?: StartupPixelColor;
+	fg?: StartupPixelColor;
+	bg?: StartupPixelColor;
 };
 
 type StartupLayout = {
@@ -311,11 +316,27 @@ function getStartupPalette(themeName: string | undefined): StartupPalette {
 }
 
 function startupFg(text: string, color: StartupColor): string {
+	return startupStyle(text, color);
+}
+
+function startupStyle(text: string, fg?: StartupColor, bg?: StartupColor): string {
+	const reset = `${fg ? "\x1b[39m" : ""}${bg ? "\x1b[49m" : ""}`;
 	if (getCapabilities().trueColor) {
-		const [r, g, b] = color.rgb;
-		return `\x1b[38;2;${r};${g};${b}m${text}\x1b[39m`;
+		const codes: string[] = [];
+		if (fg) {
+			const [r, g, b] = fg.rgb;
+			codes.push(`38;2;${r};${g};${b}`);
+		}
+		if (bg) {
+			const [r, g, b] = bg.rgb;
+			codes.push(`48;2;${r};${g};${b}`);
+		}
+		return codes.length > 0 ? `\x1b[${codes.join(";")}m${text}${reset}` : text;
 	}
-	return `\x1b[38;5;${color.color256}m${text}\x1b[39m`;
+	const codes: string[] = [];
+	if (fg) codes.push(`38;5;${fg.color256}`);
+	if (bg) codes.push(`48;5;${bg.color256}`);
+	return codes.length > 0 ? `\x1b[${codes.join(";")}m${text}${reset}` : text;
 }
 
 function startupBold(text: string): string {
@@ -337,7 +358,7 @@ function getStartupLayout(): StartupLayout {
 	const availableWidth = terminalColumns && terminalColumns > 0 ? terminalColumns - 2 : STARTUP_BOX_MAX_WIDTH;
 	const boxWidth = Math.min(STARTUP_BOX_MAX_WIDTH, Math.max(STARTUP_BOX_MIN_WIDTH, availableWidth));
 	const contentWidth = boxWidth - 7;
-	const leftWidth = Math.max(28, Math.min(48, Math.floor(contentWidth * 0.42)));
+	const leftWidth = Math.max(STARTUP_PIXEL_ART_WIDTH, Math.min(48, Math.floor(contentWidth * 0.42)));
 	return {
 		boxWidth,
 		leftWidth,
@@ -345,73 +366,144 @@ function getStartupLayout(): StartupLayout {
 	};
 }
 
-function startupPixelLine(segments: StartupPixelSegment[]): string {
-	const width = segments.reduce((total, segment) => total + segment.text.length, 0);
+function startupPixelLine(segments: StartupPixelSegment[], targetWidth: number): string {
+	const lineWidth = segments.reduce((total, segment) => total + segment.text.length, 0);
 	const line = segments
-		.map((segment) => (segment.color ? startupFg(segment.text, STARTUP_PIXEL_COLORS[segment.color]) : segment.text))
+		.map((segment) =>
+			segment.fg || segment.bg
+				? startupStyle(
+						segment.text,
+						segment.fg ? STARTUP_PIXEL_COLORS[segment.fg] : undefined,
+						segment.bg ? STARTUP_PIXEL_COLORS[segment.bg] : undefined,
+					)
+				: segment.text,
+		)
 		.join("");
-	return `${line}${" ".repeat(Math.max(0, STARTUP_ASCII_WIDTH - width))}`;
+	return `${line}${" ".repeat(Math.max(0, targetWidth - lineWidth))}`;
 }
 
 const STARTUP_PIXEL_GLYPHS = new Map<string, StartupPixelColor | null>([
 	[".", null],
 	["#", "outline"],
+	["x", "shadow"],
 	["d", "bodyDark"],
 	["b", "body"],
 	["l", "bodyLight"],
+	["f", "face"],
 	["c", "chest"],
 	["e", "eye"],
 	["p", "pupil"],
 	["k", "beak"],
+	["a", "beakLight"],
+	["s", "highlight"],
 ]);
 
-function startupPixelRow(cells: Array<StartupPixelColor | null>): string {
+const STARTUP_OWL_PIXEL_PATTERN = [
+	".......###................###.......",
+	"......#ddd#..............#ddd#......",
+	".....#ddll#..............#lldd#.....",
+	"....#ddllll##############lllldd#....",
+	"...#ddllllllbbbbbbbbbbbblllllldd#...",
+	".....#llllllllllllllllllllllll#.....",
+	".....#lllllllllllllllllllllllll#....",
+	"....#lllllllllllllllllllllllllll#...",
+	"...#llllffeeefffllllfffeeefflllll#..",
+	"...#llffeeeeeeeffffffeeeeeeeffll#...",
+	"...#lffeeeeeeeeeffffeeeeeeeeeffl#...",
+	"..#lffeeeeeeeeeeeffeeeeeeeeeeeffl#..",
+	"..#lffeeeeeepesseffeeeeeepsseeffl#..",
+	"..#fffeeeeeppppeeffeeeepppppeefff#..",
+	"..#fffeeeepppppeeffeeeepppppeefff#..",
+	"..#fffeeeepppppeeffeeeepppppeefff#..",
+	"..#lffeeeeeppppeeffeeeepppppeeffl#..",
+	"..#lfffeeesepeeffkkffeesepeeefffl#..",
+	".#lllfffeeeeeeeefkaffeeeeeeeffflll#.",
+	".#llllffffeeeffffffffffeeeffffllll#.",
+	".#lllllbffffffffffffffffffffblllll#.",
+	".#lllllbbbbbbffffffffffbbbbbblllll#.",
+	".#lll#lbbbbbbbffffffffbbbbbbbl#lll#.",
+	".#lll#lbbbbbbbffffffffbbbbbbbl#lll#.",
+	".#lll#lbbbbbbbbffffffbbbbbbbbl#lll#.",
+	".#lll#lbbbbbbbbbffffbbbbbbbbbl#lll#.",
+	".#lll#lbbbcbbbbbbffbbbbbbcbbbl#lll#.",
+	".#lll#lbbbcbbbbbbffbbbbbbcbbbl#lll#.",
+	"..#ll#lbbbcbbbbbcbbbcbbbbcbbbl#ll#..",
+	"..#ll#lbbbbbbbbbcbbbcbbbbbbbbl#ll#..",
+	"..#ll#lbcbbbbcbbcbbccbbbbbbbcl#ll#..",
+	"...#l#lbcbbbbcbbbbbcbbbbbbbbcl#l#...",
+	"...#l#ldcddddcdddddcddddddddcl#l#...",
+	"....#lldddddddcddddddcdddddddll#....",
+	".....#lddddcddcdddcddcddcddddl#.....",
+	"......#ddddcddcdddcddcddcdddd#......",
+	".......#dddcddddddcdddddcddd#.......",
+	"........##dddddddddddddddd##........",
+	"..........##dddddddddddd##..........",
+	"............############............",
+];
+
+function startupPixelPatternCells(pattern: string): Array<StartupPixelColor | null> {
+	return [...pattern].map((cell) => {
+		const color = STARTUP_PIXEL_GLYPHS.get(cell);
+		if (color === undefined) {
+			throw new Error(`Unknown startup pixel glyph: ${cell}`);
+		}
+		return color;
+	});
+}
+
+function startupPixelHalfBlockRow(
+	upperCells: Array<StartupPixelColor | null>,
+	lowerCells: Array<StartupPixelColor | null>,
+): string {
 	const segments: StartupPixelSegment[] = [];
-	let currentColor: StartupPixelColor | null | undefined;
+	let currentText = "";
+	let currentFg: StartupPixelColor | undefined;
+	let currentBg: StartupPixelColor | undefined;
 	let currentLength = 0;
 	const flush = (): void => {
 		if (currentLength === 0) return;
 		segments.push({
-			text: (currentColor === null ? "  " : "██").repeat(currentLength),
-			...(currentColor !== null && currentColor !== undefined && { color: currentColor }),
+			text: currentText.repeat(currentLength),
+			...(currentFg && { fg: currentFg }),
+			...(currentBg && { bg: currentBg }),
 		});
 		currentLength = 0;
 	};
 
-	for (const cell of cells) {
-		if (cell !== currentColor) {
+	for (let index = 0; index < STARTUP_PIXEL_ART_WIDTH; index++) {
+		const upper = upperCells[index] ?? null;
+		const lower = lowerCells[index] ?? null;
+		const text = upper && lower ? (upper === lower ? "█" : "▀") : upper ? "▀" : lower ? "▄" : " ";
+		const fg = upper ?? lower ?? undefined;
+		const bg = upper && lower && upper !== lower ? lower : undefined;
+		if (text !== currentText || fg !== currentFg || bg !== currentBg) {
 			flush();
-			currentColor = cell;
+			currentText = text;
+			currentFg = fg;
+			currentBg = bg;
 		}
 		currentLength++;
 	}
 	flush();
-	return startupPixelLine(segments);
+	return startupPixelLine(segments, STARTUP_PIXEL_ART_WIDTH);
 }
 
-function startupPixelPatternRow(pattern: string): string {
-	return startupPixelRow(
-		[...pattern].map((cell) => {
-			const color = STARTUP_PIXEL_GLYPHS.get(cell);
-			if (color === undefined) {
-				throw new Error(`Unknown startup pixel glyph: ${cell}`);
-			}
-			return color;
-		}),
-	);
+function renderStartupPixelPattern(pattern: string[]): string[] {
+	const rows = pattern.map((row) => {
+		if (row.length !== STARTUP_PIXEL_ART_WIDTH) {
+			throw new Error(`Startup pixel art row must be ${STARTUP_PIXEL_ART_WIDTH} cells wide.`);
+		}
+		return startupPixelPatternCells(row);
+	});
+	const rendered: string[] = [];
+	for (let index = 0; index < rows.length; index += 2) {
+		rendered.push(startupPixelHalfBlockRow(rows[index] ?? [], rows[index + 1] ?? []));
+	}
+	return rendered;
 }
 
 function renderStartupPixelArt(): string[] {
-	return [
-		startupPixelPatternRow("....#d...d#..."),
-		startupPixelPatternRow("...#ddddddd#.."),
-		startupPixelPatternRow("..#ddeelleedd#."),
-		startupPixelPatternRow("..#beplkpeb#."),
-		startupPixelPatternRow("..#blelllelb#."),
-		startupPixelPatternRow("..#dbcbcbcbd#."),
-		startupPixelPatternRow("...#dcdcdc#..."),
-		startupPixelPatternRow("....##.#.##..."),
-	];
+	return renderStartupPixelPattern(STARTUP_OWL_PIXEL_PATTERN);
 }
 
 function formatStartupUserName(): string {

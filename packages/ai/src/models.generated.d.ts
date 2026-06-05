@@ -6434,7 +6434,7 @@ export declare const MODELS: {
             api: "mistral-conversations";
             provider: string;
             baseUrl: string;
-            reasoning: true;
+            reasoning: false;
             input: ("image" | "text")[];
             cost: {
                 input: number;
@@ -8673,7 +8673,7 @@ export declare const MODELS: {
             contextWindow: number;
             maxTokens: number;
         };
-        readonly "nemotron-3-super-free": {
+        readonly "nemotron-3-ultra-free": {
             id: string;
             name: string;
             api: "openai-completions";
@@ -10865,6 +10865,23 @@ export declare const MODELS: {
             maxTokens: number;
         };
         readonly "nvidia/nemotron-3-super-120b-a12b:free": {
+            id: string;
+            name: string;
+            api: "openai-completions";
+            provider: string;
+            baseUrl: string;
+            reasoning: true;
+            input: "text"[];
+            cost: {
+                input: number;
+                output: number;
+                cacheRead: number;
+                cacheWrite: number;
+            };
+            contextWindow: number;
+            maxTokens: number;
+        };
+        readonly "nvidia/nemotron-3-ultra-550b-a55b": {
             id: string;
             name: string;
             api: "openai-completions";
@@ -13915,6 +13932,37 @@ export declare const MODELS: {
             contextWindow: number;
             maxTokens: number;
         };
+        readonly "nvidia/nemotron-3-ultra-550b-a55b": {
+            id: string;
+            name: string;
+            api: "openai-completions";
+            provider: string;
+            baseUrl: string;
+            compat: {
+                supportsStore: false;
+                supportsDeveloperRole: false;
+                supportsReasoningEffort: false;
+                maxTokensField: "max_tokens";
+                supportsStrictMode: false;
+                supportsLongCacheRetention: false;
+                thinkingFormat: "together";
+            };
+            reasoning: true;
+            thinkingLevelMap: {
+                minimal: null;
+                low: null;
+                medium: null;
+            };
+            input: "text"[];
+            cost: {
+                input: number;
+                output: number;
+                cacheRead: number;
+                cacheWrite: number;
+            };
+            contextWindow: number;
+            maxTokens: number;
+        };
         readonly "openai/gpt-oss-120b": {
             id: string;
             name: string;
@@ -15626,6 +15674,23 @@ export declare const MODELS: {
             maxTokens: number;
         };
         readonly "nvidia/nemotron-3-super-120b-a12b": {
+            id: string;
+            name: string;
+            api: "anthropic-messages";
+            provider: string;
+            baseUrl: string;
+            reasoning: true;
+            input: "text"[];
+            cost: {
+                input: number;
+                output: number;
+                cacheRead: number;
+                cacheWrite: number;
+            };
+            contextWindow: number;
+            maxTokens: number;
+        };
+        readonly "nvidia/nemotron-3-ultra-550b-a55b": {
             id: string;
             name: string;
             api: "anthropic-messages";
