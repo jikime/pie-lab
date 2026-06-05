@@ -162,6 +162,11 @@ function thinkingColor(thinkingLevel: string): FooterColorName {
 	}
 }
 
+const ACTIONABLE_EXTENSION_STATUS_PATTERN =
+	/\b(error|failed|failure|warn|warning|unavailable|offline|denied|missing|invalid|timeout|crash|blocked)\b/i;
+const QUIET_EXTENSION_STATUS_PATTERN = /\b(ready|connected|disconnected)\b/i;
+const ANSI_ESCAPE_PATTERN = /\x1b\[[0-9;]*m/g;
+
 /**
  * Footer component that shows pwd, token stats, and context usage.
  * Computes token/context stats from session, gets git branch and extension statuses from provider.
@@ -320,10 +325,21 @@ export class FooterComponent implements Component {
 		if (extensionStatuses.size > 0) {
 			const sortedStatuses = Array.from(extensionStatuses.entries())
 				.sort(([a], [b]) => a.localeCompare(b))
-				.map(([, text]) => sanitizeStatusText(text));
-			const statusLine = sortedStatuses.join(" ");
-			// Truncate to terminal width with dim ellipsis for consistency with footer style
-			lines.push(truncateToWidth(statusLine, width, footerFg("...", "muted")));
+				.map(([, text]) => ({
+					displayText: sanitizeStatusText(text),
+					plainText: sanitizeStatusText(text.replace(ANSI_ESCAPE_PATTERN, "")),
+				}))
+				.filter(({ displayText, plainText }) => {
+					if (!displayText) return false;
+					if (ACTIONABLE_EXTENSION_STATUS_PATTERN.test(plainText)) return true;
+					return !QUIET_EXTENSION_STATUS_PATTERN.test(plainText);
+				})
+				.map(({ displayText }) => displayText);
+			if (sortedStatuses.length > 0) {
+				const statusLine = sortedStatuses.join(" ");
+				// Truncate to terminal width with dim ellipsis for consistency with footer style
+				lines.push(truncateToWidth(statusLine, width, footerFg("...", "muted")));
+			}
 		}
 
 		return lines;

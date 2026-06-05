@@ -63,10 +63,13 @@ function createSession(options: {
 	return session as unknown as AgentSession;
 }
 
-function createFooterData(providerCount: number): ReadonlyFooterDataProvider {
+function createFooterData(
+	providerCount: number,
+	extensionStatuses = new Map<string, string>(),
+): ReadonlyFooterDataProvider {
 	const provider = {
 		getGitBranch: () => "main",
-		getExtensionStatuses: () => new Map<string, string>(),
+		getExtensionStatuses: () => extensionStatuses,
 		getAvailableProviderCount: () => providerCount,
 		onBranchChange: (callback: () => void) => {
 			void callback;
@@ -208,5 +211,30 @@ describe("FooterComponent width handling", () => {
 		const lines = footer.render(150).map(stripAnsi);
 
 		expect(lines[1]).toContain("route auto:coding -> google/gemini-2.5-pro");
+	});
+
+	it("hides quiet extension statuses while keeping actionable statuses", () => {
+		const session = createSession({
+			sessionName: "work",
+			modelId: "claude-sonnet-4-6",
+			provider: "claude-code-adk",
+		});
+		const footer = new FooterComponent(
+			session,
+			createFooterData(
+				2,
+				new Map([
+					["chat", "chat \x1b[38;2;108;108;108mdisconnected\x1b[39m"],
+					["codegraph", "CodeGraph ready"],
+					["index", "index warning: stale cache"],
+				]),
+			),
+		);
+
+		const lines = footer.render(150).map(stripAnsi);
+
+		expect(lines.join("\n")).not.toContain("chat disconnected");
+		expect(lines.join("\n")).not.toContain("CodeGraph ready");
+		expect(lines[2]).toContain("index warning: stale cache");
 	});
 });
