@@ -1095,7 +1095,81 @@ export declare const MODELS: {
             contextWindow: number;
             maxTokens: number;
         };
+        readonly "openai.gpt-5.4": {
+            id: string;
+            name: string;
+            api: "bedrock-converse-stream";
+            provider: string;
+            baseUrl: string;
+            reasoning: true;
+            thinkingLevelMap: {
+                xhigh: string;
+            };
+            input: ("image" | "text")[];
+            cost: {
+                input: number;
+                output: number;
+                cacheRead: number;
+                cacheWrite: number;
+            };
+            contextWindow: number;
+            maxTokens: number;
+        };
+        readonly "openai.gpt-5.5": {
+            id: string;
+            name: string;
+            api: "bedrock-converse-stream";
+            provider: string;
+            baseUrl: string;
+            reasoning: true;
+            thinkingLevelMap: {
+                xhigh: string;
+            };
+            input: ("image" | "text")[];
+            cost: {
+                input: number;
+                output: number;
+                cacheRead: number;
+                cacheWrite: number;
+            };
+            contextWindow: number;
+            maxTokens: number;
+        };
+        readonly "openai.gpt-oss-120b": {
+            id: string;
+            name: string;
+            api: "bedrock-converse-stream";
+            provider: string;
+            baseUrl: string;
+            reasoning: false;
+            input: "text"[];
+            cost: {
+                input: number;
+                output: number;
+                cacheRead: number;
+                cacheWrite: number;
+            };
+            contextWindow: number;
+            maxTokens: number;
+        };
         readonly "openai.gpt-oss-120b-1:0": {
+            id: string;
+            name: string;
+            api: "bedrock-converse-stream";
+            provider: string;
+            baseUrl: string;
+            reasoning: false;
+            input: "text"[];
+            cost: {
+                input: number;
+                output: number;
+                cacheRead: number;
+                cacheWrite: number;
+            };
+            contextWindow: number;
+            maxTokens: number;
+        };
+        readonly "openai.gpt-oss-20b": {
             id: string;
             name: string;
             api: "bedrock-converse-stream";
