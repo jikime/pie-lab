@@ -91,7 +91,7 @@ function bumpOrSetVersion(target) {
 	}
 
 	console.log(`Setting explicit version (${target})...`);
-		run(`npm version ${target} --workspaces --no-git-tag-version && node scripts/sync-versions.js && npm install --package-lock-only`);
+	run(`npm version ${target} --workspaces --no-git-tag-version --package-lock=false && node scripts/sync-versions.js && npm install --package-lock-only`);
 	return getVersion();
 }
 
