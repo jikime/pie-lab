@@ -18,7 +18,7 @@
  */
 
 import { execSync } from "child_process";
-import { readFileSync, writeFileSync, readdirSync, existsSync } from "fs";
+import { readFileSync, writeFileSync, readdirSync, existsSync, statSync } from "fs";
 import { join } from "path";
 
 const RELEASE_TARGET = process.argv[2];
@@ -66,6 +66,40 @@ function shellQuote(value) {
 	return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
+function workspaceDirsFromPattern(pattern) {
+	if (!pattern.includes("*")) {
+		return [pattern];
+	}
+
+	const starIndex = pattern.indexOf("*");
+	const baseDir = pattern.slice(0, starIndex).replace(/\/$/, "");
+	const suffix = pattern.slice(starIndex + 1).replace(/^\//, "");
+	if (!existsSync(baseDir)) {
+		return [];
+	}
+
+	return readdirSync(baseDir, { withFileTypes: true })
+		.filter((entry) => entry.isDirectory())
+		.map((entry) => join(baseDir, entry.name, suffix))
+		.filter((dir) => existsSync(join(dir, "package.json")));
+}
+
+function getWorkspacePackagePaths() {
+	const rootPkg = JSON.parse(readFileSync("package.json", "utf-8"));
+	const workspaces = Array.isArray(rootPkg.workspaces) ? rootPkg.workspaces : [];
+	const paths = workspaces.flatMap(workspaceDirsFromPattern).map((dir) => join(dir, "package.json"));
+	return [...new Set(paths)].filter((path) => existsSync(path) && statSync(path).isFile());
+}
+
+function setWorkspaceVersions(version) {
+	for (const pkgPath of getWorkspacePackagePaths()) {
+		const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"));
+		pkg.version = version;
+		writeFileSync(pkgPath, `${JSON.stringify(pkg, null, "\t")}\n`);
+		console.log(`${pkg.name}\nv${version}`);
+	}
+}
+
 function stageChangedFiles() {
 	const output = run("git ls-files -m -o -d --exclude-standard", { silent: true });
 	const paths = [...new Set((output || "").split("\n").map((line) => line.trim()).filter(Boolean))];
@@ -91,7 +125,9 @@ function bumpOrSetVersion(target) {
 	}
 
 	console.log(`Setting explicit version (${target})...`);
-	run(`npm version ${target} --workspaces --no-git-tag-version --package-lock=false && node scripts/sync-versions.js && npm install --package-lock-only`);
+	setWorkspaceVersions(target);
+	run("node scripts/sync-versions.js");
+	run("npm install --package-lock-only");
 	return getVersion();
 }
 
