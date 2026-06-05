@@ -64,15 +64,28 @@ const FOOTER_PALETTES: Record<"dark" | "light" | "universal", FooterPalette> = {
 	},
 };
 
+let cachedFooterPaletteKey: string | undefined;
+let cachedFooterPalette: FooterPalette | undefined;
+
 function getFooterPalette(): FooterPalette {
+	const cacheKey = `${process.env.COLORFGBG ?? ""}\0${theme.name}`;
+	if (cachedFooterPaletteKey === cacheKey && cachedFooterPalette) {
+		return cachedFooterPalette;
+	}
+
 	const detection = detectTerminalBackground();
+	let palette: FooterPalette;
 	if (detection.confidence === "high") {
-		return FOOTER_PALETTES[detection.theme];
+		palette = FOOTER_PALETTES[detection.theme];
+	} else if (theme.name === "light" || theme.name === "dark") {
+		palette = FOOTER_PALETTES[theme.name];
+	} else {
+		palette = FOOTER_PALETTES.universal;
 	}
-	if (theme.name === "light" || theme.name === "dark") {
-		return FOOTER_PALETTES[theme.name];
-	}
-	return FOOTER_PALETTES.universal;
+
+	cachedFooterPaletteKey = cacheKey;
+	cachedFooterPalette = palette;
+	return palette;
 }
 
 function footerFg(text: string, colorName: FooterColorName, bold = false): string {
@@ -167,6 +180,26 @@ const ACTIONABLE_EXTENSION_STATUS_PATTERN =
 const QUIET_EXTENSION_STATUS_PATTERN = /\b(ready|connected|disconnected)\b/i;
 const ANSI_ESCAPE_PATTERN = /\x1b\[[0-9;]*m/g;
 
+type FooterUsageStats = {
+	totalInput: number;
+	totalOutput: number;
+	totalCacheRead: number;
+	totalCacheWrite: number;
+	totalCost: number;
+	lastAssistantProvider: string | undefined;
+	lastAssistantModel: string | undefined;
+};
+
+const EMPTY_USAGE_STATS: FooterUsageStats = {
+	totalInput: 0,
+	totalOutput: 0,
+	totalCacheRead: 0,
+	totalCacheWrite: 0,
+	totalCost: 0,
+	lastAssistantProvider: undefined,
+	lastAssistantModel: undefined,
+};
+
 /**
  * Footer component that shows pwd, token stats, and context usage.
  * Computes token/context stats from session, gets git branch and extension statuses from provider.
@@ -175,6 +208,8 @@ export class FooterComponent implements Component {
 	private autoCompactEnabled = true;
 	private session: AgentSession;
 	private footerData: ReadonlyFooterDataProvider;
+	private usageRevision = -1;
+	private usageStats: FooterUsageStats = EMPTY_USAGE_STATS;
 
 	constructor(session: AgentSession, footerData: ReadonlyFooterDataProvider) {
 		this.session = session;
@@ -183,6 +218,8 @@ export class FooterComponent implements Component {
 
 	setSession(session: AgentSession): void {
 		this.session = session;
+		this.usageRevision = -1;
+		this.usageStats = EMPTY_USAGE_STATS;
 	}
 
 	setAutoCompactEnabled(enabled: boolean): void {
@@ -205,10 +242,12 @@ export class FooterComponent implements Component {
 		// Git watcher cleanup handled by provider
 	}
 
-	render(width: number): string[] {
-		const state = this.session.state;
+	private getUsageStats(): FooterUsageStats {
+		const entriesRevision = this.session.sessionManager.getEntriesRevision();
+		if (entriesRevision === this.usageRevision) {
+			return this.usageStats;
+		}
 
-		// Calculate cumulative usage from ALL session entries (not just post-compaction messages)
 		let totalInput = 0;
 		let totalOutput = 0;
 		let totalCacheRead = 0;
@@ -228,6 +267,23 @@ export class FooterComponent implements Component {
 				lastAssistantModel = entry.message.model;
 			}
 		}
+
+		this.usageRevision = entriesRevision;
+		this.usageStats = {
+			totalInput,
+			totalOutput,
+			totalCacheRead,
+			totalCacheWrite,
+			totalCost,
+			lastAssistantProvider,
+			lastAssistantModel,
+		};
+		return this.usageStats;
+	}
+
+	render(width: number): string[] {
+		const state = this.session.state;
+		const usageStats = this.getUsageStats();
 
 		// Calculate context usage from session (handles compaction correctly).
 		// After compaction, tokens are unknown until the next LLM response.
@@ -251,21 +307,27 @@ export class FooterComponent implements Component {
 		// Build stats line
 		const usageParts = [];
 		const tokenParts = [];
-		if (totalInput) tokenParts.push(footerValue(`↑${formatTokens(totalInput)}`));
-		if (totalOutput) tokenParts.push(footerValue(`↓${formatTokens(totalOutput)}`));
+		if (usageStats.totalInput) tokenParts.push(footerValue(`↑${formatTokens(usageStats.totalInput)}`));
+		if (usageStats.totalOutput) tokenParts.push(footerValue(`↓${formatTokens(usageStats.totalOutput)}`));
 		if (tokenParts.length > 0) usageParts.push(`${footerLabel("tok")} ${tokenParts.join(" ")}`);
 
 		// Show cost with "(sub)" indicator if using OAuth subscription
 		const usingSubscription = state.model ? this.session.modelRegistry.isUsingOAuth(state.model) : false;
-		if (totalCost || usingSubscription) {
+		if (usageStats.totalCost || usingSubscription) {
 			usageParts.push(
-				footerMetric("cost", formatCost(totalCost, usingSubscription), usingSubscription ? "status" : "warning"),
+				footerMetric(
+					"cost",
+					formatCost(usageStats.totalCost, usingSubscription),
+					usingSubscription ? "status" : "warning",
+				),
 			);
 		}
 
 		const cacheParts = [];
-		if (totalCacheRead) cacheParts.push(footerValue(`R${formatTokens(totalCacheRead)}`, "muted"));
-		if (totalCacheWrite) cacheParts.push(footerValue(`W${formatTokens(totalCacheWrite)}`, "muted"));
+		if (usageStats.totalCacheRead)
+			cacheParts.push(footerValue(`R${formatTokens(usageStats.totalCacheRead)}`, "muted"));
+		if (usageStats.totalCacheWrite)
+			cacheParts.push(footerValue(`W${formatTokens(usageStats.totalCacheWrite)}`, "muted"));
 		if (cacheParts.length > 0) usageParts.push(`${footerLabel("cache")} ${cacheParts.join(" ")}`);
 
 		const autoIndicator = this.autoCompactEnabled ? " auto" : "";
@@ -289,8 +351,8 @@ export class FooterComponent implements Component {
 		if (state.model) {
 			if (isRouterModel) {
 				const routedModel =
-					lastAssistantProvider && lastAssistantModel
-						? `${footerValue(lastAssistantProvider, "primary", true)}${footerFg("/", "muted")}${footerValue(lastAssistantModel, "model", true)}`
+					usageStats.lastAssistantProvider && usageStats.lastAssistantModel
+						? `${footerValue(usageStats.lastAssistantProvider, "primary", true)}${footerFg("/", "muted")}${footerValue(usageStats.lastAssistantModel, "model", true)}`
 						: undefined;
 				identityParts.push(
 					routedModel

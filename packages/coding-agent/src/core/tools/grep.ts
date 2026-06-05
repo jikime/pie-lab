@@ -1,3 +1,4 @@
+import { createReadStream } from "node:fs";
 import { readFile as fsReadFile, stat as fsStat } from "node:fs/promises";
 import { createInterface } from "node:readline";
 import type { AgentTool } from "@pie-lab/agent-core";
@@ -58,6 +59,43 @@ const defaultGrepOperations: GrepOperations = {
 	isDirectory: async (p) => (await fsStat(p)).isDirectory(),
 	readFile: (p) => fsReadFile(p, "utf-8"),
 };
+
+function readLocalLineLookup(
+	filePath: string,
+	requiredLines: ReadonlySet<number>,
+	maxLine: number,
+): Promise<Map<number, string> | null> {
+	return new Promise((resolve) => {
+		const lines = new Map<number, string>();
+		const stream = createReadStream(filePath, { encoding: "utf8" });
+		const rl = createInterface({ input: stream, crlfDelay: Infinity });
+		let settled = false;
+		let stoppedEarly = false;
+		let currentLine = 0;
+
+		const settle = (result: Map<number, string> | null) => {
+			if (settled) return;
+			settled = true;
+			resolve(result);
+		};
+
+		rl.on("line", (line) => {
+			currentLine++;
+			if (requiredLines.has(currentLine)) {
+				lines.set(currentLine, line);
+			}
+			if (currentLine >= maxLine) {
+				stoppedEarly = true;
+				rl.close();
+				stream.destroy();
+			}
+		});
+		rl.on("close", () => settle(lines));
+		stream.on("error", () => {
+			if (!stoppedEarly) settle(null);
+		});
+	});
+}
 
 export interface GrepToolOptions {
 	/** Custom operations for grep. Default: local filesystem plus ripgrep */
@@ -246,15 +284,27 @@ export function createGrepToolDefinition(
 							stderr += chunk.toString();
 						});
 
-						const formatBlock = async (filePath: string, lineNumber: number): Promise<string[]> => {
+						const formatBlock = async (
+							filePath: string,
+							lineNumber: number,
+							lineLookup?: ReadonlyMap<number, string> | null,
+						): Promise<string[]> => {
 							const relativePath = formatPath(filePath);
-							const lines = await getFileLines(filePath);
-							if (!lines.length) return [`${relativePath}:${lineNumber}: (unable to read file)`];
 							const block: string[] = [];
 							const start = contextValue > 0 ? Math.max(1, lineNumber - contextValue) : lineNumber;
-							const end = contextValue > 0 ? Math.min(lines.length, lineNumber + contextValue) : lineNumber;
+							const end = contextValue > 0 ? lineNumber + contextValue : lineNumber;
+							const fallbackLines = lineLookup ? undefined : await getFileLines(filePath);
+							if (!lineLookup && !fallbackLines?.length) {
+								return [`${relativePath}:${lineNumber}: (unable to read file)`];
+							}
 							for (let current = start; current <= end; current++) {
-								const lineText = lines[current - 1] ?? "";
+								let lineText: string | undefined;
+								if (lineLookup) {
+									lineText = lineLookup.get(current);
+								} else {
+									lineText = fallbackLines?.[current - 1];
+								}
+								if (lineText === undefined) continue;
 								const sanitized = lineText.replace(/\r/g, "");
 								const isMatchLine = current === lineNumber;
 								// Truncate long lines so grep output stays compact.
@@ -263,6 +313,7 @@ export function createGrepToolDefinition(
 								if (isMatchLine) block.push(`${relativePath}:${current}: ${truncatedText}`);
 								else block.push(`${relativePath}-${current}- ${truncatedText}`);
 							}
+							if (block.length === 0) return [`${relativePath}:${lineNumber}: (unable to read file)`];
 							return block;
 						};
 
@@ -312,6 +363,32 @@ export function createGrepToolDefinition(
 								return;
 							}
 
+							const contextLineLookups = new Map<string, Map<number, string> | null>();
+							if (contextValue > 0 && !customOps) {
+								const lineRequests = new Map<string, { requiredLines: Set<number>; maxLine: number }>();
+								for (const match of matches) {
+									const start = Math.max(1, match.lineNumber - contextValue);
+									const end = match.lineNumber + contextValue;
+									let request = lineRequests.get(match.filePath);
+									if (!request) {
+										request = { requiredLines: new Set<number>(), maxLine: end };
+										lineRequests.set(match.filePath, request);
+									}
+									request.maxLine = Math.max(request.maxLine, end);
+									for (let current = start; current <= end; current++) {
+										request.requiredLines.add(current);
+									}
+								}
+								await Promise.all(
+									Array.from(lineRequests.entries()).map(async ([filePath, request]) => {
+										contextLineLookups.set(
+											filePath,
+											await readLocalLineLookup(filePath, request.requiredLines, request.maxLine),
+										);
+									}),
+								);
+							}
+
 							// Format matches after streaming finishes so custom readFile() backends can be async.
 							for (const match of matches) {
 								if (contextValue === 0 && match.lineText !== undefined) {
@@ -324,7 +401,11 @@ export function createGrepToolDefinition(
 									if (wasTruncated) linesTruncated = true;
 									outputLines.push(`${relativePath}:${match.lineNumber}: ${truncatedText}`);
 								} else {
-									const block = await formatBlock(match.filePath, match.lineNumber);
+									const block = await formatBlock(
+										match.filePath,
+										match.lineNumber,
+										contextLineLookups.get(match.filePath),
+									);
 									outputLines.push(...block);
 								}
 							}

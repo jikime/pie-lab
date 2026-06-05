@@ -11,6 +11,11 @@ const TOOLS_DIR = getBinDir();
 const NETWORK_TIMEOUT_MS = 10_000;
 const DOWNLOAD_TIMEOUT_MS = 120_000;
 
+type ToolName = "fd" | "rg";
+
+const toolPathCache = new Map<ToolName, string>();
+const ensureToolRequests = new Map<ToolName, Promise<string | undefined>>();
+
 function isOfflineModeEnabled(): boolean {
 	return isTruthyEnv(ENV_OFFLINE, "PI_OFFLINE");
 }
@@ -80,13 +85,19 @@ function commandExists(cmd: string): boolean {
 }
 
 // Get the path to a tool (system-wide or in our tools dir)
-export function getToolPath(tool: "fd" | "rg"): string | null {
+export function getToolPath(tool: ToolName): string | null {
+	const cachedPath = toolPathCache.get(tool);
+	if (cachedPath) {
+		return cachedPath;
+	}
+
 	const config = TOOLS[tool];
 	if (!config) return null;
 
 	// Check our tools directory first
 	const localPath = join(TOOLS_DIR, config.binaryName + (platform() === "win32" ? ".exe" : ""));
 	if (existsSync(localPath)) {
+		toolPathCache.set(tool, localPath);
 		return localPath;
 	}
 
@@ -94,6 +105,7 @@ export function getToolPath(tool: "fd" | "rg"): string | null {
 	const systemBinaryNames = config.systemBinaryNames ?? [config.binaryName];
 	for (const systemBinaryName of systemBinaryNames) {
 		if (commandExists(systemBinaryName)) {
+			toolPathCache.set(tool, systemBinaryName);
 			return systemBinaryName;
 		}
 	}
@@ -236,7 +248,7 @@ function extractZipArchive(archivePath: string, extractDir: string, assetName: s
 }
 
 // Download and install a tool
-async function downloadTool(tool: "fd" | "rg"): Promise<string> {
+async function downloadTool(tool: ToolName): Promise<string> {
 	const config = TOOLS[tool];
 	if (!config) throw new Error(`Unknown tool: ${tool}`);
 
@@ -310,6 +322,7 @@ async function downloadTool(tool: "fd" | "rg"): Promise<string> {
 		rmSync(extractDir, { recursive: true, force: true });
 	}
 
+	toolPathCache.set(tool, binaryPath);
 	return binaryPath;
 }
 
@@ -321,12 +334,7 @@ const TERMUX_PACKAGES: Record<string, string> = {
 
 // Ensure a tool is available, downloading if necessary
 // Returns the path to the tool, or null if unavailable
-export async function ensureTool(tool: "fd" | "rg", silent: boolean = false): Promise<string | undefined> {
-	const existingPath = getToolPath(tool);
-	if (existingPath) {
-		return existingPath;
-	}
-
+async function resolveMissingTool(tool: ToolName, silent: boolean): Promise<string | undefined> {
 	const config = TOOLS[tool];
 	if (!config) return undefined;
 
@@ -364,4 +372,22 @@ export async function ensureTool(tool: "fd" | "rg", silent: boolean = false): Pr
 		}
 		return undefined;
 	}
+}
+
+export async function ensureTool(tool: ToolName, silent: boolean = false): Promise<string | undefined> {
+	const existingPath = getToolPath(tool);
+	if (existingPath) {
+		return existingPath;
+	}
+
+	const existingRequest = ensureToolRequests.get(tool);
+	if (existingRequest) {
+		return existingRequest;
+	}
+
+	const request = resolveMissingTool(tool, silent).finally(() => {
+		ensureToolRequests.delete(tool);
+	});
+	ensureToolRequests.set(tool, request);
+	return request;
 }

@@ -1,4 +1,5 @@
 import { basename, dirname, isAbsolute, relative, resolve as resolvePath, sep } from "node:path";
+import { createInterface } from "node:readline";
 import type { AgentTool } from "@pie-lab/agent-core";
 import type { Api, ImageContent, Model, TextContent } from "@pie-lab/ai";
 import {
@@ -8,7 +9,7 @@ import {
 	type SnapshotStore,
 } from "@pie-lab/hashline";
 import { Text } from "@pie-lab/tui";
-import { constants } from "fs";
+import { constants, createReadStream } from "fs";
 import { access as fsAccess, readFile as fsReadFile } from "fs/promises";
 import { type Static, Type } from "typebox";
 import { getReadmePath } from "../../config.ts";
@@ -18,7 +19,7 @@ import { formatDimensionNote, resizeImage } from "../../utils/image-resize.ts";
 import { detectSupportedImageMimeTypeFromFile } from "../../utils/mime.ts";
 import { formatPathRelativeToCwdOrAbsolute } from "../../utils/paths.ts";
 import type { ToolDefinition, ToolRenderResultOptions } from "../extensions/types.ts";
-import type { ConflictHistory } from "./conflict-history.ts";
+import type { ConflictEntry, ConflictHistory } from "./conflict-history.ts";
 import {
 	createDefaultInternalURLRouter,
 	type InternalURLRouter,
@@ -123,6 +124,226 @@ function splitDisplayLines(text: string): string[] {
 	if (text === "") return [""];
 	const withoutFinalNewline = text.endsWith("\n") ? text.slice(0, -1) : text;
 	return withoutFinalNewline.split("\n");
+}
+
+type TextReadSelection = {
+	absolutePath: string;
+	cwd: string;
+	inputPath: string;
+	selectedContent: string;
+	totalFileLines: number;
+	startLine: number;
+	startLineDisplay: number;
+	firstSelectedLine: string;
+	userLimitedLines?: number;
+	hashlineTag?: string;
+	conflictEntries?: ConflictEntry[];
+	truncation?: TruncationResult;
+};
+
+type StreamedTextRead = {
+	selectedContent: string;
+	totalFileLines: number;
+	firstSelectedLine: string;
+	userLimitedLines?: number;
+	truncation: TruncationResult;
+};
+
+function formatTextReadSelection(selection: TextReadSelection): {
+	content: [{ type: "text"; text: string }];
+	details: ReadToolDetails | undefined;
+} {
+	const truncation = selection.truncation ?? truncateHead(selection.selectedContent);
+	let fileOutputText: string;
+	let includeNumberedContent = true;
+	const notices: string[] = [];
+	let details: ReadToolDetails | undefined;
+	if (truncation.firstLineExceedsLimit) {
+		const firstLineSize = formatSize(Buffer.byteLength(selection.firstSelectedLine, "utf-8"));
+		fileOutputText = "";
+		includeNumberedContent = false;
+		notices.push(
+			`[Line ${selection.startLineDisplay} is ${firstLineSize}, exceeds ${formatSize(DEFAULT_MAX_BYTES)} limit. Use bash: sed -n '${selection.startLineDisplay}p' ${selection.inputPath} | head -c ${DEFAULT_MAX_BYTES}]`,
+		);
+		details = { truncation };
+	} else if (truncation.truncated) {
+		const endLineDisplay = selection.startLineDisplay + truncation.outputLines - 1;
+		const nextOffset = endLineDisplay + 1;
+		fileOutputText = truncation.content;
+		if (truncation.truncatedBy === "lines") {
+			notices.push(
+				`[Showing lines ${selection.startLineDisplay}-${endLineDisplay} of ${selection.totalFileLines}. Use offset=${nextOffset} to continue.]`,
+			);
+		} else {
+			notices.push(
+				`[Showing lines ${selection.startLineDisplay}-${endLineDisplay} of ${selection.totalFileLines} (${formatSize(DEFAULT_MAX_BYTES)} limit). Use offset=${nextOffset} to continue.]`,
+			);
+		}
+		details = { truncation };
+	} else if (
+		selection.userLimitedLines !== undefined &&
+		selection.startLine + selection.userLimitedLines < selection.totalFileLines
+	) {
+		const remaining = selection.totalFileLines - (selection.startLine + selection.userLimitedLines);
+		const nextOffset = selection.startLine + selection.userLimitedLines + 1;
+		fileOutputText = truncation.content;
+		notices.push(`[${remaining} more lines in file. Use offset=${nextOffset} to continue.]`);
+	} else {
+		fileOutputText = truncation.content;
+	}
+
+	let outputText: string;
+	if (selection.hashlineTag) {
+		const displayPath = formatPathRelativeToCwdOrAbsolute(selection.absolutePath, selection.cwd);
+		outputText = formatHashlineHeader(displayPath, selection.hashlineTag);
+		if (includeNumberedContent) {
+			outputText += `\n${formatNumberedLines(fileOutputText, selection.startLineDisplay)}`;
+		}
+		if (notices.length > 0) {
+			outputText += `\n\n${notices.join("\n")}`;
+		}
+	} else if (notices.length > 0) {
+		outputText = fileOutputText ? `${fileOutputText}\n\n${notices.join("\n")}` : notices.join("\n");
+	} else {
+		outputText = fileOutputText;
+	}
+	const conflictEntries = selection.conflictEntries ?? [];
+	if (conflictEntries.length > 0) {
+		const urls = conflictEntries.map((entry) => `conflict://${entry.id}`).join(", ");
+		outputText += `\n\n[Detected ${conflictEntries.length} merge conflict${conflictEntries.length === 1 ? "" : "s"}: ${urls}]`;
+	}
+
+	return {
+		content: [{ type: "text", text: outputText }],
+		details,
+	};
+}
+
+function createStreamedTruncation(
+	outputLines: string[],
+	selectedLineCount: number,
+	selectedBytes: number,
+	firstLineExceedsLimit: boolean,
+	byteLimitReached: boolean,
+): TruncationResult {
+	const selectedContentIsEmpty = selectedLineCount === 0 || (selectedLineCount === 1 && selectedBytes === 0);
+	const totalLines = selectedContentIsEmpty ? 0 : selectedLineCount;
+	const totalBytes = selectedContentIsEmpty ? 0 : selectedBytes;
+	const outputContent = selectedContentIsEmpty ? "" : outputLines.join("\n");
+	const outputBytes = Buffer.byteLength(outputContent, "utf-8");
+	const outputLineCount = selectedContentIsEmpty ? 0 : outputLines.length;
+	const truncated = firstLineExceedsLimit || totalLines > DEFAULT_MAX_LINES || totalBytes > DEFAULT_MAX_BYTES;
+	let truncatedBy: TruncationResult["truncatedBy"] = null;
+	if (truncated) {
+		truncatedBy = firstLineExceedsLimit || byteLimitReached ? "bytes" : "lines";
+	}
+
+	return {
+		content: outputContent,
+		truncated,
+		truncatedBy,
+		totalLines,
+		totalBytes,
+		outputLines: outputLineCount,
+		outputBytes,
+		lastLinePartial: false,
+		firstLineExceedsLimit,
+		maxLines: DEFAULT_MAX_LINES,
+		maxBytes: DEFAULT_MAX_BYTES,
+	};
+}
+
+async function readLocalTextSelection(
+	absolutePath: string,
+	startLine: number,
+	limit: number | undefined,
+	signal: AbortSignal | undefined,
+): Promise<StreamedTextRead> {
+	return new Promise((resolve, reject) => {
+		if (signal?.aborted) {
+			reject(new Error("Operation aborted"));
+			return;
+		}
+
+		let settled = false;
+		let totalFileLines = 0;
+		let selectedLineCount = 0;
+		let selectedBytes = 0;
+		let outputBytes = 0;
+		let firstSelectedLine = "";
+		let firstLineExceedsLimit = false;
+		let byteLimitReached = false;
+		const outputLines: string[] = [];
+		const stream = createReadStream(absolutePath, { encoding: "utf8" });
+		const rl = createInterface({ input: stream, crlfDelay: Infinity });
+
+		const cleanup = () => {
+			signal?.removeEventListener("abort", onAbort);
+		};
+		const settle = (fn: () => void) => {
+			if (settled) return;
+			settled = true;
+			cleanup();
+			fn();
+		};
+		const onAbort = () => {
+			stream.destroy();
+			settle(() => reject(new Error("Operation aborted")));
+		};
+
+		signal?.addEventListener("abort", onAbort, { once: true });
+
+		rl.on("line", (line) => {
+			const zeroBasedLine = totalFileLines;
+			totalFileLines++;
+			if (zeroBasedLine < startLine || (limit !== undefined && selectedLineCount >= limit)) {
+				return;
+			}
+
+			const lineBytes = Buffer.byteLength(line, "utf-8");
+			if (selectedLineCount === 0) {
+				firstSelectedLine = line;
+				firstLineExceedsLimit = lineBytes > DEFAULT_MAX_BYTES;
+			}
+			selectedLineCount++;
+			selectedBytes += lineBytes + (selectedLineCount > 1 ? 1 : 0);
+
+			if (!firstLineExceedsLimit && !byteLimitReached && outputLines.length < DEFAULT_MAX_LINES) {
+				const outputLineBytes = lineBytes + (outputLines.length > 0 ? 1 : 0);
+				if (outputBytes + outputLineBytes <= DEFAULT_MAX_BYTES) {
+					outputLines.push(line);
+					outputBytes += outputLineBytes;
+				} else {
+					byteLimitReached = true;
+				}
+			}
+		});
+		rl.on("close", () => {
+			if (totalFileLines === 0) {
+				totalFileLines = 1;
+			}
+			const userLimitedLines =
+				limit !== undefined ? Math.min(limit, Math.max(0, totalFileLines - startLine)) : undefined;
+			settle(() =>
+				resolve({
+					selectedContent: outputLines.join("\n"),
+					totalFileLines,
+					firstSelectedLine,
+					userLimitedLines,
+					truncation: createStreamedTruncation(
+						outputLines,
+						selectedLineCount,
+						selectedBytes,
+						firstLineExceedsLimit,
+						byteLimitReached,
+					),
+				}),
+			);
+		});
+		stream.on("error", (error) => {
+			settle(() => reject(error));
+		});
+	});
 }
 
 function getPiDocsClassification(absolutePath: string): CompactReadClassification | undefined {
@@ -320,6 +541,33 @@ export function createReadToolDefinition(
 				};
 			}
 
+			const startLine = offset ? Math.max(0, offset - 1) : 0;
+			const startLineDisplay = startLine + 1;
+			const canStreamText =
+				(offset !== undefined || (limit !== undefined && limit > 0)) &&
+				ops === defaultReadOperations &&
+				!useHashline &&
+				!conflictHistory;
+			if (canStreamText) {
+				const streamedRead = await readLocalTextSelection(absolutePath, startLine, limit, signal);
+				throwIfAborted();
+				if (startLine >= streamedRead.totalFileLines) {
+					throw new Error(`Offset ${offset} is beyond end of file (${streamedRead.totalFileLines} lines total)`);
+				}
+				return formatTextReadSelection({
+					absolutePath,
+					cwd,
+					inputPath: path,
+					selectedContent: streamedRead.selectedContent,
+					totalFileLines: streamedRead.totalFileLines,
+					startLine,
+					startLineDisplay,
+					firstSelectedLine: streamedRead.firstSelectedLine,
+					userLimitedLines: streamedRead.userLimitedLines,
+					truncation: streamedRead.truncation,
+				});
+			}
+
 			const buffer = await ops.readFile(absolutePath);
 			throwIfAborted();
 			const textContent = buffer.toString("utf-8");
@@ -329,82 +577,33 @@ export function createReadToolDefinition(
 			const allLines = splitDisplayLines(normalizedTextContent);
 			const conflictEntries = conflictHistory?.register(absolutePath, normalizedTextContent) ?? [];
 			const totalFileLines = allLines.length;
-			const startLine = offset ? Math.max(0, offset - 1) : 0;
-			const startLineDisplay = startLine + 1;
-			if (startLine >= allLines.length) {
-				throw new Error(`Offset ${offset} is beyond end of file (${allLines.length} lines total)`);
+			if (startLine >= totalFileLines) {
+				throw new Error(`Offset ${offset} is beyond end of file (${totalFileLines} lines total)`);
 			}
 
 			let selectedContent: string;
 			let userLimitedLines: number | undefined;
 			if (limit !== undefined) {
-				const endLine = Math.min(startLine + limit, allLines.length);
+				const endLine = Math.min(startLine + limit, totalFileLines);
 				selectedContent = allLines.slice(startLine, endLine).join("\n");
 				userLimitedLines = endLine - startLine;
 			} else {
 				selectedContent = allLines.slice(startLine).join("\n");
 			}
 
-			const truncation = truncateHead(selectedContent);
-			let fileOutputText: string;
-			let includeNumberedContent = true;
-			const notices: string[] = [];
-			let details: ReadToolDetails | undefined;
-			if (truncation.firstLineExceedsLimit) {
-				const firstLineSize = formatSize(Buffer.byteLength(allLines[startLine], "utf-8"));
-				fileOutputText = "";
-				includeNumberedContent = false;
-				notices.push(
-					`[Line ${startLineDisplay} is ${firstLineSize}, exceeds ${formatSize(DEFAULT_MAX_BYTES)} limit. Use bash: sed -n '${startLineDisplay}p' ${path} | head -c ${DEFAULT_MAX_BYTES}]`,
-				);
-				details = { truncation };
-			} else if (truncation.truncated) {
-				const endLineDisplay = startLineDisplay + truncation.outputLines - 1;
-				const nextOffset = endLineDisplay + 1;
-				fileOutputText = truncation.content;
-				if (truncation.truncatedBy === "lines") {
-					notices.push(
-						`[Showing lines ${startLineDisplay}-${endLineDisplay} of ${totalFileLines}. Use offset=${nextOffset} to continue.]`,
-					);
-				} else {
-					notices.push(
-						`[Showing lines ${startLineDisplay}-${endLineDisplay} of ${totalFileLines} (${formatSize(DEFAULT_MAX_BYTES)} limit). Use offset=${nextOffset} to continue.]`,
-					);
-				}
-				details = { truncation };
-			} else if (userLimitedLines !== undefined && startLine + userLimitedLines < allLines.length) {
-				const remaining = allLines.length - (startLine + userLimitedLines);
-				const nextOffset = startLine + userLimitedLines + 1;
-				fileOutputText = truncation.content;
-				notices.push(`[${remaining} more lines in file. Use offset=${nextOffset} to continue.]`);
-			} else {
-				fileOutputText = truncation.content;
-			}
-
-			let outputText: string;
-			if (hashlineTag) {
-				const displayPath = formatPathRelativeToCwdOrAbsolute(absolutePath, cwd);
-				outputText = formatHashlineHeader(displayPath, hashlineTag);
-				if (includeNumberedContent) {
-					outputText += `\n${formatNumberedLines(fileOutputText, startLineDisplay)}`;
-				}
-				if (notices.length > 0) {
-					outputText += `\n\n${notices.join("\n")}`;
-				}
-			} else if (notices.length > 0) {
-				outputText = fileOutputText ? `${fileOutputText}\n\n${notices.join("\n")}` : notices.join("\n");
-			} else {
-				outputText = fileOutputText;
-			}
-			if (conflictEntries.length > 0) {
-				const urls = conflictEntries.map((entry) => `conflict://${entry.id}`).join(", ");
-				outputText += `\n\n[Detected ${conflictEntries.length} merge conflict${conflictEntries.length === 1 ? "" : "s"}: ${urls}]`;
-			}
-
-			return {
-				content: [{ type: "text", text: outputText }],
-				details,
-			};
+			return formatTextReadSelection({
+				absolutePath,
+				cwd,
+				inputPath: path,
+				selectedContent,
+				totalFileLines,
+				startLine,
+				startLineDisplay,
+				firstSelectedLine: allLines[startLine] ?? "",
+				userLimitedLines,
+				hashlineTag,
+				conflictEntries,
+			});
 		},
 		renderCall(args, theme, context) {
 			const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);

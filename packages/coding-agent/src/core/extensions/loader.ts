@@ -20,9 +20,9 @@ import * as _bundledTypebox from "typebox";
 import * as _bundledTypeboxCompile from "typebox/compile";
 import * as _bundledTypeboxValue from "typebox/value";
 import { CONFIG_DIR_NAME, getAgentDir, isBunBinary } from "../../config.ts";
-// NOTE: This import works because loader.ts exports are NOT re-exported from index.ts,
-// avoiding a circular dependency. Extensions can import from @pie-lab/coding-agent.
-import * as _bundledPiCodingAgent from "../../index.ts";
+// Keep the bundled extension import surface narrow. The package root exports CLI
+// entrypoints and run modes that are expensive to load during startup.
+import * as _bundledPiCodingAgent from "../../extension-api.ts";
 import { resolvePath } from "../../utils/paths.ts";
 import { createEventBus, type EventBus } from "../event-bus.ts";
 import type { ExecOptions } from "../exec.ts";

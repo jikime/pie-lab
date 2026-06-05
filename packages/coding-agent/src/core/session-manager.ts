@@ -720,6 +720,8 @@ export class SessionManager {
 	private labelsById: Map<string, string> = new Map();
 	private labelTimestampsById: Map<string, string> = new Map();
 	private leafId: string | null = null;
+	private entriesRevision = 0;
+	private sessionName: string | undefined;
 
 	private constructor(cwd: string, sessionDir: string, sessionFile: string | undefined, persist: boolean) {
 		this.cwd = resolvePath(cwd);
@@ -761,6 +763,7 @@ export class SessionManager {
 			}
 
 			this._buildIndex();
+			this.entriesRevision++;
 			this.flushed = true;
 		} else {
 			const explicitPath = this.sessionFile;
@@ -783,7 +786,10 @@ export class SessionManager {
 		this.fileEntries = [header];
 		this.byId.clear();
 		this.labelsById.clear();
+		this.labelTimestampsById.clear();
 		this.leafId = null;
+		this.sessionName = undefined;
+		this.entriesRevision++;
 		this.flushed = false;
 
 		if (this.persist) {
@@ -798,10 +804,14 @@ export class SessionManager {
 		this.labelsById.clear();
 		this.labelTimestampsById.clear();
 		this.leafId = null;
+		this.sessionName = undefined;
 		for (const entry of this.fileEntries) {
 			if (entry.type === "session") continue;
 			this.byId.set(entry.id, entry);
 			this.leafId = entry.id;
+			if (entry.type === "session_info") {
+				this.sessionName = entry.name?.trim() || undefined;
+			}
 			if (entry.type === "label") {
 				if (entry.label) {
 					this.labelsById.set(entry.targetId, entry.label);
@@ -864,6 +874,10 @@ export class SessionManager {
 		this.fileEntries.push(entry);
 		this.byId.set(entry.id, entry);
 		this.leafId = entry.id;
+		if (entry.type === "session_info") {
+			this.sessionName = entry.name?.trim() || undefined;
+		}
+		this.entriesRevision++;
 		this._persist(entry);
 	}
 
@@ -964,16 +978,7 @@ export class SessionManager {
 
 	/** Get the current session name from the latest session_info entry, if any. */
 	getSessionName(): string | undefined {
-		// Walk entries in reverse to find the latest session_info entry.
-		// Empty names explicitly clear the session title.
-		const entries = this.getEntries();
-		for (let i = entries.length - 1; i >= 0; i--) {
-			const entry = entries[i];
-			if (entry.type === "session_info") {
-				return entry.name?.trim() || undefined;
-			}
-		}
-		return undefined;
+		return this.sessionName;
 	}
 
 	/**
@@ -1107,6 +1112,14 @@ export class SessionManager {
 	 */
 	getEntries(): SessionEntry[] {
 		return this.fileEntries.filter((e): e is SessionEntry => e.type !== "session");
+	}
+
+	/**
+	 * Monotonic revision for consumers that cache derived values from entries.
+	 * It changes only when the underlying persisted entry list changes.
+	 */
+	getEntriesRevision(): number {
+		return this.entriesRevision;
 	}
 
 	/**
@@ -1265,6 +1278,7 @@ export class SessionManager {
 			this.sessionId = newSessionId;
 			this.sessionFile = newSessionFile;
 			this._buildIndex();
+			this.entriesRevision++;
 
 			// Only write the file now if it contains an assistant message.
 			// Otherwise defer to _persist(), which creates the file on the
@@ -1300,6 +1314,7 @@ export class SessionManager {
 		this.fileEntries = [header, ...pathWithoutLabels, ...labelEntries];
 		this.sessionId = newSessionId;
 		this._buildIndex();
+		this.entriesRevision++;
 		return undefined;
 	}
 

@@ -22,6 +22,8 @@ function createSession(options: {
 	reasoning?: boolean;
 	thinkingLevel?: string;
 	usage?: AssistantUsage;
+	getEntriesRevision?: () => number;
+	onGetEntries?: () => void;
 }): AgentSession {
 	const usage = options.usage;
 	const entries =
@@ -50,7 +52,11 @@ function createSession(options: {
 			thinkingLevel: options.thinkingLevel ?? "off",
 		},
 		sessionManager: {
-			getEntries: () => entries,
+			getEntries: () => {
+				options.onGetEntries?.();
+				return entries;
+			},
+			getEntriesRevision: options.getEntriesRevision ?? (() => 0),
 			getSessionName: () => options.sessionName,
 			getCwd: () => "/tmp/project",
 		},
@@ -163,6 +169,34 @@ describe("FooterComponent width handling", () => {
 		expect(lines[1]).toContain("ctx 12.3%/200k auto");
 		expect(lines[1]).toContain("model claude-code-adk/claude-sonnet-4-6");
 		expect(lines[1]).toContain("think high");
+	});
+
+	it("reuses cumulative usage while session entries are unchanged", () => {
+		let entriesRevision = 1;
+		let getEntriesCalls = 0;
+		const session = createSession({
+			sessionName: "work",
+			usage: {
+				input: 12_345,
+				output: 6_789,
+				cacheRead: 1234,
+				cacheWrite: 567,
+				cost: { total: 0.123 },
+			},
+			getEntriesRevision: () => entriesRevision,
+			onGetEntries: () => {
+				getEntriesCalls++;
+			},
+		});
+		const footer = new FooterComponent(session, createFooterData(1));
+
+		footer.render(150);
+		footer.render(150);
+		expect(getEntriesCalls).toBe(1);
+
+		entriesRevision++;
+		footer.render(150);
+		expect(getEntriesCalls).toBe(2);
 	});
 
 	it("keeps the selected model visible before lower-priority usage fields", () => {

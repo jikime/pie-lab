@@ -169,6 +169,22 @@ describe("Coding Agent Tools", () => {
 			expect(output).not.toContain("Use offset=");
 		});
 
+		it("should preserve truncation notices for offset-only reads", async () => {
+			const testFile = join(testDir, "offset-truncated-test.txt");
+			const lines = Array.from({ length: 3000 }, (_, i) => `Line ${i + 1}`);
+			writeFileSync(testFile, lines.join("\n"));
+
+			const result = await readTool.execute("test-call-offset-truncated", { path: testFile, offset: 501 });
+			const output = getTextOutput(result);
+
+			expect(output).not.toContain("Line 500");
+			expect(output).toContain("Line 501");
+			expect(output).toContain("Line 2500");
+			expect(output).not.toContain("Line 2501");
+			expect(output).toContain("[Showing lines 501-2500 of 3000. Use offset=2501 to continue.]");
+			expect(result.details?.truncation?.truncatedBy).toBe("lines");
+		});
+
 		it("should handle limit parameter", async () => {
 			const testFile = join(testDir, "limit-test.txt");
 			const lines = Array.from({ length: 100 }, (_, i) => `Line ${i + 1}`);

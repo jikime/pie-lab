@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+
+- Improved coding-agent startup and interactive performance by narrowing the bundled extension API surface, caching footer/session-derived render data, caching built-in search tool resolution, and streaming large `read`/`grep` file operations more efficiently.
+
 ## [0.75.5] - 2026-05-23
 
 ### New Features
