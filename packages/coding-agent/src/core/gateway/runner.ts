@@ -10,6 +10,7 @@ import {
 	createAgentSessionServices,
 	getDefaultAgentUsageFilePath,
 } from "../agent-session-services.ts";
+import { runCuratorAutorunIfDue } from "../learning/curator-autorun.ts";
 import { CronJobStore, tickCronScheduler } from "../scheduler/index.ts";
 import { SessionManager } from "../session-manager.ts";
 import { SettingsManager } from "../settings-manager.ts";
@@ -689,9 +690,35 @@ function startSchedulerLoop(options: { cwd: string; agentDir: string; logger: Ga
 			inFlight = false;
 		}
 	};
+	let curatorInFlight = false;
+	const runCurator = async () => {
+		if (curatorInFlight) return;
+		curatorInFlight = true;
+		try {
+			const result = await runCuratorAutorunIfDue({
+				cwd: options.cwd,
+				agentDir: options.agentDir,
+				log: (message) => options.logger.info(`[curator] ${message}`),
+			});
+			if (result.ran) {
+				options.logger.info(
+					`[curator] auto-run done: ${result.archived ?? 0} archived, ${result.consolidated ?? 0} consolidated, ${result.pruned ?? 0} pruned`,
+				);
+			}
+		} catch (error) {
+			options.logger.error(`[curator] ${error instanceof Error ? error.message : String(error)}`);
+		} finally {
+			curatorInFlight = false;
+		}
+	};
 	void runTick();
+	void runCurator();
 	const timer = setInterval(() => void runTick(), settings.tickIntervalSeconds * 1000);
-	return () => clearInterval(timer);
+	const curatorTimer = setInterval(() => void runCurator(), 6 * 60 * 60 * 1000);
+	return () => {
+		clearInterval(timer);
+		clearInterval(curatorTimer);
+	};
 }
 
 export async function runGateway(options: RunGatewayOptions = {}): Promise<void> {

@@ -1,11 +1,15 @@
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { UsageStore } from "@pie-lab/storage";
 import { spawnProcess, waitForChildProcess } from "../../utils/child-process.ts";
 import { createAgentSessionFromServices, createAgentSessionServices } from "../agent-session-services.ts";
+import { SkillManager } from "../learning/skill-manager.ts";
 import { SessionManager } from "../session-manager.ts";
 import type { SettingsManager } from "../settings-manager.ts";
+import { loadSkills } from "../skills.ts";
 import { deliverCronResult } from "./delivery.ts";
 import { type CronJob, type CronJobStatus, CronJobStore } from "./job-store.ts";
+import { assertSafeCronContent } from "./prompt-scan.ts";
 import type { SchedulerSettings } from "./scheduler-settings.ts";
 
 export interface CronRunResult {
@@ -165,12 +169,25 @@ async function runScript(
 	}
 }
 
-async function buildPrompt(job: CronJob, store: CronJobStore, scriptOutput?: string): Promise<string> {
+/**
+ * Assemble the prompt for an agent-backed scheduled run.
+ *
+ * Content gathered at fire time (other jobs' output, script output, skill
+ * files) is injection-scanned — it can carry text the user never reviewed,
+ * such as fetched web content. A scan match fails the run.
+ */
+export async function buildCronJobPrompt(
+	job: CronJob,
+	store: CronJobStore,
+	env: { agentDir: string; cwd: string },
+	scriptOutput?: string,
+): Promise<string> {
 	const blocks: string[] = [];
 	if (job.contextFrom?.length) {
 		for (const sourceJobId of job.contextFrom) {
 			const output = await store.latestOutput(sourceJobId);
 			if (output?.trim()) {
+				assertSafeCronContent(output, `output of job "${sourceJobId}"`);
 				blocks.push(
 					`The following is the latest output from scheduled job "${sourceJobId}":\n\n${truncate(output.trim(), 20_000)}`,
 				);
@@ -178,9 +195,33 @@ async function buildPrompt(job: CronJob, store: CronJobStore, scriptOutput?: str
 		}
 	}
 	if (scriptOutput?.trim()) {
+		assertSafeCronContent(scriptOutput, "pre-run script output");
 		blocks.push(
 			`The pre-run script produced this output:\n\n\`\`\`text\n${truncate(scriptOutput.trim(), 20_000)}\n\`\`\``,
 		);
+	}
+	if (job.skills?.length) {
+		const cwd = job.workdir ?? env.cwd;
+		const { skills } = loadSkills({ cwd, agentDir: env.agentDir, skillPaths: [], includeDefaults: true });
+		const byName = new Map(skills.map((skill) => [skill.name, skill]));
+		const skillManager = new SkillManager({ agentDir: env.agentDir, cwd });
+		for (const name of job.skills) {
+			const skill = byName.get(name);
+			if (!skill) {
+				blocks.push(`Note: this job requested the skill "${name}", but it is not installed. Proceed without it.`);
+				continue;
+			}
+			const content = await readFile(skill.filePath, "utf-8");
+			assertSafeCronContent(content, `skill "${name}"`);
+			try {
+				skillManager.recordUseByPath(skill.filePath);
+			} catch {
+				// Usage tracking is best-effort.
+			}
+			blocks.push(
+				`[IMPORTANT: This scheduled job invokes the skill "${name}". Follow its instructions.]\n\n${truncate(content.trim(), 20_000)}`,
+			);
+		}
 	}
 	blocks.push(`Scheduled job prompt:\n\n${job.prompt}`);
 	blocks.push("Return only the final scheduled job output. Do not describe the scheduler internals.");
@@ -377,7 +418,13 @@ export async function runCronJob(job: CronJob, options: SchedulerRunnerOptions):
 			session.agent.abort();
 		}, agentTimeoutMs);
 		try {
-			await session.prompt(await buildPrompt(job, store, scriptCombined), {
+			const prompt = await buildCronJobPrompt(
+				job,
+				store,
+				{ agentDir: options.agentDir, cwd: options.cwd },
+				scriptCombined,
+			);
+			await session.prompt(prompt, {
 				expandPromptTemplates: false,
 				source: "extension",
 			});

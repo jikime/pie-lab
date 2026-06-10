@@ -537,6 +537,22 @@ export class SkillCurator {
 	}
 
 	/**
+	 * Whether an automatic consolidation pass should run now. True when the
+	 * configured interval has elapsed since the last pass, or — if a pass has
+	 * never run — when there are enough active skills to be worth one.
+	 */
+	isConsolidationDue(): boolean {
+		const state = this.loadState();
+		if (!state.lastConsolidatedAt) {
+			// Never consolidated — but only auto-run if there are enough skills
+			const active = this.status().filter((s) => s.state !== "archived");
+			return active.length >= 5;
+		}
+		const daysSinceLast = daysSince(state.lastConsolidatedAt) ?? 0;
+		return daysSinceLast >= this.policy.consolidateIntervalDays;
+	}
+
+	/**
 	 * Run consolidation if the interval since last run has passed.
 	 * Returns null if consolidation was not needed.
 	 */
@@ -544,17 +560,7 @@ export class SkillCurator {
 		streamFn: StreamFn,
 		options: CuratorConsolidateOptions = {},
 	): Promise<CuratorConsolidateResult | null> {
-		const state = this.loadState();
-		if (!state.lastConsolidatedAt) {
-			// Never consolidated — but only auto-run if there are enough skills
-			const active = this.status().filter((s) => s.state !== "archived");
-			if (active.length < 5) return null;
-		} else {
-			const daysSinceLast = daysSince(state.lastConsolidatedAt) ?? 0;
-			if (daysSinceLast < this.policy.consolidateIntervalDays) {
-				return null;
-			}
-		}
+		if (!this.isConsolidationDue()) return null;
 		return this.consolidate(streamFn, options);
 	}
 

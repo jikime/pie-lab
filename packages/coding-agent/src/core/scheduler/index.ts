@@ -1,6 +1,13 @@
-export { type CronDeliveryResult, deliverCronResult } from "./delivery.ts";
+export { type CronDeliveryResult, deliverCronResult, extractMediaPaths } from "./delivery.ts";
 export { type CreateCronJobInput, type CronJob, type CronJobStatus, CronJobStore } from "./job-store.ts";
-export { type CronRunResult, runCronJob, type SchedulerRunnerOptions, tickCronScheduler } from "./runner.ts";
+export { assertSafeCronContent, assertSafeCronPrompt } from "./prompt-scan.ts";
+export {
+	buildCronJobPrompt,
+	type CronRunResult,
+	runCronJob,
+	type SchedulerRunnerOptions,
+	tickCronScheduler,
+} from "./runner.ts";
 export {
 	computeGraceWindowSeconds,
 	computeNextRun,

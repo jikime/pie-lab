@@ -91,10 +91,12 @@ export async function handleCronCommand(args: string[]): Promise<boolean> {
 					schedule,
 					prompt,
 					repeat: getBooleanFlag(parsed, "repeat"),
+					repeatTimes: getNumberFlag(parsed, "repeat-times"),
 					deliver: getStringFlag(parsed, "deliver"),
 					script: getStringFlag(parsed, "script"),
 					noAgent: getBooleanFlag(parsed, "no-agent"),
 					contextFrom: getCsvFlag(parsed, "context-from"),
+					skills: getCsvFlag(parsed, "skills"),
 					tools: getCsvFlag(parsed, "tools"),
 					workdir: getStringFlag(parsed, "workdir"),
 					model: getModelFlag(parsed),
@@ -115,10 +117,12 @@ export async function handleCronCommand(args: string[]): Promise<boolean> {
 					schedule: getStringFlag(parsed, "schedule"),
 					prompt: getStringFlag(parsed, "prompt"),
 					repeat: getOptionalBooleanFlag(parsed, "repeat"),
+					repeatTimes: getNullableNumberFlag(parsed, "repeat-times"),
 					deliver: getStringFlag(parsed, "deliver"),
 					script: getNullableStringFlag(parsed, "script"),
 					noAgent: getOptionalBooleanFlag(parsed, "no-agent"),
 					contextFrom: getNullableCsvFlag(parsed, "context-from"),
+					skills: getNullableCsvFlag(parsed, "skills"),
 					tools: getNullableCsvFlag(parsed, "tools"),
 					workdir: getNullableStringFlag(parsed, "workdir"),
 					model: getModelFlag(parsed),
@@ -252,8 +256,8 @@ ${chalk.bold("Usage:")}
   ${APP_NAME} cron status [--json]
   ${APP_NAME} cron list [--json]
   ${APP_NAME} cron show <job>
-  ${APP_NAME} cron create <name> --schedule <expr> --prompt <text> [--repeat] [--deliver origin] [--tools read,bash]
-  ${APP_NAME} cron update <job> [--name <name>] [--schedule <expr>] [--prompt <text>] [--deliver origin]
+  ${APP_NAME} cron create <name> --schedule <expr> --prompt <text> [--repeat] [--repeat-times N] [--deliver origin] [--skills a,b] [--tools read,bash]
+  ${APP_NAME} cron update <job> [--name <name>] [--schedule <expr>] [--prompt <text>] [--deliver origin] [--skills a,b]
   ${APP_NAME} cron pause <job>
   ${APP_NAME} cron resume <job>
   ${APP_NAME} cron remove <job>
@@ -311,6 +315,21 @@ function getNullableStringFlag(parsed: ParsedCronArgs, name: string): string | n
 	const value = parsed.flags.get(name);
 	if (value === true || value === "") return null;
 	return String(value);
+}
+
+function getNumberFlag(parsed: ParsedCronArgs, name: string): number | undefined {
+	const value = getStringFlag(parsed, name);
+	if (value === undefined) return undefined;
+	const parsedValue = Number(value);
+	if (!Number.isFinite(parsedValue)) throw new Error(`--${name} must be a number.`);
+	return parsedValue;
+}
+
+function getNullableNumberFlag(parsed: ParsedCronArgs, name: string): number | null | undefined {
+	if (!parsed.flags.has(name)) return undefined;
+	const value = parsed.flags.get(name);
+	if (value === true || value === "") return null;
+	return getNumberFlag(parsed, name);
 }
 
 function getBooleanFlag(parsed: ParsedCronArgs, name: string): boolean {

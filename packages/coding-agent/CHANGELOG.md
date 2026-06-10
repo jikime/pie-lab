@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Added
+
+- Scheduled jobs can load skills at fire time via a `skills` list (cronjob tool, `pie cron --skills`); skill content is injected into the job prompt and usage is recorded.
+- Scheduled jobs support `repeatTimes` to stop a repeating job after N runs; run counts are tracked in `completedRuns` and the job completes and disables itself at the limit.
+- Scheduled job results can attach files by emitting `MEDIA: /path/to/file` lines; attachments are sent through gateway platforms that support them (Telegram, Discord) and appended as text paths otherwise.
+- The gateway scheduler loop now auto-runs the skill curator (stale-skill archival plus LLM consolidation) when the configured consolidation interval elapses, gated by the existing learning curator settings.
+
+### Changed
+
+- Scheduled job prompts assembled at fire time (skill files, pre-run script output, context from other jobs) are now injection-scanned; a match fails the run instead of reaching the model.
+
 ## [0.2.0] - 2026-06-05
 
 ### Changed

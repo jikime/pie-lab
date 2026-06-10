@@ -136,6 +136,8 @@ export async function deliverGatewayMessage(options: {
 	deliver?: string;
 	origin?: string;
 	content: string;
+	/** Local files to attach. Platforms without attachment support get the paths appended as text. */
+	attachmentPaths?: string[];
 	registry?: GatewayPlatformRegistry;
 }): Promise<GatewayDeliveryResult> {
 	const parts = parseGatewayDeliverTargets(options.deliver);
@@ -154,7 +156,19 @@ export async function deliverGatewayMessage(options: {
 			const platform = registry.require(destination.service);
 			if (!platform.sendMessage)
 				throw new Error(`gateway platform cannot send standalone messages: ${destination.service}`);
-			await platform.sendMessage(account, destination.channelId, options.content);
+			const supportsAttachments = platform.capabilities?.attachments === true;
+			const attachmentPaths =
+				options.attachmentPaths?.length && supportsAttachments ? options.attachmentPaths : undefined;
+			const content =
+				options.attachmentPaths?.length && !supportsAttachments
+					? [options.content, ...options.attachmentPaths.map((path) => `[attachment: ${path}]`)].join("\n")
+					: options.content;
+			await platform.sendMessage(
+				account,
+				destination.channelId,
+				content,
+				attachmentPaths ? { attachmentPaths } : undefined,
+			);
 			delivered++;
 		} catch (error) {
 			errors.push(`${destination.label}: ${error instanceof Error ? error.message : String(error)}`);

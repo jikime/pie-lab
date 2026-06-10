@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -523,5 +523,43 @@ describe("background learning review", () => {
 			status: "skipped",
 			reason: "similar memory already exists",
 		});
+	});
+});
+
+describe("skill curator autorun due-check", () => {
+	function makeCurator(agentDir: string, cwd: string): SkillCurator {
+		return new SkillCurator({
+			skillManager: new SkillManager({ agentDir, cwd }),
+			policy: { consolidateIntervalDays: 7 },
+		});
+	}
+
+	function writeCuratorState(agentDir: string, lastConsolidatedAt: string | null): void {
+		const skillsDir = join(agentDir, "skills");
+		mkdirSync(skillsDir, { recursive: true });
+		writeFileSync(
+			join(skillsDir, ".curator_state"),
+			JSON.stringify({ lastConsolidatedAt, consolidationCount: 1, lastConsolidationSummary: null }),
+			"utf-8",
+		);
+	}
+
+	it("is not due when never consolidated and too few skills exist", () => {
+		const curator = makeCurator(tempDir("curator-due-empty"), tempDir("curator-due-empty-cwd"));
+		expect(curator.isConsolidationDue()).toBe(false);
+	});
+
+	it("is due once the consolidation interval has elapsed", () => {
+		const agentDir = tempDir("curator-due-elapsed");
+		writeCuratorState(agentDir, new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString());
+		const curator = makeCurator(agentDir, tempDir("curator-due-elapsed-cwd"));
+		expect(curator.isConsolidationDue()).toBe(true);
+	});
+
+	it("is not due within the consolidation interval", () => {
+		const agentDir = tempDir("curator-due-recent");
+		writeCuratorState(agentDir, new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString());
+		const curator = makeCurator(agentDir, tempDir("curator-due-recent-cwd"));
+		expect(curator.isConsolidationDue()).toBe(false);
 	});
 });

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { chmod, mkdir, readdir, readFile, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
 import { isAbsolute, join, normalize, relative, resolve, sep } from "node:path";
 import lockfile from "proper-lockfile";
+import { assertSafeCronPrompt } from "./prompt-scan.ts";
 import {
 	computeGraceWindowSeconds,
 	computeNextRun,
@@ -25,6 +26,10 @@ export interface CronJob {
 	scheduleDisplay: string;
 	kind: ScheduleKind;
 	repeat: boolean;
+	/** Stop after this many runs (repeating jobs only). */
+	repeatTimes?: number;
+	/** How many times this job has run so far. */
+	completedRuns?: number;
 	intervalMs?: number;
 	cronExpression?: string;
 	enabled: boolean;
@@ -42,6 +47,8 @@ export interface CronJob {
 	script?: string;
 	noAgent?: boolean;
 	contextFrom?: string[];
+	/** Skills loaded into the job prompt at fire time. */
+	skills?: string[];
 	tools?: string[];
 	workdir?: string;
 	model?: CronJobModelRef;
@@ -53,11 +60,13 @@ export interface CreateCronJobInput {
 	prompt: string;
 	schedule: string;
 	repeat?: boolean;
+	repeatTimes?: number;
 	deliver?: string;
 	origin?: string;
 	script?: string;
 	noAgent?: boolean;
 	contextFrom?: string[];
+	skills?: string[];
 	tools?: string[];
 	workdir?: string;
 	model?: CronJobModelRef;
@@ -69,11 +78,13 @@ export interface UpdateCronJobInput {
 	prompt?: string;
 	schedule?: string;
 	repeat?: boolean;
+	repeatTimes?: number | null;
 	deliver?: string;
 	origin?: string;
 	script?: string | null;
 	noAgent?: boolean;
 	contextFrom?: string[] | null;
+	skills?: string[] | null;
 	tools?: string[] | null;
 	workdir?: string | null;
 	model?: CronJobModelRef | null;
@@ -160,20 +171,12 @@ function assertRelativeSafePath(path: string, label: string): string {
 	return normalized;
 }
 
-function scanCronPrompt(prompt: string): void {
-	const patterns = [
-		/ignore\s+(all\s+)?previous\s+instructions/i,
-		/reveal\s+(the\s+)?system\s+prompt/i,
-		/exfiltrat(e|ion)/i,
-		/(api|access|secret)\s*key/i,
-		/(steal|leak)\s+(secrets?|tokens?|credentials?)/i,
-		/read\s+.*\.env/i,
-	];
-	for (const pattern of patterns) {
-		if (pattern.test(prompt)) {
-			throw new Error("Scheduled job prompt contains unsafe instruction-like text.");
-		}
+function normalizeRepeatTimes(value: number | undefined | null): number | undefined {
+	if (value === undefined || value === null) return undefined;
+	if (!Number.isInteger(value) || value < 1) {
+		throw new Error("repeatTimes must be a positive integer.");
 	}
+	return value;
 }
 
 export class CronJobStore {
@@ -219,13 +222,17 @@ export class CronJobStore {
 				throw new Error(`Scheduled job already exists: ${name}`);
 			}
 			const prompt = normalizePrompt(input.prompt);
-			scanCronPrompt(prompt);
+			assertSafeCronPrompt(prompt);
 			const timezone = input.timezone ? validateTimezone(input.timezone) : undefined;
 			const parsed = parseSchedule(input.schedule, { forceRepeat: input.repeat, timezone });
 			const now = new Date().toISOString();
 			if (input.script) assertRelativeSafePath(input.script, "script");
 			if (input.noAgent && !input.script) {
 				throw new Error("noAgent jobs require a script.");
+			}
+			const repeatTimes = normalizeRepeatTimes(input.repeatTimes);
+			if (repeatTimes !== undefined && !parsed.repeat) {
+				throw new Error("repeatTimes requires a repeating schedule.");
 			}
 			const job: CronJob = {
 				id: this.createJobId(name, file.jobs),
@@ -235,6 +242,7 @@ export class CronJobStore {
 				scheduleDisplay: parsed.scheduleDisplay,
 				kind: parsed.kind,
 				repeat: parsed.repeat,
+				repeatTimes,
 				intervalMs: parsed.intervalMs,
 				cronExpression: parsed.cronExpression,
 				enabled: true,
@@ -247,6 +255,7 @@ export class CronJobStore {
 				script: input.script ? assertRelativeSafePath(input.script, "script") : undefined,
 				noAgent: input.noAgent === true,
 				contextFrom: normalizeStringList(input.contextFrom),
+				skills: normalizeStringList(input.skills),
 				tools: normalizeStringList(input.tools),
 				workdir: normalizeWorkdir(input.workdir, this.cwd),
 				model: input.model,
@@ -274,7 +283,7 @@ export class CronJobStore {
 			}
 			if (input.prompt !== undefined) {
 				next.prompt = normalizePrompt(input.prompt);
-				scanCronPrompt(next.prompt);
+				assertSafeCronPrompt(next.prompt);
 			}
 			if (input.timezone !== undefined) {
 				next.timezone = input.timezone === null ? undefined : validateTimezone(input.timezone);
@@ -307,7 +316,12 @@ export class CronJobStore {
 			}
 			if (input.noAgent !== undefined) next.noAgent = input.noAgent;
 			if (next.noAgent && !next.script) throw new Error("noAgent jobs require a script.");
+			if (input.repeatTimes !== undefined) next.repeatTimes = normalizeRepeatTimes(input.repeatTimes);
+			if (next.repeatTimes !== undefined && !next.repeat) {
+				throw new Error("repeatTimes requires a repeating schedule.");
+			}
 			if (input.contextFrom !== undefined) next.contextFrom = normalizeStringList(input.contextFrom);
+			if (input.skills !== undefined) next.skills = normalizeStringList(input.skills);
 			if (input.tools !== undefined) next.tools = normalizeStringList(input.tools);
 			if (input.workdir !== undefined) next.workdir = normalizeWorkdir(input.workdir, this.cwd);
 			if (input.model !== undefined) next.model = input.model ?? undefined;
@@ -428,10 +442,19 @@ export class CronJobStore {
 			const file = await this.readJobsFile();
 			const index = this.resolveJobIndex(file.jobs, id);
 			const current = file.jobs[index];
-			const finalState: CronJobStatus = current.repeat && current.enabled ? "pending" : result.status;
+			const completedRuns = (current.completedRuns ?? 0) + 1;
+			const reachedRunLimit = current.repeatTimes !== undefined && completedRuns >= current.repeatTimes;
+			const finalState: CronJobStatus = reachedRunLimit
+				? "completed"
+				: current.repeat && current.enabled
+					? "pending"
+					: result.status;
 			const job: CronJob = {
 				...current,
 				state: finalState,
+				enabled: current.enabled && !reachedRunLimit,
+				nextRunAt: reachedRunLimit ? undefined : current.nextRunAt,
+				completedRuns,
 				lastRunAt: (result.ranAt ?? new Date()).toISOString(),
 				lastStatus: result.status,
 				lastError: result.error,
