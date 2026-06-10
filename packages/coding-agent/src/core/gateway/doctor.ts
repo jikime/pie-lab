@@ -7,6 +7,7 @@ import { describeGatewayOpenAiAudioCredentials, resolveGatewayOpenAiAudioCredent
 import { CHAT_CONFIG_PATH, listConfiguredConversations, loadChatConfig } from "./chat/config.ts";
 import type { ChatAccountConfig, DiscordAccountConfig, TelegramAccountConfig } from "./chat/core/config-types.ts";
 import { type GatewayStatus, readGatewayStatus } from "./runner.ts";
+import { getPieLabServerOrigin } from "./server-url.ts";
 import { getGatewayTtsMaxChars, getGatewayTtsOutputDir } from "./speech.ts";
 import { getGatewaySttCacheDir, getGatewaySttMaxBytes } from "./transcription.ts";
 
@@ -252,9 +253,7 @@ async function checkStt(env: NodeJS.ProcessEnv = process.env): Promise<GatewayDo
 			),
 		];
 	}
-	const host = env.PIE_LAB_SERVER_HOST || env.PIE_ADK_SERVER_HOST || "127.0.0.1";
-	const port = env.PIE_LAB_SERVER_PORT || env.PIE_ADK_SERVER_PORT || "4873";
-	const endpoint = `http://${host}:${port}/media/routes`;
+	const endpoint = `${getPieLabServerOrigin(env)}/media/routes`;
 	try {
 		const response = await fetch(endpoint);
 		if (!response.ok) {
@@ -307,9 +306,7 @@ async function checkTts(env: NodeJS.ProcessEnv = process.env): Promise<GatewayDo
 			),
 		];
 	}
-	const host = env.PIE_LAB_SERVER_HOST || env.PIE_ADK_SERVER_HOST || "127.0.0.1";
-	const port = env.PIE_LAB_SERVER_PORT || env.PIE_ADK_SERVER_PORT || "4873";
-	const endpoint = `http://${host}:${port}/media/routes`;
+	const endpoint = `${getPieLabServerOrigin(env)}/media/routes`;
 	try {
 		const response = await fetch(endpoint);
 		if (!response.ok) {

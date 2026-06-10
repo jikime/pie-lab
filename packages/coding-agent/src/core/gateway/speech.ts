@@ -10,6 +10,7 @@ import {
 	recordGatewayAudioUsage,
 	textLengthForAudioUsage,
 } from "./audio-usage.ts";
+import { getPieLabServerOrigin } from "./server-url.ts";
 
 export type GatewaySpeechProvider = "local" | "openai" | "custom";
 
@@ -59,10 +60,7 @@ export function getGatewayTtsMaxChars(env: NodeJS.ProcessEnv = process.env): num
 
 function localSpeechEndpoint(env: NodeJS.ProcessEnv): string {
 	const base =
-		env.PIE_GATEWAY_TTS_BASE_URL ||
-		env.PIE_LAB_API_BASE_URL ||
-		env.PIE_API_BASE_URL ||
-		`http://${env.PIE_LAB_SERVER_HOST || env.PIE_ADK_SERVER_HOST || "127.0.0.1"}:${env.PIE_LAB_SERVER_PORT || env.PIE_ADK_SERVER_PORT || "4873"}`;
+		env.PIE_GATEWAY_TTS_BASE_URL || env.PIE_LAB_API_BASE_URL || env.PIE_API_BASE_URL || getPieLabServerOrigin(env);
 	return `${base.replace(/\/+$/, "")}/v1/audio/speech?response_format=json`;
 }
 

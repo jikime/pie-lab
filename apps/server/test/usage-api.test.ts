@@ -2,7 +2,7 @@ import { createInMemoryUsageStore, createUsageRecordId, type UsageRecord } from 
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
-import { createUsageRequestHandler, getDefaultUsageFilePath, parseUsageRecordQuery } from "../src/index.js";
+import { createUsageRequestHandler, getDefaultUsageFilePath, parseUsageRecordQuery } from "../src/index.ts";
 
 describe("usage API", () => {
 	let server: Server | undefined;

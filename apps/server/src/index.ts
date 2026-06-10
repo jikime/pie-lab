@@ -6,59 +6,61 @@ import {
 	createChatCompletionsRequestHandler,
 	createDefaultModelRegistry,
 	type ChatCompletionsApiOptions,
-} from "./chat-completions-api.js";
-import { createBudgetRequestHandler, type BudgetApiOptions } from "./budget-api.js";
-import { createOAuthRequestHandler, type OAuthApiOptions } from "./oauth-api.js";
+} from "./chat-completions-api.ts";
+import { createBudgetRequestHandler, type BudgetApiOptions } from "./budget-api.ts";
+import { createOAuthRequestHandler, type OAuthApiOptions } from "./oauth-api.ts";
 import {
 	createAccountSelectionRequestHandler,
 	type AccountSelectionApiOptions,
-} from "./account-selection-api.js";
+} from "./account-selection-api.ts";
 import {
 	createProviderConnectionsRequestHandler,
 	type ProviderConnectionsApiOptions,
-} from "./provider-connections-api.js";
+} from "./provider-connections-api.ts";
 import {
 	createProviderSettingsRequestHandler,
 	type ProviderSettingsApiOptions,
-} from "./provider-settings-api.js";
+} from "./provider-settings-api.ts";
 import {
 	createProviderQuotaRequestHandler,
 	getDefaultProviderConnectionFilePath,
 	type ProviderQuotaApiOptions,
-} from "./provider-quota-api.js";
+} from "./provider-quota-api.ts";
 import {
 	createModelAvailabilityRequestHandler,
 	type ModelAvailabilityApiOptions,
-} from "./model-availability-api.js";
-import { createMediaRequestHandler, type MediaApiOptions } from "./media-api.js";
-import { createLearningRequestHandler, type LearningApiOptions } from "./learning-api.js";
-import { createPieAgentChatRequestHandler, type PieAgentChatApiOptions } from "./pie-agent-chat-api.js";
-import { createProviderStatusRequestHandler } from "./provider-status-api.js";
-import { createProxyPoolRequestHandler, type ProxyPoolApiOptions } from "./proxy-pools-api.js";
+} from "./model-availability-api.ts";
+import { createMediaRequestHandler, type MediaApiOptions } from "./media-api.ts";
+import { createLearningRequestHandler, type LearningApiOptions } from "./learning-api.ts";
+import { createPieAgentChatRequestHandler, type PieAgentChatApiOptions } from "./pie-agent-chat-api.ts";
+import { createProviderStatusRequestHandler } from "./provider-status-api.ts";
+import { createProxyPoolRequestHandler, type ProxyPoolApiOptions } from "./proxy-pools-api.ts";
 import {
 	createRoutingPolicyRequestHandler,
 	type RoutingPolicyApiOptions,
-} from "./routing-policy-api.js";
-import { createSiteRequestHandler, isSitePath, type SiteApiOptions } from "./site-api.js";
-import { createUsageRequestHandler, getDefaultUsageFilePath, type UsageApiOptions } from "./usage-api.js";
+} from "./routing-policy-api.ts";
+import { createSiteRequestHandler, isSitePath, type SiteApiOptions } from "./site-api.ts";
+import { enforceRequestSecurity, resolveRequestSecurity } from "./request-security.ts";
+import { createUsageRequestHandler, getDefaultUsageFilePath, type UsageApiOptions } from "./usage-api.ts";
 
-export * from "./chat-completions-api.js";
-export * from "./account-selection-api.js";
-export * from "./budget-api.js";
-export * from "./budget-policy.js";
-export * from "./oauth-api.js";
-export * from "./media-api.js";
-export * from "./learning-api.js";
-export * from "./pie-agent-chat-api.js";
-export * from "./model-availability-api.js";
-export * from "./provider-connections-api.js";
-export * from "./provider-settings-api.js";
-export * from "./provider-quota-api.js";
-export * from "./provider-status-api.js";
-export * from "./proxy-pools-api.js";
-export * from "./routing-policy-api.js";
-export * from "./site-api.js";
-export * from "./usage-api.js";
+export * from "./chat-completions-api.ts";
+export * from "./account-selection-api.ts";
+export * from "./budget-api.ts";
+export * from "./budget-policy.ts";
+export * from "./oauth-api.ts";
+export * from "./media-api.ts";
+export * from "./learning-api.ts";
+export * from "./pie-agent-chat-api.ts";
+export * from "./model-availability-api.ts";
+export * from "./provider-connections-api.ts";
+export * from "./provider-settings-api.ts";
+export * from "./provider-quota-api.ts";
+export * from "./provider-status-api.ts";
+export * from "./proxy-pools-api.ts";
+export * from "./routing-policy-api.ts";
+export * from "./site-api.ts";
+export * from "./request-security.ts";
+export * from "./usage-api.ts";
 
 export interface PieLabServerOptions
 	extends UsageApiOptions,
@@ -78,9 +80,18 @@ export interface PieLabServerOptions
 		SiteApiOptions {
 	host?: string;
 	port?: number;
+	/** Extra Host header hostnames to accept (besides localhost/127.0.0.1/::1 and `host`). */
+	allowedHosts?: string[];
+	/** Extra browser origins to accept (besides local-hostname origins). */
+	allowedOrigins?: string[];
 }
 
 export function createPieLabRequestHandler(options: PieLabServerOptions = {}) {
+	const requestSecurity = resolveRequestSecurity({
+		host: options.host ?? resolveServerHost(),
+		allowedHosts: options.allowedHosts,
+		allowedOrigins: options.allowedOrigins,
+	});
 	const usageStore =
 		options.usageStore ?? createJsonlUsageStore(options.usageFilePath ?? getDefaultUsageFilePath());
 	const modelRegistry = options.modelRegistry ?? createDefaultModelRegistry();
@@ -124,6 +135,9 @@ export function createPieLabRequestHandler(options: PieLabServerOptions = {}) {
 	const usageHandler = createUsageRequestHandler({ ...options, usageStore });
 
 	return async (request: Parameters<typeof chatHandler>[0], response: Parameters<typeof chatHandler>[1]) => {
+		if (!enforceRequestSecurity(request, response, requestSecurity)) {
+			return;
+		}
 		const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
 		if (isChatOrModelPath(url.pathname)) {
 			await chatHandler(request, response);
@@ -191,8 +205,8 @@ export function createPieLabRequestHandler(options: PieLabServerOptions = {}) {
 }
 
 export function startServer(options: PieLabServerOptions = {}): Server {
-	const host = options.host ?? process.env.PIE_LAB_SERVER_HOST ?? process.env.PIE_ADK_SERVER_HOST ?? "127.0.0.1";
-	const port = options.port ?? parsePort(process.env.PIE_LAB_SERVER_PORT ?? process.env.PIE_ADK_SERVER_PORT, 4873);
+	const host = options.host ?? resolveServerHost();
+	const port = options.port ?? resolveServerPort();
 	const server = createServer(createPieLabRequestHandler(options));
 
 	server.listen(port, host);
@@ -200,8 +214,8 @@ export function startServer(options: PieLabServerOptions = {}): Server {
 }
 
 if (isCliEntrypoint()) {
-	const host = process.env.PIE_LAB_SERVER_HOST ?? process.env.PIE_ADK_SERVER_HOST ?? "127.0.0.1";
-	const port = parsePort(process.env.PIE_LAB_SERVER_PORT ?? process.env.PIE_ADK_SERVER_PORT, 4873);
+	const host = resolveServerHost();
+	const port = resolveServerPort();
 	const server = startServer({ host, port });
 
 	server.on("listening", () => {
@@ -213,6 +227,14 @@ if (isCliEntrypoint()) {
 		console.error(error);
 		process.exitCode = 1;
 	});
+}
+
+function resolveServerHost(): string {
+	return process.env.PIE_LAB_SERVER_HOST ?? process.env.PIE_ADK_SERVER_HOST ?? "127.0.0.1";
+}
+
+function resolveServerPort(): number {
+	return parsePort(process.env.PIE_LAB_SERVER_PORT ?? process.env.PIE_ADK_SERVER_PORT, 4873);
 }
 
 function parsePort(value: string | undefined, fallback: number): number {

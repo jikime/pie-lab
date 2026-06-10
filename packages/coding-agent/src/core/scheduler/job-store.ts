@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { chmod, mkdir, readFile, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readdir, readFile, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
 import { isAbsolute, join, normalize, relative, resolve, sep } from "node:path";
 import lockfile from "proper-lockfile";
 import {
@@ -507,7 +507,6 @@ export class CronJobStore {
 	async latestOutput(jobId: string): Promise<string | undefined> {
 		const dir = join(this.outputDir, jobId);
 		try {
-			const { readdir } = await import("node:fs/promises");
 			const entries = (await readdir(dir))
 				.filter((entry) => entry.endsWith(".md"))
 				.sort()

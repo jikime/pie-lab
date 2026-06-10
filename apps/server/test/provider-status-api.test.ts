@@ -4,7 +4,7 @@ import { createInMemoryProviderConnectionStore, type ProviderConnection } from "
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
-import { createProviderProbeResponse, createProviderStatusRequestHandler, createProviderStatusResponse } from "../src/index.js";
+import { createProviderProbeResponse, createProviderStatusRequestHandler, createProviderStatusResponse } from "../src/index.ts";
 
 describe("provider status API", () => {
 	let server: Server | undefined;

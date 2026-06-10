@@ -6,7 +6,7 @@ import {
 } from "@pie-lab/storage";
 import { createHash, randomBytes } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { getDefaultProviderConnectionFilePath } from "./provider-quota-api.js";
+import { getDefaultProviderConnectionFilePath } from "./provider-quota-api.ts";
 
 export interface OAuthApiOptions {
 	providerConnectionStore?: ProviderConnectionStore;

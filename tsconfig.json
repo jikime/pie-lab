@@ -19,20 +19,14 @@
 			"typebox": ["./node_modules/typebox"],
 			"@pie-lab/tui": ["./packages/tui/src/index.ts"],
 			"@pie-lab/tui/*": ["./packages/tui/src/*"],
-			"@pie-lab/web-ui": ["./packages/web-ui/src/index.ts"],
-			"@pie-lab/web-ui/*": ["./packages/web-ui/src/*"],
 			"@pie-lab/router": ["./packages/router/src/index.ts"],
 			"@pie-lab/router/*": ["./packages/router/src/*"],
 			"@pie-lab/storage": ["./packages/storage/src/index.ts"],
 			"@pie-lab/storage/*": ["./packages/storage/src/*"],
-			"@pie-lab/chat": ["./packages/chat/src/index.ts"],
-			"@pie-lab/chat/*": ["./packages/chat/src/*"],
 			"@pie-lab/shared": ["./packages/shared/src/index.ts"],
 			"@pie-lab/shared/*": ["./packages/shared/src/*"],
 			"@pie-lab/hashline": ["./packages/hashline/src/index.ts"],
-			"@pie-lab/hashline/*": ["./packages/hashline/src/*"],
-			"@pie-lab/agent-old": ["./packages/agent-old/src/index.ts"],
-			"@pie-lab/agent-old/*": ["./packages/agent-old/src/*"]
+			"@pie-lab/hashline/*": ["./packages/hashline/src/*"]
 		}
 	},
 	"include": [
@@ -42,5 +36,5 @@
 		"packages/*/test/**/*",
 		"packages/coding-agent/examples/**/*"
 	],
-	"exclude": ["packages/web-ui/**/*", "**/dist/**", "packages/coding-agent/examples/extensions/gondolin/**"]
+	"exclude": ["**/dist/**", "packages/coding-agent/examples/extensions/gondolin/**"]
 }

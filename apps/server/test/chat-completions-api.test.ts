@@ -8,7 +8,7 @@ import {
 	type ChatCompletionAuthResolver,
 	type ChatCompletionExecutor,
 	type ChatCompletionStreamExecutor,
-} from "../src/index.js";
+} from "../src/index.ts";
 
 describe("chat completions API", () => {
 	let server: Server | undefined;

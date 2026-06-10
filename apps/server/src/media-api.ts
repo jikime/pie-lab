@@ -14,8 +14,8 @@ import {
 	createBudgetLimitErrorBody,
 	evaluateBudget,
 	type BudgetStatus,
-} from "./budget-policy.js";
-import { getDefaultProviderConnectionFilePath } from "./provider-quota-api.js";
+} from "./budget-policy.ts";
+import { getDefaultProviderConnectionFilePath } from "./provider-quota-api.ts";
 
 export interface MediaApiOptions {
 	providerConnectionStore?: ProviderConnectionStore;

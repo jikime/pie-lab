@@ -10,7 +10,7 @@ import {
 	createProviderQuotaRequestHandler,
 	createProviderQuotaSelectionSnapshot,
 	getUsageForProvider,
-} from "../src/index.js";
+} from "../src/index.ts";
 
 describe("provider quota API", () => {
 	let server: Server | undefined;

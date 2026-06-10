@@ -5,9 +5,9 @@ import {
 	type UsageStore,
 } from "@pie-lab/storage";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { evaluateBudget } from "./budget-policy.js";
-import { getDefaultProviderConnectionFilePath } from "./provider-quota-api.js";
-import { getDefaultUsageFilePath } from "./usage-api.js";
+import { evaluateBudget } from "./budget-policy.ts";
+import { getDefaultProviderConnectionFilePath } from "./provider-quota-api.ts";
+import { getDefaultUsageFilePath } from "./usage-api.ts";
 
 export interface BudgetApiOptions {
 	providerConnectionStore?: ProviderConnectionStore;

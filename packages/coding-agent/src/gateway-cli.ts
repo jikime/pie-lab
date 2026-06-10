@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, statSync } from "node:fs";
-import { access, mkdir, readdir, rm, watch, writeFile } from "node:fs/promises";
+import { access, mkdir, readdir, readFile, rm, watch, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
@@ -765,7 +765,6 @@ async function printHistory(args: string[]): Promise<void> {
 	const printRecords = async (name: string, service: string, logPath: string) => {
 		let rawRecords: ChatLogRecord[];
 		try {
-			const { readFile } = await import("node:fs/promises");
 			const text = await readFile(logPath, "utf8");
 			rawRecords = text
 				.split("\n")
@@ -911,7 +910,6 @@ async function attachGateway(args: string[]): Promise<void> {
 	const abortController = new AbortController();
 
 	const processNewLines = async (t: AttachTarget, lastSize: number): Promise<number> => {
-		const { readFile } = await import("node:fs/promises");
 		let content: string;
 		try {
 			content = await readFile(t.logPath, "utf8");

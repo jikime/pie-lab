@@ -4,7 +4,7 @@ import type { AgentSessionEvent } from "@pie-lab/coding-agent";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
-import { createPieLabRequestHandler, type PieAgentChatSession } from "../src/index.js";
+import { createPieLabRequestHandler, type PieAgentChatSession } from "../src/index.ts";
 
 describe("pie agent chat API", () => {
 	let server: Server | undefined;

@@ -2,7 +2,7 @@ import { createInMemoryProviderConnectionStore, createInMemoryUsageStore, type P
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
-import { createPieLabRequestHandler, createProxyPoolRequestHandler, type ProxyPoolTester } from "../src/index.js";
+import { createPieLabRequestHandler, createProxyPoolRequestHandler, type ProxyPoolTester } from "../src/index.ts";
 
 describe("proxy pools API", () => {
 	let server: Server | undefined;
@@ -281,6 +281,49 @@ describe("proxy pools API", () => {
 			lastTestedAt: body.testedAt,
 			lastError: "Proxy test timed out",
 		});
+	});
+
+	it("masks proxy URL credentials in responses and preserves them on masked round-trip", async () => {
+		const store = createInMemoryProviderConnectionStore();
+		const baseUrl = await start(store);
+
+		const createResponse = await fetch(`${baseUrl}/proxy-pools`, {
+			method: "POST",
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify({
+				name: "Authed",
+				type: "http",
+				proxyUrl: "http://user:hunter2@proxy.example:8080/",
+			}),
+		});
+		expect(createResponse.status).toBe(201);
+		const created = (await createResponse.json()) as { proxyPool: { id: string; proxyUrl: string } };
+		expect(created.proxyPool.proxyUrl).toBe("http://user:****@proxy.example:8080/");
+
+		const listResponse = await fetch(`${baseUrl}/proxy-pools`);
+		const listed = (await listResponse.json()) as { proxyPools: Array<{ proxyUrl: string }> };
+		expect(listed.proxyPools[0]?.proxyUrl).toBe("http://user:****@proxy.example:8080/");
+
+		// Editing other fields with the masked URL echoed back must not clobber the credential.
+		const updateResponse = await fetch(`${baseUrl}/proxy-pools/${created.proxyPool.id}`, {
+			method: "PUT",
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify({ name: "Authed v2", proxyUrl: "http://user:****@proxy.example:8080/" }),
+		});
+		expect(updateResponse.status).toBe(200);
+		const stored = await store.getProxyPoolById(created.proxyPool.id);
+		expect(stored?.proxyUrl).toBe("http://user:hunter2@proxy.example:8080/");
+		expect(stored?.name).toBe("Authed v2");
+
+		// Sending a genuinely new URL still updates the credential.
+		const replaceResponse = await fetch(`${baseUrl}/proxy-pools/${created.proxyPool.id}`, {
+			method: "PUT",
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify({ proxyUrl: "http://user:newpass@proxy.example:8080/" }),
+		});
+		expect(replaceResponse.status).toBe(200);
+		const replaced = await store.getProxyPoolById(created.proxyPool.id);
+		expect(replaced?.proxyUrl).toBe("http://user:newpass@proxy.example:8080/");
 	});
 
 	it("returns 404 when testing an unknown proxy pool", async () => {

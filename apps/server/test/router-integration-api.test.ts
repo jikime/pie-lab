@@ -8,7 +8,7 @@ import {
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createPieLabRequestHandler, type ChatCompletionExecutor } from "../src/index.js";
+import { createPieLabRequestHandler, type ChatCompletionExecutor } from "../src/index.ts";
 
 describe("router integration APIs", () => {
 	let server: Server | undefined;

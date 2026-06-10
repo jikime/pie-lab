@@ -9,7 +9,7 @@ import {
 } from "@pie-lab/storage";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { ProxyAgent, fetch as undiciFetch } from "undici";
-import { getDefaultProviderConnectionFilePath } from "./provider-quota-api.js";
+import { getDefaultProviderConnectionFilePath } from "./provider-quota-api.ts";
 
 export interface ProxyPoolApiOptions {
 	providerConnectionStore?: ProviderConnectionStore;
@@ -145,7 +145,7 @@ async function handleProxyPoolListRequest(
 
 		writeJson(response, 200, {
 			count: data.length,
-			proxyPools: data,
+			proxyPools: data.map(maskProxyPool),
 		});
 		return;
 	}
@@ -161,7 +161,7 @@ async function handleProxyPoolListRequest(
 		}
 
 		const proxyPool = await providerConnectionStore.createProxyPool(normalized);
-		writeJson(response, 201, { proxyPool });
+		writeJson(response, 201, { proxyPool: maskProxyPool(proxyPool) });
 		return;
 	}
 
@@ -181,7 +181,7 @@ async function handleProxyPoolDetailRequest(
 			return;
 		}
 
-		writeJson(response, 200, { proxyPool });
+		writeJson(response, 200, { proxyPool: maskProxyPool(proxyPool) });
 		return;
 	}
 
@@ -200,9 +200,12 @@ async function handleProxyPoolDetailRequest(
 			writeJson(response, 400, { error: normalized.error });
 			return;
 		}
+		if (normalized.updates.proxyUrl !== undefined && normalized.updates.proxyUrl === maskProxyUrl(existing.proxyUrl)) {
+			delete normalized.updates.proxyUrl;
+		}
 
 		const proxyPool = await providerConnectionStore.updateProxyPool(proxyPoolId, normalized.updates);
-		writeJson(response, 200, { proxyPool });
+		writeJson(response, 200, { proxyPool: maskProxyPool(proxyPool) });
 		return;
 	}
 
@@ -265,7 +268,7 @@ async function handleProxyPoolTestRequest(
 		error: result.error ?? null,
 		elapsedMs: result.elapsedMs ?? 0,
 		testedAt: now,
-		proxyPool: updatedProxyPool,
+		proxyPool: maskProxyPool(updatedProxyPool),
 	});
 }
 
@@ -322,6 +325,30 @@ function normalizeProxyPoolInput(body: Record<string, unknown>): CreateProxyPool
 		strictProxy: body.strictProxy === true,
 		type: body.type === "vercel" ? "vercel" : "http",
 	};
+}
+
+/**
+ * Mask the password portion of a proxy URL credential for API responses.
+ * The username stays visible so users can identify the account; clients that
+ * send the masked value back on update keep the stored credential unchanged.
+ */
+export function maskProxyUrl(proxyUrl: string | null | undefined): string | null | undefined {
+	if (!proxyUrl) return proxyUrl;
+	try {
+		const parsed = new URL(proxyUrl);
+		if (!parsed.password) return proxyUrl;
+		parsed.password = "****";
+		return parsed.toString();
+	} catch {
+		return proxyUrl;
+	}
+}
+
+function maskProxyPool<T extends { proxyUrl?: string | null }>(proxyPool: T): T;
+function maskProxyPool<T extends { proxyUrl?: string | null }>(proxyPool: T | null): T | null;
+function maskProxyPool<T extends { proxyUrl?: string | null }>(proxyPool: T | null): T | null {
+	if (!proxyPool) return proxyPool;
+	return { ...proxyPool, proxyUrl: maskProxyUrl(proxyPool.proxyUrl) };
 }
 
 function normalizeProxyPoolUpdate(body: Record<string, unknown>): { updates: UpdateProxyPoolInput } | { error: string } {

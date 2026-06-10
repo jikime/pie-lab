@@ -1,7 +1,7 @@
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
-import { createPieLabRequestHandler, createSiteRequestHandler } from "../src/index.js";
+import { createPieLabRequestHandler, createSiteRequestHandler } from "../src/index.ts";
 
 describe("site API", () => {
 	let server: Server | undefined;

@@ -5,7 +5,7 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { createLearningRequestHandler } from "../src/learning-api.js";
+import { createLearningRequestHandler } from "../src/learning-api.ts";
 
 describe("learning API", () => {
 	let server: Server | undefined;

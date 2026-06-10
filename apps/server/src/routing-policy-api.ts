@@ -6,7 +6,7 @@ import {
 	type RouterPolicySettings,
 } from "@pie-lab/storage";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { getDefaultProviderConnectionFilePath } from "./provider-quota-api.js";
+import { getDefaultProviderConnectionFilePath } from "./provider-quota-api.ts";
 
 export interface RoutingPolicyApiOptions {
 	providerConnectionStore?: ProviderConnectionStore;

@@ -15,7 +15,7 @@ import { join } from "node:path";
 import { PIE_LAB_ROUTER_PROVIDER } from "@pie-lab/router";
 import { randomUUID } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { createDefaultModelRegistry } from "./chat-completions-api.js";
+import { createDefaultModelRegistry } from "./chat-completions-api.ts";
 
 export interface PieAgentChatApiOptions {
 	modelRegistry?: CreateAgentSessionOptions["modelRegistry"];

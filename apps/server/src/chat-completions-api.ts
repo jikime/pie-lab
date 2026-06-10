@@ -52,7 +52,7 @@ import {
 	evaluateBudget,
 	estimateModelRequestCostUsd,
 	type BudgetStatus,
-} from "./budget-policy.js";
+} from "./budget-policy.ts";
 
 export type ChatCompletionExecutor = (
 	model: Model<Api>,
