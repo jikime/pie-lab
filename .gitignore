@@ -45,3 +45,7 @@ packages/*/src/**/*.js
 packages/*/src/**/*.js.map
 packages/*/src/**/*.d.ts
 packages/*/src/**/*.d.ts.map
+
+# Local skill/tool artifacts (not part of the release)
+_workspace/
+generated-images/
