@@ -1044,7 +1044,12 @@ export class InteractiveMode {
 		this.registerSignalHandlers();
 
 		// Load changelog (only show new entries, skip for resumed sessions)
-		this.changelogMarkdown = this.getChangelogForDisplay();
+		// pie-lab: startup "what's new" notice disabled. The fork's version (0.2.0)
+		// is lower than the upstream changelog entries (0.10-0.79) merged into
+		// CHANGELOG.md, so getNewEntries() would surface all ~242 upstream entries
+		// on every fresh session and never clear. Re-enable only after the fork's
+		// versioning no longer collides with the inherited changelog history.
+		// this.changelogMarkdown = this.getChangelogForDisplay();
 
 		// Ensure fd and rg are available (downloads if missing, adds to PATH via getBinDir)
 		// Both are needed: fd for autocomplete, rg for grep tool and bash commands
@@ -1336,7 +1341,13 @@ export class InteractiveMode {
 	/**
 	 * Get changelog entries to display on startup.
 	 * Only shows new entries since last seen version, skips for resumed sessions.
+	 *
+	 * pie-lab: retained but no longer called from init() — the startup "what's new"
+	 * notice is disabled (see the commented assignment in init()). Kept intact so it
+	 * can be re-enabled once the fork's versioning no longer collides with the
+	 * inherited upstream changelog history.
 	 */
+	// biome-ignore lint/correctness/noUnusedPrivateClassMembers: intentionally retained; startup changelog notice disabled for pie-lab
 	private getChangelogForDisplay(): string | undefined {
 		// Skip changelog for resumed/continued sessions (already have messages)
 		if (this.session.state.messages.length > 0) {
