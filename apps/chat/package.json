@@ -1,6 +1,6 @@
 {
 	"name": "@pie-lab/pie-chat",
-	"version": "0.2.0",
+	"version": "0.2.1",
 	"private": true,
 	"type": "module",
 	"description": "Next.js pie-lab chat app based on the pi-chat source",
@@ -19,8 +19,8 @@
 	},
 	"dependencies": {
 		"@earendil-works/gondolin": "^0.7.0",
-		"@pie-lab/coding-agent": "^0.2.0",
-		"@pie-lab/tui": "^0.2.0",
+		"@pie-lab/coding-agent": "^0.2.1",
+		"@pie-lab/tui": "^0.2.1",
 		"class-variance-authority": "^0.7.1",
 		"clsx": "^2.1.1",
 		"discord.js": "^14.26.4",

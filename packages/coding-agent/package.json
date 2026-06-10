@@ -1,6 +1,6 @@
 {
 	"name": "@pie-lab/coding-agent",
-	"version": "0.2.0",
+	"version": "0.2.1",
 	"description": "Coding agent CLI with read, bash, edit, write tools and session management",
 	"type": "module",
 	"pieConfig": {
@@ -58,13 +58,13 @@
 	},
 	"dependencies": {
 		"@discordjs/voice": "0.19.0",
-		"@pie-lab/agent-core": "^0.2.0",
-		"@pie-lab/ai": "^0.2.0",
-		"@pie-lab/hashline": "^0.2.0",
-		"@pie-lab/router": "^0.2.0",
-		"@pie-lab/shared": "^0.2.0",
-		"@pie-lab/storage": "^0.2.0",
-		"@pie-lab/tui": "^0.2.0",
+		"@pie-lab/agent-core": "^0.2.1",
+		"@pie-lab/ai": "^0.2.1",
+		"@pie-lab/hashline": "^0.2.1",
+		"@pie-lab/router": "^0.2.1",
+		"@pie-lab/shared": "^0.2.1",
+		"@pie-lab/storage": "^0.2.1",
+		"@pie-lab/tui": "^0.2.1",
 		"@silvia-odwyer/photon-node": "0.3.4",
 		"chalk": "5.6.2",
 		"cross-spawn": "7.0.6",

@@ -55,7 +55,7 @@
 	},
 	"version": "0.1.3",
 	"dependencies": {
-		"@pie-lab/coding-agent": "^0.2.0"
+		"@pie-lab/coding-agent": "^0.2.1"
 	},
 	"overrides": {
 		"rimraf": "6.1.2",

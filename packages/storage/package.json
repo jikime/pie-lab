@@ -1,6 +1,6 @@
 {
 	"name": "@pie-lab/storage",
-	"version": "0.2.0",
+	"version": "0.2.1",
 	"type": "module",
 	"description": "Local storage interfaces for pie-lab",
 	"main": "./dist/index.js",
