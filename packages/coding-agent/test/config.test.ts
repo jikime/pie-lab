@@ -51,7 +51,7 @@ afterEach(() => {
 function createNpmPrefixInstall(template = "pi-prefix-"): { prefix: string; packageDir: string } {
 	const prefix = mkdtempSync(join(tmpdir(), template));
 	const root = join(prefix, "lib", "node_modules");
-	const scopeDir = join(root, "@earendil-works");
+	const scopeDir = join(root, "@pie-lab");
 	const packageDir = join(scopeDir, "pi-coding-agent");
 	mkdirSync(packageDir, { recursive: true });
 	tempDir = prefix;
@@ -108,7 +108,7 @@ function createBunGlobalInstall(): { packageDir: string } {
 	const prefix = join(temp, ".bun");
 	const bunBin = join(prefix, "bin");
 	const root = join(prefix, "install", "global", "node_modules");
-	const scopeDir = join(root, "@earendil-works");
+	const scopeDir = join(root, "@pie-lab");
 	const packageDir = join(scopeDir, "pi-coding-agent");
 	mkdirSync(packageDir, { recursive: true });
 	mkdirSync(bunBin, { recursive: true });
@@ -148,12 +148,12 @@ function createFakeBunScript(bunBin: string): string {
 describe("detectInstallMethod", () => {
 	test("detects pnpm from Windows .pnpm install paths", () => {
 		setExecPath(
-			"C:\\Users\\Admin\\Documents\\pnpm-repository\\global\\5\\.pnpm\\@earendil-works+pi-coding-agent@0.67.68\\node_modules\\@earendil-works\\pi-coding-agent\\dist\\cli.js",
+			"C:\\Users\\Admin\\Documents\\pnpm-repository\\global\\5\\.pnpm\\@pie-lab+coding-agent@0.67.68\\node_modules\\@pie-lab\\coding-agent\\dist\\cli.js",
 		);
 
 		expect(detectInstallMethod()).toBe("pnpm");
 		expect(getUpdateInstruction("@pie-lab/coding-agent")).toBe(
-			"Run: pnpm install -g --ignore-scripts @pie-lab/coding-agent",
+			"Run: pnpm install -g --ignore-scripts --config.minimumReleaseAge=0 @pie-lab/coding-agent",
 		);
 	});
 
@@ -175,8 +175,16 @@ describe("detectInstallMethod", () => {
 		expect(detectInstallMethod()).toBe("npm");
 		expect(command).toEqual({
 			command: "npm",
-			args: ["--prefix", prefix, "install", "-g", "--ignore-scripts", "@pie-lab/coding-agent"],
-			display: `npm --prefix ${prefix} install -g --ignore-scripts @pie-lab/coding-agent`,
+			args: [
+				"--prefix",
+				prefix,
+				"install",
+				"-g",
+				"--ignore-scripts",
+				"--min-release-age=0",
+				"@pie-lab/coding-agent",
+			],
+			display: `npm --prefix ${prefix} install -g --ignore-scripts --min-release-age=0 @pie-lab/coding-agent`,
 		});
 	});
 
@@ -187,8 +195,8 @@ describe("detectInstallMethod", () => {
 
 		expect(command).toEqual({
 			command: "npm",
-			args: ["--prefix", prefix, "install", "-g", "--ignore-scripts", "@new-scope/pi"],
-			display: `npm --prefix ${prefix} uninstall -g @mariozechner/pi-coding-agent && npm --prefix ${prefix} install -g --ignore-scripts @new-scope/pi`,
+			args: ["--prefix", prefix, "install", "-g", "--ignore-scripts", "--min-release-age=0", "@new-scope/pi"],
+			display: `npm --prefix ${prefix} uninstall -g @mariozechner/pi-coding-agent && npm --prefix ${prefix} install -g --ignore-scripts --min-release-age=0 @new-scope/pi`,
 			steps: [
 				{
 					command: "npm",
@@ -197,8 +205,8 @@ describe("detectInstallMethod", () => {
 				},
 				{
 					command: "npm",
-					args: ["--prefix", prefix, "install", "-g", "--ignore-scripts", "@new-scope/pi"],
-					display: `npm --prefix ${prefix} install -g --ignore-scripts @new-scope/pi`,
+					args: ["--prefix", prefix, "install", "-g", "--ignore-scripts", "--min-release-age=0", "@new-scope/pi"],
+					display: `npm --prefix ${prefix} install -g --ignore-scripts --min-release-age=0 @new-scope/pi`,
 				},
 			],
 		});
@@ -211,8 +219,16 @@ describe("detectInstallMethod", () => {
 
 		expect(command).toEqual({
 			command: "npm",
-			args: ["--prefix", prefix, "install", "-g", "--ignore-scripts", "@pie-lab/coding-agent"],
-			display: `npm --prefix ${prefix} install -g --ignore-scripts @pie-lab/coding-agent`,
+			args: [
+				"--prefix",
+				prefix,
+				"install",
+				"-g",
+				"--ignore-scripts",
+				"--min-release-age=0",
+				"@pie-lab/coding-agent",
+			],
+			display: `npm --prefix ${prefix} install -g --ignore-scripts --min-release-age=0 @pie-lab/coding-agent`,
 		});
 	});
 
@@ -221,7 +237,15 @@ describe("detectInstallMethod", () => {
 
 		const command = getSelfUpdateCommand("@pie-lab/coding-agent", []);
 
-		expect(command?.args).toEqual(["--prefix", prefix, "install", "-g", "--ignore-scripts", "@pie-lab/coding-agent"]);
+		expect(command?.args).toEqual([
+			"--prefix",
+			prefix,
+			"install",
+			"-g",
+			"--ignore-scripts",
+			"--min-release-age=0",
+			"@pie-lab/coding-agent",
+		]);
 	});
 
 	test("quotes npm self-update display paths", () => {
@@ -229,17 +253,19 @@ describe("detectInstallMethod", () => {
 
 		const command = getSelfUpdateCommand("@pie-lab/coding-agent");
 
-		expect(command?.display).toBe(`npm --prefix "${prefix}" install -g --ignore-scripts @pie-lab/coding-agent`);
+		expect(command?.display).toBe(
+			`npm --prefix "${prefix}" install -g --ignore-scripts --min-release-age=0 @pie-lab/coding-agent`,
+		);
 	});
 
 	test("does not infer Windows npm custom prefixes from package paths", () => {
-		const packageDir = "C:\\Users\\Admin\\npm prefix\\node_modules\\@earendil-works\\pi-coding-agent";
+		const packageDir = "C:\\Users\\Admin\\npm prefix\\node_modules\\@pie-lab\\coding-agent";
 		process.env.PI_PACKAGE_DIR = packageDir;
 		setExecPath(`${packageDir}\\dist\\cli.js`);
 
 		expect(detectInstallMethod()).toBe("npm");
 		expect(getUpdateInstruction("@pie-lab/coding-agent")).toBe(
-			"Run: npm install -g --ignore-scripts @pie-lab/coding-agent",
+			"Run: npm install -g --ignore-scripts --min-release-age=0 @pie-lab/coding-agent",
 		);
 	});
 
@@ -251,8 +277,8 @@ describe("detectInstallMethod", () => {
 		expect(detectInstallMethod()).toBe("bun");
 		expect(command).toEqual({
 			command: "bun",
-			args: ["install", "-g", "--ignore-scripts", "@pie-lab/coding-agent"],
-			display: "bun install -g --ignore-scripts @pie-lab/coding-agent",
+			args: ["install", "-g", "--ignore-scripts", "--minimum-release-age=0", "@pie-lab/coding-agent"],
+			display: "bun install -g --ignore-scripts --minimum-release-age=0 @pie-lab/coding-agent",
 		});
 	});
 
@@ -264,8 +290,9 @@ describe("detectInstallMethod", () => {
 		expect(detectInstallMethod()).toBe("pnpm");
 		expect(command).toEqual({
 			command: "pnpm",
-			args: ["install", "-g", "--ignore-scripts", "@new-scope/pi"],
-			display: "pnpm remove -g @mariozechner/pi-coding-agent && pnpm install -g --ignore-scripts @new-scope/pi",
+			args: ["install", "-g", "--ignore-scripts", "--config.minimumReleaseAge=0", "@new-scope/pi"],
+			display:
+				"pnpm remove -g @mariozechner/pi-coding-agent && pnpm install -g --ignore-scripts --config.minimumReleaseAge=0 @new-scope/pi",
 			steps: [
 				{
 					command: "pnpm",
@@ -274,8 +301,8 @@ describe("detectInstallMethod", () => {
 				},
 				{
 					command: "pnpm",
-					args: ["install", "-g", "--ignore-scripts", "@new-scope/pi"],
-					display: "pnpm install -g --ignore-scripts @new-scope/pi",
+					args: ["install", "-g", "--ignore-scripts", "--config.minimumReleaseAge=0", "@new-scope/pi"],
+					display: "pnpm install -g --ignore-scripts --config.minimumReleaseAge=0 @new-scope/pi",
 				},
 			],
 		});
@@ -286,7 +313,7 @@ describe("detectInstallMethod", () => {
 		const binDir = join(temp, "bin");
 		const root = join(temp, "Library", "pnpm", "global", "v11");
 		const packageName = "@pie-lab/coding-agent";
-		const globalPackageDir = join(root, "11e9a", "node_modules", "@earendil-works", "pi-coding-agent");
+		const globalPackageDir = join(root, "11e9a", "node_modules", "@pie-lab", "pi-coding-agent");
 		const storePackageDir = join(
 			temp,
 			"Library",
@@ -294,12 +321,12 @@ describe("detectInstallMethod", () => {
 			"store",
 			"v11",
 			"links",
-			"@earendil-works",
+			"@pie-lab",
 			"pi-coding-agent",
 			"0.75.0",
 			"hash",
 			"node_modules",
-			"@earendil-works",
+			"@pie-lab",
 			"pi-coding-agent",
 		);
 		mkdirSync(globalPackageDir, { recursive: true });
@@ -319,8 +346,8 @@ describe("detectInstallMethod", () => {
 		expect(detectInstallMethod()).toBe("pnpm");
 		expect(command).toEqual({
 			command: "pnpm",
-			args: ["install", "-g", "--ignore-scripts", packageName],
-			display: `pnpm install -g --ignore-scripts ${packageName}`,
+			args: ["install", "-g", "--ignore-scripts", "--config.minimumReleaseAge=0", packageName],
+			display: `pnpm install -g --ignore-scripts --config.minimumReleaseAge=0 ${packageName}`,
 		});
 	});
 
@@ -357,8 +384,9 @@ describe("detectInstallMethod", () => {
 		expect(detectInstallMethod()).toBe("bun");
 		expect(command).toEqual({
 			command: "bun",
-			args: ["install", "-g", "--ignore-scripts", "@new-scope/pi"],
-			display: "bun uninstall -g @mariozechner/pi-coding-agent && bun install -g --ignore-scripts @new-scope/pi",
+			args: ["install", "-g", "--ignore-scripts", "--minimum-release-age=0", "@new-scope/pi"],
+			display:
+				"bun uninstall -g @mariozechner/pi-coding-agent && bun install -g --ignore-scripts --minimum-release-age=0 @new-scope/pi",
 			steps: [
 				{
 					command: "bun",
@@ -367,8 +395,8 @@ describe("detectInstallMethod", () => {
 				},
 				{
 					command: "bun",
-					args: ["install", "-g", "--ignore-scripts", "@new-scope/pi"],
-					display: "bun install -g --ignore-scripts @new-scope/pi",
+					args: ["install", "-g", "--ignore-scripts", "--minimum-release-age=0", "@new-scope/pi"],
+					display: "bun install -g --ignore-scripts --minimum-release-age=0 @new-scope/pi",
 				},
 			],
 		});

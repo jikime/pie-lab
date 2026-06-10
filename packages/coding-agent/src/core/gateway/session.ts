@@ -1,5 +1,5 @@
-import type { ChatService, ResolvedConversation } from "./chat/core/config-types.js";
-import type { InboundMessageInput } from "./chat/core/runtime-types.js";
+import type { ChatService, ResolvedConversation } from "./chat/core/config-types.ts";
+import type { InboundMessageInput } from "./chat/core/runtime-types.ts";
 
 export type GatewayChatType = "dm" | "group" | "channel" | "thread";
 

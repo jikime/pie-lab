@@ -29,13 +29,13 @@ import {
 import { convertToLlm } from "./messages.ts";
 import { ModelRegistry } from "./model-registry.ts";
 import { findInitialModel } from "./model-resolver.ts";
+import { mergeProviderAttributionHeaders } from "./provider-attribution.ts";
 import type { ResourceLoader } from "./resource-loader.ts";
 import { DefaultResourceLoader } from "./resource-loader.ts";
 import { CronJobStore, createSchedulerToolDefinitions } from "./scheduler/index.ts";
 import { getDefaultSessionDir, SessionManager } from "./session-manager.ts";
-import { createSessionSearchToolDefinition } from "./session-search-tool.js";
+import { createSessionSearchToolDefinition } from "./session-search-tool.ts";
 import { SettingsManager } from "./settings-manager.ts";
-import { isInstallTelemetryEnabled } from "./telemetry.ts";
 import { time } from "./timings.ts";
 import {
 	createBashTool,
@@ -85,6 +85,8 @@ export interface CreateAgentSessionOptions {
 	 * When provided, only the listed tool names are enabled.
 	 */
 	tools?: string[];
+	/** Optional denylist of tool names to disable. Applies after `tools` when both are provided. */
+	excludeTools?: string[];
 	/** Custom tools to register (in addition to built-in tools). */
 	customTools?: ToolDefinition[];
 
@@ -148,44 +150,6 @@ export {
 
 function getDefaultAgentDir(): string {
 	return getAgentDir();
-}
-
-function getAttributionHeaders(
-	model: Model<any>,
-	settingsManager: SettingsManager,
-	sessionId?: string,
-): Record<string, string> | undefined {
-	if (
-		sessionId &&
-		(model.provider === "opencode" || model.provider === "opencode-go" || model.baseUrl.includes("opencode.ai"))
-	) {
-		return { "x-opencode-session": sessionId, "x-opencode-client": "pi" };
-	}
-
-	if (!isInstallTelemetryEnabled(settingsManager)) {
-		return undefined;
-	}
-
-	if (model.provider === "openrouter" || model.baseUrl.includes("openrouter.ai")) {
-		return {
-			"HTTP-Referer": "https://pi.dev",
-			"X-OpenRouter-Title": "pi",
-			"X-OpenRouter-Categories": "cli-agent",
-		};
-	}
-
-	if (
-		model.provider === "cloudflare-workers-ai" ||
-		model.provider === "cloudflare-ai-gateway" ||
-		model.baseUrl.includes("api.cloudflare.com") ||
-		model.baseUrl.includes("gateway.ai.cloudflare.com")
-	) {
-		return {
-			"User-Agent": "pi-coding-agent",
-		};
-	}
-
-	return undefined;
 }
 
 function formatUnknownError(error: unknown): string {
@@ -390,11 +354,11 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	// session_search and scheduler tools are custom tools — they are registered in
 	// _toolRegistry but NOT added to active tools automatically unless we list them here.
 	const extraDefaultTools: string[] = [...sessionSearchTool.map((t) => t.name), ...schedulerTools.map((t) => t.name)];
-	const initialActiveToolNames: string[] = options.tools
-		? [...options.tools]
-		: options.noTools
-			? []
-			: [...defaultActiveToolNames, ...extraDefaultTools];
+	const excludedToolNames = options.excludeTools;
+	const excludedToolNameSet = excludedToolNames ? new Set(excludedToolNames) : undefined;
+	const initialActiveToolNames: string[] = (
+		options.tools ? [...options.tools] : options.noTools ? [] : [...defaultActiveToolNames, ...extraDefaultTools]
+	).filter((name) => !excludedToolNameSet?.has(name));
 
 	let agent: Agent;
 
@@ -519,21 +483,27 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 							connectionId = auth.connectionId ?? connectionId;
 
 							const providerRetrySettings = settingsManager.getProviderRetrySettings();
-							const attributionHeaders = getAttributionHeaders(
-								resolvedModel,
-								settingsManager,
-								options?.sessionId,
-							);
+							const httpIdleTimeoutMs = settingsManager.getHttpIdleTimeoutMs();
+							// SDKs treat timeout=0 as 0ms (immediate timeout), not "no timeout".
+							// Use max int32 to effectively disable the timeout.
+							const effectiveTimeoutMs = httpIdleTimeoutMs === 0 ? 2147483647 : httpIdleTimeoutMs;
+							const timeoutMs = options?.timeoutMs ?? providerRetrySettings.timeoutMs ?? effectiveTimeoutMs;
+							const websocketConnectTimeoutMs =
+								options?.websocketConnectTimeoutMs ?? settingsManager.getWebSocketConnectTimeoutMs();
 							const inner = await streamSimple(resolvedModel, context, {
 								...options,
 								apiKey: auth.apiKey,
-								timeoutMs: options?.timeoutMs ?? providerRetrySettings.timeoutMs,
+								timeoutMs,
+								websocketConnectTimeoutMs,
 								maxRetries: options?.maxRetries ?? providerRetrySettings.maxRetries,
 								maxRetryDelayMs: options?.maxRetryDelayMs ?? providerRetrySettings.maxRetryDelayMs,
-								headers:
-									attributionHeaders || auth.headers || options?.headers
-										? { ...attributionHeaders, ...auth.headers, ...options?.headers }
-										: undefined,
+								headers: mergeProviderAttributionHeaders(
+									resolvedModel,
+									settingsManager,
+									options?.sessionId,
+									auth.headers,
+									options?.headers,
+								),
 							});
 
 							// Single-route fast path: stream events directly to outer without buffering.
@@ -564,7 +534,18 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 									}
 									outer.push(event);
 								}
-								continue;
+								// Stream ended without an explicit done/error event. Providers may
+								// finish via end(message) instead (e.g. extension streamSimple overrides),
+								// which resolves result() without emitting a done event. Mirror the
+								// non-routed behavior by completing the outer stream from result().
+								const finalMessage = await inner.result();
+								await recordUsage(finalMessage, "success");
+								const doneReason =
+									finalMessage.stopReason === "length" || finalMessage.stopReason === "toolUse"
+										? finalMessage.stopReason
+										: "stop";
+								outer.push({ type: "done", reason: doneReason, message: finalMessage });
+								return;
 							}
 
 							// Multi-route fallback path: buffer until done/error to decide retry.
@@ -708,6 +689,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		modelRegistry,
 		initialActiveToolNames,
 		allowedToolNames,
+		excludedToolNames,
 		extensionRunnerRef,
 		sessionStartEvent: options.sessionStartEvent,
 		learningMemorySnapshot,

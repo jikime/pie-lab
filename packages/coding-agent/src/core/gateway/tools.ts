@@ -3,9 +3,9 @@ import { resolve } from "node:path";
 import type { UsageStore } from "@pie-lab/storage";
 import { type Static, Type } from "typebox";
 import type { ToolDefinition } from "../extensions/types.ts";
-import { createSessionSearchToolDefinition } from "../session-search-tool.js";
-import type { ConversationRuntime } from "./chat/runtime.js";
-import { synthesizeGatewaySpeech } from "./speech.js";
+import { createSessionSearchToolDefinition } from "../session-search-tool.ts";
+import type { ConversationRuntime } from "./chat/runtime.ts";
+import { synthesizeGatewaySpeech } from "./speech.ts";
 
 const chatHistorySchema = Type.Object({
 	query: Type.Optional(Type.String({ description: "Case-insensitive text to search for" })),

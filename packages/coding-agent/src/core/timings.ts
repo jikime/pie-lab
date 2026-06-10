@@ -3,7 +3,7 @@
  * Enable with PIE_TIMING=1 environment variable.
  */
 
-import { ENV_TIMING, isTruthyEnv } from "../config.js";
+import { ENV_TIMING, isTruthyEnv } from "../config.ts";
 
 const ENABLED = isTruthyEnv(ENV_TIMING, "PI_TIMING");
 const timings: Array<{ label: string; ms: number }> = [];

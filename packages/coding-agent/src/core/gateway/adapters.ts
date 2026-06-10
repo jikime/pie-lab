@@ -11,7 +11,7 @@ import {
 	Partials,
 	type VoiceBasedChannel,
 } from "discord.js";
-import { CHAT_HOME } from "./chat/config.js";
+import { CHAT_HOME } from "./chat/config.ts";
 import type {
 	ChatAccountConfig,
 	ChatConfig,
@@ -19,20 +19,20 @@ import type {
 	DiscordAccountConfig,
 	ResolvedConversation,
 	TelegramAccountConfig,
-} from "./chat/core/config-types.js";
-import type { InboundMessageInput } from "./chat/core/runtime-types.js";
+} from "./chat/core/config-types.ts";
+import type { InboundMessageInput } from "./chat/core/runtime-types.ts";
 import {
 	fetchBinary,
 	guessAttachmentKind,
 	readLocalAttachment,
 	storeDownloadedAttachment,
 	textMentionsBot,
-} from "./chat/live/common.js";
-import { chunkText } from "./chat/render/chunking.js";
-import { formatMarkdownForService, maxMessageLength, telegramHtmlToPlainText } from "./chat/render/format.js";
-import { type DiscordVoiceCommand, DiscordVoiceController, parseDiscordVoiceCommandText } from "./discord-voice.js";
-import { defaultGatewayPlatformRegistry, type GatewayPlatformRegistry } from "./platform-registry.js";
-import { type GatewayTranscriptionResult, transcribeGatewayAudio } from "./transcription.js";
+} from "./chat/live/common.ts";
+import { chunkText } from "./chat/render/chunking.ts";
+import { formatMarkdownForService, maxMessageLength, telegramHtmlToPlainText } from "./chat/render/format.ts";
+import { type DiscordVoiceCommand, DiscordVoiceController, parseDiscordVoiceCommandText } from "./discord-voice.ts";
+import { defaultGatewayPlatformRegistry, type GatewayPlatformRegistry } from "./platform-registry.ts";
+import { type GatewayTranscriptionResult, transcribeGatewayAudio } from "./transcription.ts";
 
 export interface GatewayCheckpoint {
 	cursor?: string;

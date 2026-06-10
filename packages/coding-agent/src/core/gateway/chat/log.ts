@@ -1,6 +1,6 @@
 import { appendFile, copyFile, lstat, mkdir, open, readFile, unlink, writeFile } from "node:fs/promises";
 import { basename, dirname, extname, join, relative, resolve } from "node:path";
-import type { GatewaySessionSource } from "../session.js";
+import type { GatewaySessionSource } from "../session.ts";
 import type {
 	AttachmentInput,
 	AttachmentKind,
@@ -8,7 +8,7 @@ import type {
 	InboundMessageInput,
 	ResolvedConversation,
 	StoredAttachment,
-} from "./types.js";
+} from "./types.ts";
 
 function guessAttachmentKind(path: string): AttachmentKind {
 	const ext = extname(path).toLowerCase();

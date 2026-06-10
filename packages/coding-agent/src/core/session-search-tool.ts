@@ -7,9 +7,9 @@
  *   3. Source filter — { query, sources } → limit to tui / gateway-reasoning / gateway-chat
  */
 
-import { getAgentDir } from "../config.js";
-import type { ToolDefinition } from "./extensions/types.js";
-import { ensureSessionDBIndexed, getSessionDB } from "./session-db.js";
+import { getAgentDir } from "../config.ts";
+import type { ToolDefinition } from "./extensions/types.ts";
+import { ensureSessionDBIndexed, getSessionDB } from "./session-db.ts";
 
 const TOOL_NAME = "session_search";
 

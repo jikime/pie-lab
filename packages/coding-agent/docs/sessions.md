@@ -10,6 +10,7 @@ Sessions auto-save to `~/.pie/agent/sessions/`, organized by working directory. 
 pie -c                  # Continue most recent session
 pie -r                  # Browse and select from past sessions
 pie --no-session        # Ephemeral mode; do not save
+pie --name "my task"    # Set session display name at startup
 pie --session <path|id> # Use a specific session file or partial session ID
 pie --fork <path|id>    # Fork a session file or partial session ID into a new session
 ```
@@ -54,6 +55,13 @@ Use `/name <name>` to set a human-readable session name:
 
 ```text
 /name Refactor auth module
+```
+
+Set the name at startup with `--name` or `-n`:
+
+```bash
+pie --name "Refactor auth module"
+pie --name "CI audit" -p "Review this build failure"
 ```
 
 Named sessions are easier to find in `/resume` and `pie -r`.

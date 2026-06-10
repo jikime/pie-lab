@@ -1,4 +1,4 @@
-import { deliverGatewayMessage, type GatewayDeliveryResult } from "../gateway/delivery.js";
+import { deliverGatewayMessage, type GatewayDeliveryResult } from "../gateway/delivery.ts";
 
 export type CronDeliverTarget = string;
 export type CronDeliveryResult = GatewayDeliveryResult;

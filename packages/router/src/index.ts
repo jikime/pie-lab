@@ -1,6 +1,6 @@
 export type RoutingMode = "fixed" | "router" | "fallback";
 
-export * from "./rtk.js";
+export * from "./rtk.ts";
 
 export type RouterIntent = "coding" | "chat" | "reasoning" | "vision" | "general" | (string & {});
 

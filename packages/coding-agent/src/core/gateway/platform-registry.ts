@@ -1,5 +1,5 @@
-import type { GatewayAccountAdapterContext, GatewayAdapter, GatewayConversationEndpoint } from "./adapters.js";
-import type { ChatAccountConfig, ChatService } from "./chat/core/config-types.js";
+import type { GatewayAccountAdapterContext, GatewayAdapter, GatewayConversationEndpoint } from "./adapters.ts";
+import type { ChatAccountConfig, ChatService } from "./chat/core/config-types.ts";
 
 export interface GatewayPlatformCapabilities {
 	markdown?: boolean;

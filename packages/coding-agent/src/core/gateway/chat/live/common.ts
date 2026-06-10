@@ -1,7 +1,7 @@
 import { lstat, mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, extname, join } from "node:path";
-import type { ResolvedConversation } from "../core/config-types.js";
-import type { AttachmentInput } from "../core/runtime-types.js";
+import type { ResolvedConversation } from "../core/config-types.ts";
+import type { AttachmentInput } from "../core/runtime-types.ts";
 
 function sanitize(value: string): string {
 	return value.replace(/[^a-zA-Z0-9._-]+/g, "_");

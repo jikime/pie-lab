@@ -38,6 +38,7 @@
 		"dist",
 		"docs",
 		"examples",
+		"containerization.md",
 		"CHANGELOG.md",
 		"npm-shrinkwrap.json"
 	],
@@ -93,7 +94,7 @@
 		}
 	},
 	"optionalDependencies": {
-		"@mariozechner/clipboard": "0.3.6"
+		"@mariozechner/clipboard": "0.3.9"
 	},
 	"devDependencies": {
 		"@types/cross-spawn": "6.0.6",

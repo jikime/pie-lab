@@ -26,7 +26,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { DatabaseSync, type StatementSync } from "node:sqlite"; // eslint-disable-line import/no-unresolved
-import { getAgentDir, getSessionsDir } from "../config.js";
+import { getAgentDir, getSessionsDir } from "../config.ts";
 
 // ---------------------------------------------------------------------------
 // Types matching the JSONL formats in pie-lab

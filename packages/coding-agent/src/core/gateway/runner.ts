@@ -27,13 +27,13 @@ import {
 	listConfiguredConversations,
 	loadChatConfig,
 	saveChatConfig,
-} from "./chat/config.js";
-import { ConversationRuntime } from "./chat/runtime.js";
-import type { ChatAccountConfig, ConfiguredChannel, InboundMessageInput, ResolvedConversation } from "./chat/types.js";
+} from "./chat/config.ts";
+import { ConversationRuntime } from "./chat/runtime.ts";
+import type { ChatAccountConfig, ConfiguredChannel, InboundMessageInput, ResolvedConversation } from "./chat/types.ts";
 import { buildGatewaySystemPrompt } from "./prompt.ts";
 import { buildGatewaySessionKey, buildGatewaySessionSource } from "./session.ts";
 import { createGatewayChatTools } from "./tools.ts";
-import { WebIPCServer } from "./web-ipc-server.js";
+import { WebIPCServer } from "./web-ipc-server.ts";
 
 export interface GatewayLogger {
 	info(message: string): void;
@@ -783,7 +783,7 @@ export async function runGateway(options: RunGatewayOptions = {}): Promise<void>
 		agentDir,
 		logger,
 		createWorker: async (conversationId: string) => {
-			const { buildWebConversation } = await import("./web-ipc-server.js");
+			const { buildWebConversation } = await import("./web-ipc-server.ts");
 			const conversation = buildWebConversation(agentDir, conversationId);
 			const worker = new GatewayConversationWorker({ conversation, cwd, agentDir, logger, usageStore });
 			await worker.start();

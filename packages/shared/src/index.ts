@@ -4,4 +4,4 @@ export const PIE_LAB_SOURCES = {
 	pieChat: "https://github.com/jikime/pi-chat",
 } as const;
 
-export * from "./provider-quota.js";
+export * from "./provider-quota.ts";

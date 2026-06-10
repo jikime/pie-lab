@@ -1,7 +1,7 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import { getAgentDir } from "../../../config.js";
+import { getAgentDir } from "../../../config.ts";
 import type {
 	AccessPolicy,
 	ChatAccountConfig,
@@ -10,7 +10,7 @@ import type {
 	GondolinConfig,
 	GondolinSecretConfig,
 	ResolvedConversation,
-} from "./core/config-types.js";
+} from "./core/config-types.ts";
 
 export const CHAT_HOME = join(getAgentDir(), "chat");
 export const CHAT_CONFIG_PATH = join(CHAT_HOME, "config.json");

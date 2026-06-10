@@ -42,5 +42,5 @@
 		"packages/*/test/**/*",
 		"packages/coding-agent/examples/**/*"
 	],
-	"exclude": ["packages/web-ui/**/*", "**/dist/**"]
+	"exclude": ["packages/web-ui/**/*", "**/dist/**", "packages/coding-agent/examples/extensions/gondolin/**"]
 }

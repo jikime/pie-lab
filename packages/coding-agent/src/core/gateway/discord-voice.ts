@@ -15,12 +15,12 @@ import {
 } from "@discordjs/voice";
 import type { Client, GuildMember, Message, VoiceBasedChannel } from "discord.js";
 import { opus } from "prism-media";
-import type { GatewayConversationEndpoint } from "./adapters.js";
-import type { DiscordAccountConfig } from "./chat/core/config-types.js";
-import type { InboundMessageInput } from "./chat/core/runtime-types.js";
-import { guessAttachmentKind } from "./chat/live/common.js";
-import { synthesizeGatewaySpeech } from "./speech.js";
-import { transcribeGatewayAudio } from "./transcription.js";
+import type { GatewayConversationEndpoint } from "./adapters.ts";
+import type { DiscordAccountConfig } from "./chat/core/config-types.ts";
+import type { InboundMessageInput } from "./chat/core/runtime-types.ts";
+import { guessAttachmentKind } from "./chat/live/common.ts";
+import { synthesizeGatewaySpeech } from "./speech.ts";
+import { transcribeGatewayAudio } from "./transcription.ts";
 
 export type DiscordVoiceCommand = "join" | "leave" | "status";
 

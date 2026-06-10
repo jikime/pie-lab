@@ -5,9 +5,9 @@ import {
 	type ProviderConnection,
 	type ProviderConnectionStore,
 } from "@pie-lab/storage";
-import { getAgentDir } from "../../config.js";
-import { AuthStorage } from "../auth-storage.js";
-import { resolveConfigValue } from "../resolve-config-value.js";
+import { getAgentDir } from "../../config.ts";
+import { AuthStorage } from "../auth-storage.ts";
+import { resolveConfigValue } from "../resolve-config-value.ts";
 
 export type GatewayOpenAiAudioKeySource =
 	| "VOICE_TOOLS_OPENAI_KEY"

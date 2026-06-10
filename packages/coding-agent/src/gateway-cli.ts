@@ -19,14 +19,14 @@ import {
 	loadChatConfig,
 	resolveConversation,
 	saveChatConfig,
-} from "./core/gateway/chat/config.js";
+} from "./core/gateway/chat/config.ts";
 import type {
 	ChatConfig,
 	ConfiguredChannel,
 	DiscordAccountConfig,
 	TelegramAccountConfig,
-} from "./core/gateway/chat/core/config-types.js";
-import type { ChatLogRecord } from "./core/gateway/chat/core/runtime-types.js";
+} from "./core/gateway/chat/core/config-types.ts";
+import type { ChatLogRecord } from "./core/gateway/chat/core/runtime-types.ts";
 import { type GatewayDoctorCheck, runGatewayDoctor } from "./core/gateway/doctor.ts";
 import { getGatewayDir, readGatewayPid, readGatewayStatus, runGateway } from "./core/gateway/runner.ts";
 

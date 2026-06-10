@@ -1,9 +1,9 @@
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { registerBuiltInGatewayPlatforms } from "./adapters.js";
-import type { ChatAccountConfig, ChatConfig, DiscordAccountConfig } from "./chat/core/config-types.js";
-import { defaultGatewayPlatformRegistry, type GatewayPlatformRegistry } from "./platform-registry.js";
+import { registerBuiltInGatewayPlatforms } from "./adapters.ts";
+import type { ChatAccountConfig, ChatConfig, DiscordAccountConfig } from "./chat/core/config-types.ts";
+import { defaultGatewayPlatformRegistry, type GatewayPlatformRegistry } from "./platform-registry.ts";
 
 export interface GatewayDeliveryResult {
 	delivered: number;

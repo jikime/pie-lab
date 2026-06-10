@@ -188,6 +188,7 @@ type FooterUsageStats = {
 	totalCost: number;
 	lastAssistantProvider: string | undefined;
 	lastAssistantModel: string | undefined;
+	latestCacheHitRate: number | undefined;
 };
 
 const EMPTY_USAGE_STATS: FooterUsageStats = {
@@ -198,6 +199,7 @@ const EMPTY_USAGE_STATS: FooterUsageStats = {
 	totalCost: 0,
 	lastAssistantProvider: undefined,
 	lastAssistantModel: undefined,
+	latestCacheHitRate: undefined,
 };
 
 /**
@@ -255,6 +257,7 @@ export class FooterComponent implements Component {
 		let totalCost = 0;
 		let lastAssistantProvider: string | undefined;
 		let lastAssistantModel: string | undefined;
+		let latestCacheHitRate: number | undefined;
 
 		for (const entry of this.session.sessionManager.getEntries()) {
 			if (entry.type === "message" && entry.message.role === "assistant") {
@@ -265,6 +268,11 @@ export class FooterComponent implements Component {
 				totalCost += entry.message.usage.cost.total;
 				lastAssistantProvider = entry.message.provider;
 				lastAssistantModel = entry.message.model;
+
+				const latestPromptTokens =
+					entry.message.usage.input + entry.message.usage.cacheRead + entry.message.usage.cacheWrite;
+				latestCacheHitRate =
+					latestPromptTokens > 0 ? (entry.message.usage.cacheRead / latestPromptTokens) * 100 : undefined;
 			}
 		}
 
@@ -277,6 +285,7 @@ export class FooterComponent implements Component {
 			totalCost,
 			lastAssistantProvider,
 			lastAssistantModel,
+			latestCacheHitRate,
 		};
 		return this.usageStats;
 	}
@@ -328,6 +337,11 @@ export class FooterComponent implements Component {
 			cacheParts.push(footerValue(`R${formatTokens(usageStats.totalCacheRead)}`, "muted"));
 		if (usageStats.totalCacheWrite)
 			cacheParts.push(footerValue(`W${formatTokens(usageStats.totalCacheWrite)}`, "muted"));
+		if (
+			(usageStats.totalCacheRead > 0 || usageStats.totalCacheWrite > 0) &&
+			usageStats.latestCacheHitRate !== undefined
+		)
+			cacheParts.push(footerValue(`CH${usageStats.latestCacheHitRate.toFixed(1)}%`, "muted"));
 		if (cacheParts.length > 0) usageParts.push(`${footerLabel("cache")} ${cacheParts.join(" ")}`);
 
 		const autoIndicator = this.autoCompactEnabled ? " auto" : "";

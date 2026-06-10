@@ -4,10 +4,10 @@
 // - packages/chat/src/streaming-markdown.ts
 // - packages/chat/src/thread.ts
 
-import type { ChatService } from "../core/config-types.js";
-import { chunkText } from "./chunking.js";
-import { formatMarkdownForService, maxMessageLength } from "./format.js";
-import { StreamingMarkdownRenderer } from "./streaming-markdown.js";
+import type { ChatService } from "../core/config-types.ts";
+import { chunkText } from "./chunking.ts";
+import { formatMarkdownForService, maxMessageLength } from "./format.ts";
+import { StreamingMarkdownRenderer } from "./streaming-markdown.ts";
 
 export interface PreviewChunk {
 	id: string;

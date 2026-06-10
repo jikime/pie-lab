@@ -13,7 +13,7 @@
  */
 
 import { createConnection, type Socket } from "node:net";
-import { getWebIpcSocketPath } from "./web-ipc-server.js";
+import { getWebIpcSocketPath } from "./web-ipc-server.ts";
 
 export type WebIPCEvent =
 	| { type: "delta"; text: string }

@@ -27,7 +27,7 @@ Pi loads skills from:
 - Global:
   - `~/.pie/agent/skills/`
   - `~/.agents/skills/`
-- Project:
+- Project (only after the project is trusted):
   - `.pie/skills/`
   - `.agents/skills/` in `cwd` and ancestor directories (up to git repo root, or filesystem root when not in a repo)
 - Packages: `skills/` directories or `pi.skills` entries in `package.json`

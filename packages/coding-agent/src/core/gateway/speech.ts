@@ -2,14 +2,14 @@ import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { UsageStore } from "@pie-lab/storage";
-import { getAgentDir } from "../../config.js";
-import { resolveGatewayOpenAiAudioCredentials } from "./audio-credentials.js";
+import { getAgentDir } from "../../config.ts";
+import { resolveGatewayOpenAiAudioCredentials } from "./audio-credentials.ts";
 import {
 	detectWavDurationSeconds,
 	type GatewayAudioUsageContext,
 	recordGatewayAudioUsage,
 	textLengthForAudioUsage,
-} from "./audio-usage.js";
+} from "./audio-usage.ts";
 
 export type GatewaySpeechProvider = "local" | "openai" | "custom";
 

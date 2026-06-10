@@ -2,9 +2,9 @@ import { createHash } from "node:crypto";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { basename, extname, join } from "node:path";
 import type { UsageStore } from "@pie-lab/storage";
-import { getAgentDir } from "../../config.js";
-import { resolveGatewayOpenAiAudioCredentials } from "./audio-credentials.js";
-import { detectWavDurationSeconds, type GatewayAudioUsageContext, recordGatewayAudioUsage } from "./audio-usage.js";
+import { getAgentDir } from "../../config.ts";
+import { resolveGatewayOpenAiAudioCredentials } from "./audio-credentials.ts";
+import { detectWavDurationSeconds, type GatewayAudioUsageContext, recordGatewayAudioUsage } from "./audio-usage.ts";
 
 export type GatewayTranscriptionProvider = "local" | "openai" | "custom";
 

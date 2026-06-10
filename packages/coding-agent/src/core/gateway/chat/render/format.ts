@@ -6,7 +6,7 @@
 import remarkGfm from "remark-gfm";
 import remarkParse from "remark-parse";
 import { unified } from "unified";
-import type { ChatService } from "../core/config-types.js";
+import type { ChatService } from "../core/config-types.ts";
 
 export interface RenderedChunkPayload {
 	text: string;

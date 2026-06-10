@@ -4,6 +4,7 @@ import type { AgentSession } from "../src/core/agent-session.ts";
 import type { ReadonlyFooterDataProvider } from "../src/core/footer-data-provider.ts";
 import { FooterComponent, formatCwdForFooter } from "../src/modes/interactive/components/footer.ts";
 import { initTheme } from "../src/modes/interactive/theme/theme.ts";
+import { stripAnsi } from "../src/utils/ansi.ts";
 
 type AssistantUsage = {
 	input: number;
@@ -96,10 +97,6 @@ describe("formatCwdForFooter", () => {
 		expect(formatCwdForFooter("/home/user/project", "/home/user")).toBe("~/project");
 	});
 });
-
-function stripAnsi(text: string): string {
-	return text.replace(/\x1b\[[0-9;]*m/g, "");
-}
 
 describe("FooterComponent width handling", () => {
 	beforeAll(() => {
@@ -270,5 +267,22 @@ describe("FooterComponent width handling", () => {
 		expect(lines.join("\n")).not.toContain("chat disconnected");
 		expect(lines.join("\n")).not.toContain("CodeGraph ready");
 		expect(lines[2]).toContain("index warning: stale cache");
+	});
+
+	it("shows the latest cache hit rate when cache usage is present", () => {
+		const session = createSession({
+			sessionName: "",
+			usage: {
+				input: 100,
+				output: 10,
+				cacheRead: 50,
+				cacheWrite: 50,
+				cost: { total: 0.001 },
+			},
+		});
+		const footer = new FooterComponent(session, createFooterData(1));
+
+		const statsLine = stripAnsi(footer.render(120)[1]);
+		expect(statsLine).toContain("CH25.0%");
 	});
 });

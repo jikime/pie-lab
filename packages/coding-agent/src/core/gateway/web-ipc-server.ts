@@ -24,9 +24,9 @@ import { mkdir, unlink } from "node:fs/promises";
 import type { Server } from "node:net";
 import { createServer } from "node:net";
 import { join } from "node:path";
-import type { GatewayConversationEndpoint, GatewayTransport } from "./adapters.js";
-import type { ChatAccountConfig, ConfiguredChannel } from "./chat/core/config-types.js";
-import type { InboundMessageInput, ResolvedConversation } from "./chat/types.js";
+import type { GatewayConversationEndpoint, GatewayTransport } from "./adapters.ts";
+import type { ChatAccountConfig, ConfiguredChannel } from "./chat/core/config-types.ts";
+import type { InboundMessageInput, ResolvedConversation } from "./chat/types.ts";
 
 export const WEB_IPC_SOCKET_NAME = "gateway-web.sock";
 

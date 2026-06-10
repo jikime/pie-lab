@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { buildGatewaySessionKey, buildGatewaySessionSource } from "../session.js";
+import { buildGatewaySessionKey, buildGatewaySessionSource } from "../session.ts";
 import {
 	acquireConversationLock,
 	appendConversationRecord,
@@ -10,7 +10,7 @@ import {
 	normalizeInboundMessage,
 	readConversationLog,
 	releaseConversationLock,
-} from "./log.js";
+} from "./log.ts";
 import type {
 	ChatLogRecord,
 	CheckpointRecord,
@@ -21,7 +21,7 @@ import type {
 	JobQueuedRecord,
 	PendingJob,
 	ResolvedConversation,
-} from "./types.js";
+} from "./types.ts";
 
 function isDMConversation(conversation: ResolvedConversation): boolean {
 	return conversation.channel.dm ?? false;

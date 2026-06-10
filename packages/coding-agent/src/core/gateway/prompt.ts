@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { ResolvedConversation } from "./chat/core/config-types.js";
+import type { ResolvedConversation } from "./chat/core/config-types.ts";
 
 function readText(path: string): string {
 	try {

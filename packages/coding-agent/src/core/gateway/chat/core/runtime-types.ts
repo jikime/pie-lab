@@ -1,5 +1,5 @@
-import type { GatewayChatType, GatewaySessionSource } from "../../session.js";
-import type { ChatService } from "./config-types.js";
+import type { GatewayChatType, GatewaySessionSource } from "../../session.ts";
+import type { ChatService } from "./config-types.ts";
 
 export type AttachmentKind = "image" | "file" | "audio" | "video";
 

@@ -1,14 +1,14 @@
 import { spawnSync } from "node:child_process";
 import { access, readFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import { getAgentDir } from "../../config.js";
-import { SettingsManager } from "../settings-manager.js";
-import { describeGatewayOpenAiAudioCredentials, resolveGatewayOpenAiAudioCredentials } from "./audio-credentials.js";
-import { CHAT_CONFIG_PATH, listConfiguredConversations, loadChatConfig } from "./chat/config.js";
-import type { ChatAccountConfig, DiscordAccountConfig, TelegramAccountConfig } from "./chat/core/config-types.js";
-import { type GatewayStatus, readGatewayStatus } from "./runner.js";
-import { getGatewayTtsMaxChars, getGatewayTtsOutputDir } from "./speech.js";
-import { getGatewaySttCacheDir, getGatewaySttMaxBytes } from "./transcription.js";
+import { getAgentDir } from "../../config.ts";
+import { SettingsManager } from "../settings-manager.ts";
+import { describeGatewayOpenAiAudioCredentials, resolveGatewayOpenAiAudioCredentials } from "./audio-credentials.ts";
+import { CHAT_CONFIG_PATH, listConfiguredConversations, loadChatConfig } from "./chat/config.ts";
+import type { ChatAccountConfig, DiscordAccountConfig, TelegramAccountConfig } from "./chat/core/config-types.ts";
+import { type GatewayStatus, readGatewayStatus } from "./runner.ts";
+import { getGatewayTtsMaxChars, getGatewayTtsOutputDir } from "./speech.ts";
+import { getGatewaySttCacheDir, getGatewaySttMaxBytes } from "./transcription.ts";
 
 export type GatewayDoctorLevel = "ok" | "warn" | "fail";
 
