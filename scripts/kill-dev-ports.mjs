@@ -2,7 +2,7 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import process from "node:process";
 
-const DEFAULT_PORTS = [4873, 4876, 4877];
+const DEFAULT_PORTS = [4873, 4876, 4877, 4878];
 const WAIT_MS = 500;
 
 function parsePorts() {

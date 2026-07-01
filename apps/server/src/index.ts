@@ -33,6 +33,7 @@ import {
 import { createMediaRequestHandler, type MediaApiOptions } from "./media-api.ts";
 import { createLearningRequestHandler, type LearningApiOptions } from "./learning-api.ts";
 import { createPieAgentChatRequestHandler, type PieAgentChatApiOptions } from "./pie-agent-chat-api.ts";
+import { createDesignRunsRequestHandler, isDesignPath, type DesignRunsApiOptions } from "./design-runs-api.ts";
 import { createProviderStatusRequestHandler } from "./provider-status-api.ts";
 import { createProxyPoolRequestHandler, type ProxyPoolApiOptions } from "./proxy-pools-api.ts";
 import {
@@ -51,6 +52,7 @@ export * from "./oauth-api.ts";
 export * from "./media-api.ts";
 export * from "./learning-api.ts";
 export * from "./pie-agent-chat-api.ts";
+export * from "./design-runs-api.ts";
 export * from "./model-availability-api.ts";
 export * from "./provider-connections-api.ts";
 export * from "./provider-settings-api.ts";
@@ -75,6 +77,7 @@ export interface PieLabServerOptions
 		MediaApiOptions,
 		LearningApiOptions,
 		PieAgentChatApiOptions,
+		DesignRunsApiOptions,
 		ProxyPoolApiOptions,
 		RoutingPolicyApiOptions,
 		SiteApiOptions {
@@ -125,6 +128,11 @@ export function createPieLabRequestHandler(options: PieLabServerOptions = {}) {
 		modelRegistry,
 		usageStore,
 	});
+	const designRunsHandler = createDesignRunsRequestHandler({
+		...options,
+		modelRegistry,
+		usageStore,
+	});
 	const proxyPoolHandler = createProxyPoolRequestHandler({ ...options, providerConnectionStore });
 	const siteHandler = createSiteRequestHandler(options);
 	const routingPolicyHandler = createRoutingPolicyRequestHandler({
@@ -145,6 +153,10 @@ export function createPieLabRequestHandler(options: PieLabServerOptions = {}) {
 		}
 		if (isPieAgentChatPath(url.pathname)) {
 			await pieAgentChatHandler(request, response);
+			return;
+		}
+		if (isDesignPath(url.pathname)) {
+			await designRunsHandler(request, response);
 			return;
 		}
 		if (isProviderPath(url.pathname)) {

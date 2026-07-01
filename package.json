@@ -13,10 +13,10 @@
 	],
 	"scripts": {
 		"clean": "npm run clean --workspaces --if-present",
-		"build": "cd packages/tui && npm run build && cd ../ai && npm run build && cd ../storage && npm run build && cd ../router && npm run build && cd ../shared && npm run build && cd ../agent && npm run build && cd ../hashline && npm run build && cd ../coding-agent && npm run build && cd ../../apps/server && npm run build && cd ../dashboard && npm run build && cd ../chat && npm run build",
+		"build": "cd packages/tui && npm run build && cd ../ai && npm run build && cd ../storage && npm run build && cd ../router && npm run build && cd ../shared && npm run build && cd ../agent && npm run build && cd ../hashline && npm run build && cd ../coding-agent && npm run build && cd ../../apps/server && npm run build && cd ../dashboard && npm run build && cd ../chat && npm run build && cd ../design && npm run build",
 		"dev": "npm run dev:clean-ports && npm run dev:start",
 		"dev:clean-ports": "node scripts/kill-dev-ports.mjs",
-		"dev:start": "concurrently --names \"ai,storage,router,shared,agent,coding-agent,server,dashboard,chat,tui\" --prefix-colors \"cyan,gray,blue,magenta,yellow,red,white,black,green,blueBright\" \"cd packages/ai && npm run dev\" \"cd packages/storage && npm run dev\" \"cd packages/router && npm run dev\" \"cd packages/shared && npm run dev\" \"cd packages/agent && npm run dev\" \"cd packages/coding-agent && npm run dev\" \"cd apps/server && npm run dev\" \"cd apps/dashboard && npm run dev\" \"cd apps/chat && npm run dev\" \"cd packages/tui && npm run dev\"",
+		"dev:start": "concurrently --names \"ai,storage,router,shared,agent,coding-agent,server,dashboard,chat,design,tui\" --prefix-colors \"cyan,gray,blue,magenta,yellow,red,white,black,green,greenBright,blueBright\" \"cd packages/ai && npm run dev\" \"cd packages/storage && npm run dev\" \"cd packages/router && npm run dev\" \"cd packages/shared && npm run dev\" \"cd packages/agent && npm run dev\" \"cd packages/coding-agent && npm run dev\" \"cd apps/server && npm run dev\" \"cd apps/dashboard && npm run dev\" \"cd apps/chat && npm run dev\" \"cd apps/design && npm run dev\" \"cd packages/tui && npm run dev\"",
 		"dev:tsc": "concurrently --names \"ai\" --prefix-colors \"cyan\" \"cd packages/ai && npm run dev:tsc\"",
 		"check": "biome check --write --error-on-warnings . && tsgo --noEmit && npm run check:browser-smoke",
 		"check:browser-smoke": "node scripts/check-browser-smoke.mjs",
