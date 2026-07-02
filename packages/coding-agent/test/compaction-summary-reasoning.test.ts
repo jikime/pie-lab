@@ -7,8 +7,8 @@ const { completeSimpleMock } = vi.hoisted(() => ({
 	completeSimpleMock: vi.fn(),
 }));
 
-vi.mock("@pie-lab/ai", async (importOriginal) => {
-	const actual = await importOriginal<typeof import("@pie-lab/ai")>();
+vi.mock("@pie-lab/ai/compat", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("@pie-lab/ai/compat")>();
 	return {
 		...actual,
 		completeSimple: completeSimpleMock,

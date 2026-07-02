@@ -188,6 +188,29 @@ describe("detectInstallMethod", () => {
 		});
 	});
 
+	test("self-updates exact npm versions without uninstalling the current package", () => {
+		const { prefix } = createNpmPrefixInstall();
+
+		const command = getSelfUpdateCommand("@pie-lab/coding-agent", undefined, {
+			packageName: "@pie-lab/coding-agent",
+			installSpec: "@pie-lab/coding-agent@1.2.3",
+		});
+
+		expect(command).toEqual({
+			command: "npm",
+			args: [
+				"--prefix",
+				prefix,
+				"install",
+				"-g",
+				"--ignore-scripts",
+				"--min-release-age=0",
+				"@pie-lab/coding-agent@1.2.3",
+			],
+			display: `npm --prefix ${prefix} install -g --ignore-scripts --min-release-age=0 @pie-lab/coding-agent@1.2.3`,
+		});
+	});
+
 	test("self-updates renamed packages from the current install prefix", () => {
 		const { prefix } = createNpmPrefixInstall();
 

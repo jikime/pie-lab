@@ -16,6 +16,8 @@
 			"@pie-lab/coding-agent/model-registry": ["./packages/coding-agent/src/core/model-registry.ts"],
 			"@pie-lab/coding-agent/hooks": ["./packages/coding-agent/src/core/hooks/index.ts"],
 			"@pie-lab/coding-agent/*": ["./packages/coding-agent/src/*"],
+			"@pie-lab/orchestrator": ["./packages/orchestrator/src/index.ts"],
+			"@pie-lab/orchestrator/*": ["./packages/orchestrator/src/*"],
 			"typebox": ["./node_modules/typebox"],
 			"@pie-lab/tui": ["./packages/tui/src/index.ts"],
 			"@pie-lab/tui/*": ["./packages/tui/src/*"],

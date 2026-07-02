@@ -1,8 +1,5 @@
+import { completeSimple, getModels, getProviders, streamSimple } from "@pie-lab/ai/compat";
 import {
-	completeSimple,
-	getModels,
-	getProviders,
-	streamSimple,
 	type Api,
 	type AssistantMessage,
 	type AssistantMessageEvent,

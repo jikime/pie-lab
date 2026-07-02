@@ -28,6 +28,6 @@
 		"@pie-lab/router": "^0.2.1",
 		"@pie-lab/shared": "^0.2.1",
 		"@pie-lab/storage": "^0.2.1",
-		"undici": "^8.3.0"
+		"undici": "^8.5.0"
 	}
 }

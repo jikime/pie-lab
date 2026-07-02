@@ -2,8 +2,9 @@ import { isAbsolute, relative, resolve, sep } from "node:path";
 import { PIE_LAB_ROUTER_PROVIDER } from "@pie-lab/router";
 import { type Component, getCapabilities, truncateToWidth } from "@pie-lab/tui";
 import type { AgentSession } from "../../../core/agent-session.ts";
+import { areExperimentalFeaturesEnabled } from "../../../core/experimental.ts";
 import type { ReadonlyFooterDataProvider } from "../../../core/footer-data-provider.ts";
-import { detectTerminalBackground, theme } from "../theme/theme.ts";
+import { detectTerminalBackgroundFromEnv, theme } from "../theme/theme.ts";
 
 type FooterColor = {
 	rgb: [number, number, number];
@@ -73,7 +74,7 @@ function getFooterPalette(): FooterPalette {
 		return cachedFooterPalette;
 	}
 
-	const detection = detectTerminalBackground();
+	const detection = detectTerminalBackgroundFromEnv();
 	let palette: FooterPalette;
 	if (detection.confidence === "high") {
 		palette = FOOTER_PALETTES[detection.theme];
@@ -354,6 +355,7 @@ export class FooterComponent implements Component {
 			contextPercentDisplay,
 			contextColor(contextPercentValue, contextPercent === "?"),
 		);
+		const experimentalPart = areExperimentalFeaturesEnabled() ? footerValue("xp", "warning", true) : "";
 
 		// Add model or router alias on the right side, plus thinking level if model supports it.
 		const modelName = state.model?.id || "no-model";
@@ -390,7 +392,7 @@ export class FooterComponent implements Component {
 		}
 
 		const statsLine = truncateToWidth(
-			joinFooterParts([...identityParts, contextPart, ...usageParts]),
+			joinFooterParts([...identityParts, contextPart, experimentalPart, ...usageParts]),
 			width,
 			footerFg("...", "muted"),
 		);

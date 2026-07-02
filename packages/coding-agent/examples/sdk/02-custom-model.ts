@@ -4,7 +4,7 @@
  * Shows how to select a specific model and thinking level.
  */
 
-import { getModel } from "@pie-lab/ai";
+import { getModel } from "@pie-lab/ai/compat";
 import { AuthStorage, createAgentSession, ModelRegistry } from "@pie-lab/coding-agent";
 
 // Set up auth storage and model registry

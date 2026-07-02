@@ -13,7 +13,7 @@
  */
 
 import type { AgentMessage } from "@pie-lab/agent-core";
-import { complete, type Message } from "@pie-lab/ai";
+import { complete, type Message } from "@pie-lab/ai/compat";
 import type { ExtensionAPI, SessionEntry } from "@pie-lab/coding-agent";
 import { BorderedLoader, convertToLlm, serializeConversation } from "@pie-lab/coding-agent";
 
@@ -136,7 +136,7 @@ export default function (pi: ExtensionAPI) {
 					const response = await complete(
 						ctx.model!,
 						{ systemPrompt: SYSTEM_PROMPT, messages: [userMessage] },
-						{ apiKey: auth.apiKey, headers: auth.headers, signal: loader.signal },
+						{ apiKey: auth.apiKey, headers: auth.headers, env: auth.env, signal: loader.signal },
 					);
 
 					if (response.stopReason === "aborted") {

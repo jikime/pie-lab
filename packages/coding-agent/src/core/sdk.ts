@@ -8,7 +8,7 @@ import {
 	type Message,
 	type Model,
 	streamSimple,
-} from "@pie-lab/ai";
+} from "@pie-lab/ai/compat";
 import { resolvePiModelRoutePlan } from "@pie-lab/router";
 import { createUsageRecordId, type UsageRecordStatus, type UsageStore } from "@pie-lab/storage";
 import { getAgentDir } from "../config.ts";
@@ -482,6 +482,8 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 							}
 							connectionId = auth.connectionId ?? connectionId;
 
+							const env =
+								auth.env || options?.env ? { ...(auth.env ?? {}), ...(options?.env ?? {}) } : undefined;
 							const providerRetrySettings = settingsManager.getProviderRetrySettings();
 							const httpIdleTimeoutMs = settingsManager.getHttpIdleTimeoutMs();
 							// SDKs treat timeout=0 as 0ms (immediate timeout), not "no timeout".
@@ -493,6 +495,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 							const inner = await streamSimple(resolvedModel, context, {
 								...options,
 								apiKey: auth.apiKey,
+								env,
 								timeoutMs,
 								websocketConnectTimeoutMs,
 								maxRetries: options?.maxRetries ?? providerRetrySettings.maxRetries,

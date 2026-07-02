@@ -13,7 +13,7 @@
  *   pi --extension examples/extensions/custom-compaction.ts
  */
 
-import { complete } from "@pie-lab/ai";
+import { complete } from "@pie-lab/ai/compat";
 import type { ExtensionAPI } from "@pie-lab/coding-agent";
 import { convertToLlm, serializeConversation } from "@pie-lab/coding-agent";
 
@@ -93,6 +93,7 @@ ${conversationText}
 				{
 					apiKey: auth.apiKey,
 					headers: auth.headers,
+					env: auth.env,
 					maxTokens: 8192,
 					signal,
 				},

@@ -7,7 +7,7 @@
  * 3. Loads the result into the editor for user to fill in answers
  */
 
-import { complete, type UserMessage } from "@pie-lab/ai";
+import { complete, type UserMessage } from "@pie-lab/ai/compat";
 import type { ExtensionAPI } from "@pie-lab/coding-agent";
 import { BorderedLoader } from "@pie-lab/coding-agent";
 
@@ -90,7 +90,7 @@ export default function (pi: ExtensionAPI) {
 					const response = await complete(
 						ctx.model!,
 						{ systemPrompt: SYSTEM_PROMPT, messages: [userMessage] },
-						{ apiKey: auth.apiKey, headers: auth.headers, signal: loader.signal },
+						{ apiKey: auth.apiKey, headers: auth.headers, env: auth.env, signal: loader.signal },
 					);
 
 					if (response.stopReason === "aborted") {

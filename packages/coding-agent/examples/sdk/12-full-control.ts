@@ -4,7 +4,7 @@
  * Replace everything - no discovery, explicit configuration.
  */
 
-import { getModel } from "@pie-lab/ai";
+import { getModel } from "@pie-lab/ai/compat";
 import {
 	AuthStorage,
 	createAgentSession,

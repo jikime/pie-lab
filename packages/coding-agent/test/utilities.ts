@@ -6,7 +6,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync }
 import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { Agent } from "@pie-lab/agent-core";
-import { getModel, type OAuthCredentials, type OAuthProvider } from "@pie-lab/ai";
+import { getModel, type OAuthCredentials, type OAuthProvider } from "@pie-lab/ai/compat";
 import { getOAuthApiKey } from "@pie-lab/ai/oauth";
 import { AgentSession } from "../src/core/agent-session.ts";
 import { AuthStorage } from "../src/core/auth-storage.ts";

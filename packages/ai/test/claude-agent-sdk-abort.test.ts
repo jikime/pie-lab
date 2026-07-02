@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { streamClaudeAgentSdk } from "../src/providers/claude-agent-sdk.ts";
+import { stream as streamClaudeAgentSdk } from "../src/api/claude-agent-sdk.ts";
 import type { Context, Model } from "../src/types.ts";
 
 type InterruptMode = "throw" | "reject";

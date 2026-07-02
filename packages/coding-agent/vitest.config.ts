@@ -2,6 +2,7 @@ import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
 const aiSrcIndex = fileURLToPath(new URL("../ai/src/index.ts", import.meta.url));
+const aiSrcCompat = fileURLToPath(new URL("../ai/src/compat.ts", import.meta.url));
 const aiSrcOAuth = fileURLToPath(new URL("../ai/src/oauth.ts", import.meta.url));
 const agentSrcIndex = fileURLToPath(new URL("../agent/src/index.ts", import.meta.url));
 const hashlineSrcIndex = fileURLToPath(new URL("../hashline/src/index.ts", import.meta.url));
@@ -23,6 +24,7 @@ export default defineConfig({
 	resolve: {
 		alias: [
 			{ find: /^@pie-lab\/ai$/, replacement: aiSrcIndex },
+			{ find: /^@pie-lab\/ai\/compat$/, replacement: aiSrcCompat },
 			{ find: /^@pie-lab\/ai\/oauth$/, replacement: aiSrcOAuth },
 			{ find: /^@pie-lab\/agent-core$/, replacement: agentSrcIndex },
 			{ find: /^@pie-lab\/hashline$/, replacement: hashlineSrcIndex },

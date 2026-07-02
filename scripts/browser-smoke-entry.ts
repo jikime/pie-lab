@@ -1,4 +1,5 @@
-import { complete, createAssistantMessageEventStream, getModel, getProviders, Type } from "@pie-lab/ai";
+import { createAssistantMessageEventStream, Type } from "@pie-lab/ai";
+import { complete, getModel, getProviders } from "@pie-lab/ai/compat";
 import {
 	Agent,
 	bashExecutionToText,
