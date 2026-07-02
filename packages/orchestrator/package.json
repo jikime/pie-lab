@@ -1,6 +1,6 @@
 {
 	"name": "@pie-lab/orchestrator",
-	"version": "0.2.1",
+	"version": "0.3.0",
 	"description": "experimental orchestrator package for pi",
 	"type": "module",
 	"main": "./dist/index.js",
@@ -37,7 +37,7 @@
 		"node": ">=22.19.0"
 	},
 	"dependencies": {
-		"@pie-lab/coding-agent": "^0.2.1"
+		"@pie-lab/coding-agent": "^0.3.0"
 	},
 	"devDependencies": {
 		"shx": "0.4.0"

@@ -13,7 +13,7 @@ const internalPackagePrefix = "@pie-lab/";
 const allowedInstallScriptPackages = new Map([
 	["@google/genai@1.52.0", "preinstall is a no-op in the published package"],
 	["koffi@2.16.2", "optional TUI native dependency inherited from @pie-lab/tui"],
-	["protobufjs@7.6.2", "postinstall only warns about protobufjs version scheme mismatches"],
+	["protobufjs@7.6.4", "postinstall only warns about protobufjs version scheme mismatches"],
 ]);
 
 const args = new Set(process.argv.slice(2));

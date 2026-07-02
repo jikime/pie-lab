@@ -1,6 +1,6 @@
 {
 	"name": "@pie-lab/design",
-	"version": "0.2.1",
+	"version": "0.3.0",
 	"private": true,
 	"type": "module",
 	"description": "Next.js pie-lab design studio app (open-design core-loop port)",

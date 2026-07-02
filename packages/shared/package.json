@@ -1,6 +1,6 @@
 {
 	"name": "@pie-lab/shared",
-	"version": "0.2.1",
+	"version": "0.3.0",
 	"type": "module",
 	"description": "Shared metadata and utilities for pie-lab",
 	"main": "./dist/index.js",
@@ -24,8 +24,8 @@
 		"clean": "shx rm -rf dist"
 	},
 	"dependencies": {
-		"@pie-lab/router": "^0.2.1",
-		"@pie-lab/storage": "^0.2.1",
+		"@pie-lab/router": "^0.3.0",
+		"@pie-lab/storage": "^0.3.0",
 		"undici": "^8.5.0"
 	},
 	"repository": {
