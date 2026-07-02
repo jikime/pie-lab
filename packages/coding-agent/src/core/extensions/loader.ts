@@ -65,6 +65,14 @@ const VIRTUAL_MODULES: Record<string, unknown> = {
 	"@mariozechner/pi-ai/compat": _bundledPiAiCompat,
 	"@mariozechner/pi-ai/oauth": _bundledPiAiOauth,
 	"@mariozechner/pi-coding-agent": _bundledPiCodingAgent,
+	// Current upstream namespace: extensions from the pi ecosystem import
+	// @earendil-works/pi-*; map them onto the fork's bundled packages.
+	"@earendil-works/pi-agent-core": _bundledPiAgentCore,
+	"@earendil-works/pi-tui": _bundledPiTui,
+	"@earendil-works/pi-ai": _bundledPiAiCompat,
+	"@earendil-works/pi-ai/compat": _bundledPiAiCompat,
+	"@earendil-works/pi-ai/oauth": _bundledPiAiOauth,
+	"@earendil-works/pi-coding-agent": _bundledPiCodingAgent,
 };
 
 const require = createRequire(import.meta.url);
@@ -116,6 +124,14 @@ function getAliases(): Record<string, string> {
 		"@mariozechner/pi-ai": piAiCompatEntry,
 		"@mariozechner/pi-ai/compat": piAiCompatEntry,
 		"@mariozechner/pi-ai/oauth": piAiOauthEntry,
+		// Current upstream namespace: extensions from the pi ecosystem import
+		// @earendil-works/pi-*; map them onto the fork's bundled packages.
+		"@earendil-works/pi-coding-agent": piCodingAgentEntry,
+		"@earendil-works/pi-agent-core": piAgentCoreEntry,
+		"@earendil-works/pi-tui": piTuiEntry,
+		"@earendil-works/pi-ai": piAiCompatEntry,
+		"@earendil-works/pi-ai/compat": piAiCompatEntry,
+		"@earendil-works/pi-ai/oauth": piAiOauthEntry,
 		typebox: typeboxEntry,
 		"typebox/compile": typeboxCompileEntry,
 		"typebox/value": typeboxValueEntry,
